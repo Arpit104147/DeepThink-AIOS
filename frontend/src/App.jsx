@@ -613,8 +613,11 @@ export default function App() {
                 type="text"
                 defaultValue={serverUrl}
                 onBlur={e => {
-                  localStorage.setItem("server_url", e.target.value);
-                  setServerUrl(e.target.value);
+                  let val = e.target.value.trim();
+                  if (val && !val.startsWith("http")) val = "http://" + val;
+                  if (val.endsWith("/")) val = val.slice(0, -1);
+                  localStorage.setItem("server_url", val);
+                  setServerUrl(val);
                 }}
               />
             </div>
