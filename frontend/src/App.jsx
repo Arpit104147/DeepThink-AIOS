@@ -616,6 +616,7 @@ export default function App() {
                   let val = e.target.value.trim();
                   if (val && !val.startsWith("http")) val = "http://" + val;
                   if (val.endsWith("/")) val = val.slice(0, -1);
+                  val = val.replace("localhost", "127.0.0.1").replace("0.0.0.0", "127.0.0.1");
                   localStorage.setItem("server_url", val);
                   setServerUrl(val);
                 }}
