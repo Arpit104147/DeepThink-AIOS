@@ -968,3 +968,86 @@ body {
     bottom: 0;
   }
 }
+
+/* Premium Markdown & LaTeX Math Styling */
+.md-content {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.md-h1, .md-h2, .md-h3 {
+  color: #ffffff;
+  font-weight: 600;
+  margin: 18px 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.md-h1 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.md-h2 { font-size: 1.3rem; }
+.md-h3 { font-size: 1.125rem; }
+
+.md-p {
+  margin: 8px 0;
+}
+
+.md-hr {
+  border: 0;
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 20px 0;
+}
+
+.md-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+  padding-left: 6px;
+}
+
+.md-list-item.bullet .bullet-dot {
+  color: var(--accent);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.md-list-item.numbered .num-prefix {
+  color: var(--accent);
+  font-weight: 600;
+  min-width: 18px;
+}
+
+.md-list-item .bullet-content, .md-list-item .num-content {
+  flex: 1;
+}
+
+.math-block {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 12px 16px;
+  margin: 14px 0;
+  background: rgba(139, 92, 246, 0.04);
+  border: 1px dashed rgba(139, 92, 246, 0.25);
+  border-radius: 8px;
+  color: #ffffff;
+}
+
+.math-block-fallback {
+  text-align: center;
+  font-style: italic;
+  font-family: 'Courier New', Courier, monospace;
+  background: rgba(255,255,255,0.03);
+  padding: 10px;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.math-inline-fallback {
+  font-style: italic;
+  font-family: 'Georgia', serif;
+  color: var(--thinking-text);
+  padding: 0 2px;
+}
+

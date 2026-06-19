@@ -160,6 +160,118 @@ const ArtifactSandbox = ({ htmlCode }) => {
 /* ═══════════════════════════════════════════════════
    MARKDOWN RENDERER (with Plotly + Artifact support)
    ═══════════════════════════════════════════════════ */
+const renderMath = (tex, isBlock) => {
+  if (window.katex) {
+    try {
+      return (
+        <span 
+          dangerouslySetInnerHTML={{ 
+            __html: window.katex.renderToString(tex, { 
+              displayMode: isBlock,
+              throwOnError: false
+            }) 
+          }} 
+        />
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  // Fallback if KaTeX is not loaded
+  return isBlock ? (
+    <div className="math-block-fallback">{tex}</div>
+  ) : (
+    <span className="math-inline-fallback">{tex}</span>
+  );
+};
+
+const renderInlineElements = (text) => {
+  // Split inline elements: inline math \( ... \) or $ ... $, bold **...**, inline code `...`
+  const inlineParts = text.split(/(\\\([\s\S]*?\\\)|\$.*?\$|\*\*.*?\*\*|`.*?`)/g);
+  return inlineParts.map((chunk, index) => {
+    if (chunk.startsWith("\\(") && chunk.endsWith("\\)")) {
+      return <React.Fragment key={index}>{renderMath(chunk.slice(2, -2).trim(), false)}</React.Fragment>;
+    }
+    if (chunk.startsWith("$") && chunk.endsWith("$")) {
+      return <React.Fragment key={index}>{renderMath(chunk.slice(1, -1).trim(), false)}</React.Fragment>;
+    }
+    if (chunk.startsWith("**") && chunk.endsWith("**")) {
+      return <strong key={index}>{chunk.slice(2, -2)}</strong>;
+    }
+    if (chunk.startsWith("`") && chunk.endsWith("`")) {
+      return <code key={index}>{chunk.slice(1, -1)}</code>;
+    }
+    return chunk;
+  });
+};
+
+const parseAndRenderSegment = (segment) => {
+  // Extract block math: \[ ... \] or $$ ... $$
+  const parts = segment.split(/(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("\\[") && part.endsWith("\\]")) {
+      const tex = part.slice(2, -2).trim();
+      return <div key={index} className="math-block">{renderMath(tex, true)}</div>;
+    }
+    if (part.startsWith("$$") && part.endsWith("$$")) {
+      const tex = part.slice(2, -2).trim();
+      return <div key={index} className="math-block">{renderMath(tex, true)}</div>;
+    }
+
+    const lines = part.split("\n");
+    return (
+      <React.Fragment key={index}>
+        {lines.map((line, j) => {
+          const trimmed = line.trim();
+          
+          if (trimmed === "") {
+            return <div key={j} style={{ height: "6px" }} />;
+          }
+
+          if (trimmed === "---") {
+            return <hr key={j} className="md-hr" />;
+          }
+
+          if (line.startsWith("### ")) {
+            return <h3 key={j} className="md-h3">{renderInlineElements(line.slice(4))}</h3>;
+          }
+          if (line.startsWith("## ")) {
+            return <h2 key={j} className="md-h2">{renderInlineElements(line.slice(3))}</h2>;
+          }
+          if (line.startsWith("# ")) {
+            return <h1 key={j} className="md-h1">{renderInlineElements(line.slice(2))}</h1>;
+          }
+
+          if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+            return (
+              <div key={j} className="md-list-item bullet">
+                <span className="bullet-dot">•</span>
+                <span className="bullet-content">{renderInlineElements(trimmed.slice(2))}</span>
+              </div>
+            );
+          }
+
+          const numMatch = trimmed.match(/^(\d+)\.\s(.*)/);
+          if (numMatch) {
+            return (
+              <div key={j} className="md-list-item numbered">
+                <span className="num-prefix">{numMatch[1]}.</span>
+                <span className="num-content">{renderInlineElements(numMatch[2])}</span>
+              </div>
+            );
+          }
+
+          return (
+            <p key={j} className="md-p">
+              {renderInlineElements(line)}
+            </p>
+          );
+        })}
+      </React.Fragment>
+    );
+  });
+};
+
 const MessageRenderer = ({ text }) => {
   if (!text) return null;
 
@@ -209,17 +321,8 @@ const MessageRenderer = ({ text }) => {
                 );
               }
               return (
-                <div key={i}>
-                  {part.split("\n").map((line, j) => {
-                    const formatted = line.split(/(\*\*.*?\*\*|`.*?`)/g).map((chunk, k) => {
-                      if (chunk.startsWith("**") && chunk.endsWith("**"))
-                        return <strong key={k}>{chunk.slice(2, -2)}</strong>;
-                      if (chunk.startsWith("`") && chunk.endsWith("`"))
-                        return <code key={k}>{chunk.slice(1, -1)}</code>;
-                      return chunk;
-                    });
-                    return <React.Fragment key={j}>{formatted}<br /></React.Fragment>;
-                  })}
+                <div key={i} className="md-content">
+                  {parseAndRenderSegment(part)}
                 </div>
               );
             })}
