@@ -280,17 +280,17 @@ async def chat(request: ChatRequest):
                     item = q.get(timeout=0.1)
                     if item is None:
                         break
-                    yield json.dumps(item) + "\n"
+                    yield f"data: {json.dumps(item)}\n\n"
                 except queue.Empty:
-                    yield json.dumps({"type": "keep_alive"}) + "\n"
+                    yield f"data: {json.dumps({'type': 'keep_alive'})}\n\n"
                     await asyncio.sleep(0.5)
                     
             thread.join()
 
         except Exception as e:
-            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-    return StreamingResponse(response_generator(), media_type="text/event-stream")
+    return StreamingResponse(response_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.get("/api/memory/count")
 def get_memory_count():
