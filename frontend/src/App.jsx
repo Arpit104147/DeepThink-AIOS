@@ -57,10 +57,11 @@ const ArtifactSandbox = ({ htmlCode }) => {
   const [hasError, setHasError] = useState(false);
   const iframeRef = useRef(null);
 
-  // Build a blob URL from the HTML code for secure sandboxed rendering
-  const blobUrl = useRef(null);
+  // Build a blob URL from the HTML code for secure sandboxed rendering (uses state to trigger re-render)
+  const [blobUrl, setBlobUrl] = useState(null);
   useEffect(() => {
     if (!htmlCode) return;
+    let url = null;
     try {
       // Bulletproof dark mode and Error Catcher injection
       let injectedHtml = htmlCode;
@@ -95,14 +96,15 @@ const ArtifactSandbox = ({ htmlCode }) => {
       }
       
       const blob = new Blob([injectedHtml], { type: "text/html" });
-      blobUrl.current = URL.createObjectURL(blob);
+      url = URL.createObjectURL(blob);
+      setBlobUrl(url);
       setHasError(false);
     } catch (err) {
       console.error("Artifact blob error:", err);
       setHasError(true);
     }
     return () => {
-      if (blobUrl.current) URL.revokeObjectURL(blobUrl.current);
+      if (url) URL.revokeObjectURL(url);
     };
   }, [htmlCode]);
 
@@ -143,10 +145,10 @@ const ArtifactSandbox = ({ htmlCode }) => {
         </div>
       </div>
       <div className="artifact-iframe-wrap">
-        {blobUrl.current && (
+        {blobUrl && (
           <iframe
             ref={iframeRef}
-            src={blobUrl.current}
+            src={blobUrl}
             sandbox="allow-scripts allow-same-origin"
             title="AI Artifact"
             className="artifact-iframe"
