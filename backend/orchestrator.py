@@ -483,7 +483,10 @@ class AgentOrchestrator:
         cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
         # Also handle unclosed <think> tags (model sometimes forgets to close)
         cleaned = re.sub(r'<think>.*', '', cleaned, flags=re.DOTALL)
-        return cleaned.strip()
+        cleaned = cleaned.strip()
+        # If stripping removed EVERYTHING, it means the model put its entire answer 
+        # inside the think block and forgot to write outside. Return the original text.
+        return cleaned if cleaned else text
 
 
     def _crunch_prompt(self, prompt, target_model, max_tokens_limit, status_callback=None, router_llm=None):
