@@ -476,6 +476,21 @@ class AgentOrchestrator:
     # =========================================================================
     # MAIN AGENTIC PIPELINE
     # =========================================================================
+    def _clean_cutoff_notes(self, text):
+        """Remove training cutoff date disclaimers and warnings from final output."""
+        if not text:
+            return text
+        # Regex to remove parenthesized or unparenthesized notes about training cutoff date
+        patterns = [
+            r'\(?Note:\s*(Since|As)?\s*(my|our|the)?\s*training\s*data\s*(only\s*goes\s*up\s*to|cuts\s*off\s*in|goes\s*up\s*to|cutoff\s*is|knowledge\s*cutoff|only\s*extends\s*to).*?\)?\.?',
+            r'\(?Always\s*verify\s*with\s*official\s*sources\s*for\s*the\s*most\s*up-to-date\s*information\.?\)?',
+            r'\(?Since\s*my\s*training\s*data\s*only\s*goes\s*up\s*to\s*September\s*2021,\s*I\s*cannot\s*access\s*or\s*provide\s*real-time\s*information\.?\)?'
+        ]
+        cleaned = text
+        for pat in patterns:
+            cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        return cleaned.strip()
+
     def _strip_thinking(self, text):
         """Remove <think>...</think> blocks from DeepSeek R1 / VibeThinker output."""
         if not text:
@@ -1061,8 +1076,18 @@ class AgentOrchestrator:
         import datetime
         current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        system_instruction = ""
+        if web_context:
+            system_instruction = (
+                "You are an advanced AI assistant equipped with real-time web search capabilities.\n"
+                "Use the provided Web Context to answer the User Query directly, accurately, and factually.\n"
+                "Since you are provided with live search results, do NOT mention your training cutoff date, "
+                "do NOT state that you cannot access real-time/current information, and do NOT add disclaimers "
+                "about not having internet access. Answer as a live, fully-connected AI.\n\n"
+            )
+
         enriched_prompt = (
-            f"Current System Date/Time: {current_date}\n\nWeb Context:\n{web_context}\n\nUser Query:\n{prompt}"
+            f"{system_instruction}Current System Date/Time: {current_date}\n\nWeb Context:\n{web_context}\n\nUser Query:\n{prompt}"
             if web_context else f"Current System Date/Time: {current_date}\n\nUser Query:\n{prompt}"
         )
 
@@ -1094,20 +1119,23 @@ class AgentOrchestrator:
             if status_callback:
                 status_callback("Answering directly...", "success", "router", 100)
             safe = self._crunch_prompt(enriched_prompt, "router", router_ctx - self.max_tokens, status_callback, router_llm=router_llm)
-            return self._call_model(router_llm, safe, max_tokens=self.max_tokens, temperature=0.6)
+            res = self._call_model(router_llm, safe, max_tokens=self.max_tokens, temperature=0.6)
+            return self._clean_cutoff_notes(res)
 
         # ══════════════════════════════════════════════════════════════════
         # PATH B: CODING — Actor-Critic with Dual Sandbox
         # ══════════════════════════════════════════════════════════════════
         if task_type == "CODING":
-            return self._coding_pipeline(prompt, enriched_prompt, router_llm,
+            res = self._coding_pipeline(prompt, enriched_prompt, router_llm,
                                          router_ctx, ds_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
+            return self._clean_cutoff_notes(res)
 
         # ══════════════════════════════════════════════════════════════════
         # PATH C: REASONING — Playground-Verified or LLM Debate
         # ══════════════════════════════════════════════════════════════════
-        return self._reasoning_pipeline(prompt, enriched_prompt, router_llm,
+        res = self._reasoning_pipeline(prompt, enriched_prompt, router_llm,
                                         router_ctx, ds_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
+        return self._clean_cutoff_notes(res)
 
     # =====================================================================
     # CODING PIPELINE — Reasoning Sandbox → Code Sandbox → Reflexion
