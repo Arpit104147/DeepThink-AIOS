@@ -172,6 +172,7 @@ body {
 .history-list::-webkit-scrollbar {
   width: 4px;
 }
+
 .history-list::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
@@ -328,6 +329,7 @@ body {
 .chat-area::-webkit-scrollbar {
   width: 6px;
 }
+
 .chat-area::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
@@ -356,8 +358,16 @@ body {
 }
 
 @keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  51%,
+  100% {
+    opacity: 0;
+  }
 }
 
 /* Messages */
@@ -392,7 +402,7 @@ body {
 }
 
 .msg-row.user .msg-body {
-  text-align: right;
+  text-align: left;
   max-width: 70%;
   margin-left: auto;
 }
@@ -495,7 +505,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .thinking-label {
@@ -527,6 +539,7 @@ body {
 .thinking-content::-webkit-scrollbar {
   width: 3px;
 }
+
 .thinking-content::-webkit-scrollbar-thumb {
   background: var(--thinking-border);
   border-radius: 3px;
@@ -676,14 +689,21 @@ body {
   border-radius: 14px;
   padding: 6px;
   min-width: 220px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   z-index: 50;
   animation: popIn 0.15s ease;
 }
 
 @keyframes popIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .popup-item {
@@ -770,7 +790,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   z-index: 200;
   display: flex;
@@ -780,8 +800,13 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .modal {
@@ -791,7 +816,7 @@ body {
   padding: 28px;
   width: 420px;
   max-width: 90vw;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 .modal h2 {
@@ -811,7 +836,8 @@ body {
   margin-bottom: 6px;
 }
 
-.modal-field input, .modal-field select {
+.modal-field input,
+.modal-field select {
   width: 100%;
   padding: 8px 12px;
   background: var(--bg-secondary);
@@ -823,7 +849,8 @@ body {
   outline: none;
 }
 
-.modal-field input:focus, .modal-field select:focus {
+.modal-field input:focus,
+.modal-field select:focus {
   border-color: var(--accent);
 }
 
@@ -909,8 +936,17 @@ body {
 }
 
 @keyframes artifactPulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--success); }
-  50% { opacity: 0.6; box-shadow: 0 0 16px var(--success); }
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 8px var(--success);
+  }
+
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 16px var(--success);
+  }
 }
 
 .artifact-label {
@@ -1000,12 +1036,15 @@ body {
     left: 0;
     height: 100vh;
   }
+
   .msg-row {
     padding: 12px 16px;
   }
+
   .input-wrapper {
     max-width: 100%;
   }
+
   .artifact-container.expanded {
     top: 0;
     left: 0;
@@ -1021,16 +1060,28 @@ body {
   line-height: 1.7;
 }
 
-.md-h1, .md-h2, .md-h3 {
+.md-h1,
+.md-h2,
+.md-h3 {
   color: #ffffff;
   font-weight: 600;
   margin: 18px 0 10px;
   letter-spacing: -0.01em;
 }
 
-.md-h1 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
-.md-h2 { font-size: 1.3rem; }
-.md-h3 { font-size: 1.125rem; }
+.md-h1 {
+  font-size: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.md-h2 {
+  font-size: 1.3rem;
+}
+
+.md-h3 {
+  font-size: 1.125rem;
+}
 
 .md-p {
   margin: 8px 0;
@@ -1063,7 +1114,8 @@ body {
   min-width: 18px;
 }
 
-.md-list-item .bullet-content, .md-list-item .num-content {
+.md-list-item .bullet-content,
+.md-list-item .num-content {
   flex: 1;
 }
 
@@ -1083,7 +1135,7 @@ body {
   text-align: center;
   font-style: italic;
   font-family: 'Courier New', Courier, monospace;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   padding: 10px;
   border-radius: 6px;
   width: 100%;
@@ -1147,5 +1199,3 @@ body {
   background: var(--bg-hover);
   color: var(--accent-hover);
 }
-
-
