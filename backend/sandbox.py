@@ -119,6 +119,8 @@ ALLOWED_MODULES = {
     'networkx',
     # Astrophysics & Celestial Mechanics
     'astropy',
+    # Web & API requests (for real-time weather and stock prediction data)
+    'requests', 'urllib', 'http',
 }
 
 # ── Step 3: Create the Restricted Import Function ────────────────────────
