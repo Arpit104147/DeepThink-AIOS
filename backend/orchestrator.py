@@ -1167,6 +1167,25 @@ class AgentOrchestrator:
         lessons = ""
         all_errors = []
 
+        planner_sys = (
+            "You are a world-class scientist, physicist, and software planner.\n"
+            "Your task is to draft a step-by-step logic plan for the user's query.\n"
+            "Ensure maximum accuracy by following these principles:\n"
+            "1. Physical/Mathematical Rigor: Double-check all physical formulas. Avoid mixing up linear drag (F_d = -c*v) and quadratic drag (F_d = -0.5*C_d*A*rho*v*||v||). Include all real-world constants (e.g., cross-sectional area A, drag coefficient C_d, air density rho, mass m).\n"
+            "2. Complete Multi-Dimensional Coordinates: For 3D kinematics, use actual 3D launch angles (e.g. elevation theta AND azimuth/bearing phi) rather than a single 2D angle. Ensure all coordinate axes (x, y, z) are derived correctly.\n"
+            "3. Structured Workflow: Detail the exact equations, numerical integration method (e.g. Euler, RK4), stopping boundaries (e.g., stopping when hitting the ground), and data arrays needed."
+        )
+
+        coder_sys = (
+            "You are an expert computational programmer and software engineer.\n"
+            "Your job is to translate the logic plan into a complete, clean, and immediately runnable Python script.\n"
+            "RULES:\n"
+            "1. Implement the mathematical and physical equations exactly as described in the plan.\n"
+            "2. Do NOT write placeholders, mock functions, or abbreviated loop bodies. The code must be 100% complete, functional, and printable.\n"
+            "3. Ensure the simulation code handles conditions properly (e.g., stopping when height y < 0, checking for zero division).\n"
+            "4. Verify imports and usage (e.g., numpy, scipy, matplotlib)."
+        )
+
         for reset in range(max_resets):
             # ── Phase 1: DeepSeek Logic Plan ─────────────────────────────
             if status_callback:
@@ -1177,7 +1196,7 @@ class AgentOrchestrator:
             plan_p = f"Create a step-by-step logic plan:\n{ds_safe}"
             if lessons:
                 plan_p += f"\n\nLESSONS FROM PREVIOUS FAILURES:\n{lessons}"
-            ds_draft = self._strip_thinking(self._call_model(ds_llm, plan_p, gen_tokens, gen_temp))
+            ds_draft = self._strip_thinking(self._call_model(ds_llm, plan_p, gen_tokens, gen_temp, system_prompt=planner_sys))
 
             # ── Phase 2: Reasoning Sandbox — Verify Logic ────────────────
             if status_callback:
@@ -1192,7 +1211,7 @@ class AgentOrchestrator:
                     f"Logic plan FAILED verification.\nPlan:\n{ds_draft[:2000]}\n"
                     f"Error:\n{pg_out[:1000]}\nRewrite a corrected logic plan."
                 )
-                ds_draft = self._strip_thinking(self._call_model(vibe_llm, fix_p, gen_tokens, gen_temp))
+                ds_draft = self._strip_thinking(self._call_model(vibe_llm, fix_p, gen_tokens, gen_temp, system_prompt=planner_sys))
                 v2, _, _ = self._run_playground(vibe_llm, ds_draft, "logic")
                 if v2 and status_callback:
                     status_callback("VibeThinker corrected the logic!", "success", "vibethinker", 40)
@@ -1209,7 +1228,7 @@ class AgentOrchestrator:
                 status_callback("VibeThinker writing code...", "info", "vibethinker", 50)
             vibe_llm = self._get_model("vibethinker", required_ctx=ds_ctx)
             code_p = f"Write a complete Python script for this plan:\n{compiled_plan}\n\nWrap in ```python```."
-            code = Sandbox.extract_code(self._strip_thinking(self._call_model(vibe_llm, code_p, gen_tokens, gen_temp)))
+            code = Sandbox.extract_code(self._strip_thinking(self._call_model(vibe_llm, code_p, gen_tokens, gen_temp, system_prompt=coder_sys)))
 
             # ── Phase 4: Execution Sandbox ───────────────────────────────
             if status_callback:
@@ -1227,7 +1246,7 @@ class AgentOrchestrator:
             failed_code = code
             failed_error = output
             fix_p = f"Code failed:\n{code}\n\nError:\n{output}\n\nFix it. Output in ```python```."
-            code = Sandbox.extract_code(self._strip_thinking(self._call_model(vibe_llm, fix_p, gen_tokens, gen_temp)))
+            code = Sandbox.extract_code(self._strip_thinking(self._call_model(vibe_llm, fix_p, gen_tokens, gen_temp, system_prompt=coder_sys)))
             ok, output = self.sandbox.execute(code)
             if ok:
                 self.memory.save(prompt, code)
@@ -1244,7 +1263,7 @@ class AgentOrchestrator:
                 f"Code:\n{code}\nError:\n{output}\n"
                 f"Rewrite the ENTIRE script from scratch in ```python```. Think step by step."
             )
-            esc_resp = self._strip_thinking(self._call_model(vibe_llm, esc_p, gen_tokens, gen_temp))
+            esc_resp = self._strip_thinking(self._call_model(vibe_llm, esc_p, gen_tokens, gen_temp, system_prompt=coder_sys))
             if "```" in esc_resp:
                 code = Sandbox.extract_code(esc_resp)
                 ok, output = self.sandbox.execute(code)
@@ -1287,6 +1306,12 @@ class AgentOrchestrator:
             mode = "Playground-Verified" if use_playground else "LLM Debate"
             status_callback(f"Reasoning mode: {mode}", "info", "router", 15)
 
+        reasoning_sys = (
+            "You are a rigorous scientific researcher and expert logic reasoner.\n"
+            "Provide a step-by-step, factually precise, and mathematically sound answer.\n"
+            "Avoid common traps: explicitly verify physics models (e.g. linear vs. quadratic drag), include all coordinate components in multi-dimensional problems, define all assumptions and physical constants, and complete all math derivations fully."
+        )
+
         if use_playground:
             # ── Playground-Verified Reasoning (with Nuclear Reset) ────────
             max_resets = 2
@@ -1305,7 +1330,7 @@ class AgentOrchestrator:
                         draft_p += "\n\nYour previous answer had errors. Rewrite from scratch."
                     if lessons:
                         draft_p += f"\n\nLESSONS FROM PREVIOUS FAILURES:\n{lessons}"
-                    ds_answer = self._strip_thinking(self._call_model(ds_llm, draft_p, gen_tokens, gen_temp))
+                    ds_answer = self._strip_thinking(self._call_model(ds_llm, draft_p, gen_tokens, gen_temp, system_prompt=reasoning_sys))
 
                     if status_callback:
                         status_callback("Verifying in Reasoning Playground...", "info", "deepseek_r1", 35 + rnd*12)
@@ -1326,7 +1351,7 @@ class AgentOrchestrator:
                         f"This answer failed verification.\nAnswer:\n{ds_answer[:2000]}\n"
                         f"Error:\n{pg_out[:1000]}\nProvide a corrected, complete answer."
                     )
-                    vibe_answer = self._strip_thinking(self._call_model(vibe_llm, vibe_p, gen_tokens, gen_temp))
+                    vibe_answer = self._strip_thinking(self._call_model(vibe_llm, vibe_p, gen_tokens, gen_temp, system_prompt=reasoning_sys))
                     v2, _, _ = self._run_playground(vibe_llm, vibe_answer, "reasoning")
                     if v2:
                         if status_callback:
