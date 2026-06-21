@@ -29,7 +29,7 @@ class Memory:
 
     def _init_sqlite(self):
         """Initialize local SQLite database for structured data and embedding storage."""
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             
             # Table for storing experiences (tasks, solutions, mistakes)
@@ -54,7 +54,7 @@ class Memory:
                 pass
         
         # SQLite count
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM memories")
             count = cursor.fetchone()[0]
@@ -83,7 +83,7 @@ class Memory:
                 print(f"ChromaDB query failed: {str(e)}. Falling back to SQLite recall.")
 
         # SQLite Query Fallback
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, task, doc, embedding FROM memories")
             rows = cursor.fetchall()
@@ -167,19 +167,40 @@ class Memory:
 
     def _is_duplicate(self, task):
         """Check if a very similar task already exists in memory."""
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT task FROM memories")
             rows = cursor.fetchall()
 
-        # Simple dedup: if >60% of words overlap with an existing task, skip
-        task_words = set(task.lower().split())
+        # Stopwords list to filter out generic noise words
+        STOPWORDS = {
+            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", 
+            "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
+            "can", "did", "do", "does", "doing", "don't", "down", "during", "each", "few", "for", "from", 
+            "further", "had", "has", "have", "having", "he", "her", "here", "hers", "him", "his", "how", 
+            "i", "if", "in", "into", "is", "it", "its", "me", "more", "most", "my", "myself", "no", "nor", 
+            "not", "of", "off", "on", "once", "only", "or", "other", "our", "ours", "out", "over", "own", 
+            "same", "she", "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", 
+            "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", 
+            "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", 
+            "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves"
+        }
+
+        # Filter out punctuation and stopwords to compare only content words
+        def _get_content_words(t):
+            words = [w.strip(",.!?()\"';:") for w in t.lower().split()]
+            return set(w for w in words if w and w not in STOPWORDS)
+
+        task_words = _get_content_words(task)
+        if not task_words:
+            return False
+
         for (existing_task,) in rows:
-            existing_words = set(existing_task.lower().split())
-            if not task_words or not existing_words:
+            existing_words = _get_content_words(existing_task)
+            if not existing_words:
                 continue
             overlap = len(task_words & existing_words) / max(len(task_words), len(existing_words))
-            if overlap > 0.6:
+            if overlap > 0.8:  # Higher threshold for content words to prevent false duplicate matching
                 return True
         return False
 
@@ -226,7 +247,7 @@ class Memory:
             except Exception as e:
                 print(f"Embedding generation failed: {str(e)}")
 
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
@@ -275,7 +296,7 @@ class Memory:
             except Exception as e:
                 print(f"Embedding generation failed: {str(e)}")
 
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
