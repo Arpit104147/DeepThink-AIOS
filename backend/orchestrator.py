@@ -1211,7 +1211,7 @@ class AgentOrchestrator:
         if past_experience:
             ds_safe += past_experience
 
-        max_resets = 2
+        max_resets = 1
         lessons = ""
         all_errors = []
 
@@ -1458,7 +1458,7 @@ class AgentOrchestrator:
 
         if use_playground:
             # ── Playground-Verified Reasoning (with Nuclear Reset) ────────
-            max_resets = 2
+            max_resets = 1
             lessons = ""
             all_errors = []
 
