@@ -1374,7 +1374,49 @@ class AgentOrchestrator:
                     status_callback(f"Nuclear Reset: Extracting lessons...", "error", "vibethinker", 85)
                 lessons = self._extract_failure_lessons(vibe_llm, compiled_plan, "\n".join(all_errors))
 
-        # All resets exhausted
+        # All resets exhausted -> Emergency Web Search Healing fallback
+        if status_callback:
+            status_callback("Main pipeline failed. Activating Emergency Web Search...", "warning", "system", 90)
+        try:
+            error_lines = [line.strip() for line in output.split('\n') if line.strip()]
+            error_query = error_lines[-1] if error_lines else output[:100]
+            if len(error_query) > 120:
+                error_query = error_query[-120:]
+            search_term = f"python {error_query}"
+            if status_callback:
+                status_callback(f"Searching: '{search_term}'...", "info", "system", 92)
+            web_results = self.web_search.search(search_term, max_results=2)
+            emergency_context = ""
+            if web_results:
+                emergency_context = "\n".join([f"- {r.get('title')}: {r.get('snippet', '')}" for r in web_results])
+            if emergency_context:
+                if status_callback:
+                    status_callback("Emergency context acquired. Rewriting script...", "info", "vibethinker", 95)
+                vibe_llm = self._get_model("vibethinker", required_ctx=ds_ctx)
+                emergency_prompt = (
+                    f"The previous attempts failed with the following traceback:\n"
+                    f"{output[:800]}\n\n"
+                    f"We searched the web for this error and found the following references:\n"
+                    f"{emergency_context}\n\n"
+                    f"Using this information, rewrite the complete functional Python script to fix the error.\n"
+                    f"Original plan:\n{compiled_plan[:1500]}\n\n"
+                    f"Output the complete script in a ```python``` block."
+                )
+                esc_resp = self._strip_thinking(self._call_model(vibe_llm, emergency_prompt, gen_tokens, gen_temp, system_prompt=coder_sys))
+                if "```" in esc_resp:
+                    code = Sandbox.extract_code(esc_resp)
+                    ok, output = self.sandbox.execute(code)
+                    if ok:
+                        if status_callback:
+                            status_callback("Emergency Search Healing SUCCESSFUL!", "success", "vibethinker", 100)
+                        self.memory.save(prompt, code)
+                        self.memory.save_mistake(prompt, failed_code, failed_error, code)
+                        router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
+                        viz = self._check_3d_gate(prompt, compiled_plan, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
+                        return f"### Logic Plan (Verified via Emergency Search)\n{compiled_plan}\n\n### Execution Output\n{output}{viz}\n\n### Code\n```python\n{code}\n```"
+        except Exception as es:
+            print(f"Emergency web search recovery failed: {es}")
+
         if status_callback:
             status_callback("Max retries reached.", "error", "system", 100)
         return f"### Logic Plan\n{compiled_plan}\n\n### Execution Failed\n{output}\n\n### Code\n```python\n{code}\n```"
@@ -1491,9 +1533,52 @@ class AgentOrchestrator:
                     vibe_llm = self._get_model("vibethinker", required_ctx=ds_ctx)
                     lessons = self._extract_failure_lessons(vibe_llm, ds_answer, "\n".join(all_errors))
 
-            # All resets exhausted — return best effort
+            # All resets exhausted -> Emergency Web Search Healing fallback
             if status_callback:
-                status_callback("Max retries reached. Returning best effort.", "warning", "system", 90)
+                status_callback("Main pipeline failed. Activating Emergency Web Search...", "warning", "system", 90)
+            try:
+                error_lines = [line.strip() for line in pg_out.split('\n') if line.strip()]
+                error_query = error_lines[-1] if error_lines else pg_out[:100]
+                if len(error_query) > 120:
+                    error_query = error_query[-120:]
+                search_term = f"python reasoning {error_query}"
+                if status_callback:
+                    status_callback(f"Searching: '{search_term}'...", "info", "system", 92)
+                web_results = self.web_search.search(search_term, max_results=2)
+                emergency_context = ""
+                if web_results:
+                    emergency_context = "\n".join([f"- {r.get('title')}: {r.get('snippet', '')}" for r in web_results])
+                if emergency_context:
+                    if status_callback:
+                        status_callback("Emergency context acquired. Final reasoning correction...", "info", "vibethinker", 95)
+                    vibe_llm = self._get_model("vibethinker", required_ctx=ds_ctx)
+                    emergency_prompt = (
+                        f"The reasoning explanation failed sandbox verification with the error:\n"
+                        f"{pg_out[:500]}\n\n"
+                        f"We found the following context online for this issue:\n"
+                        f"{emergency_context}\n\n"
+                        f"Correct the derivation/calculation to fix this issue, and formulate the final detailed explanation.\n"
+                        f"Failed Draft:\n{ds_answer[:1500]}"
+                    )
+                    vibe_answer = self._strip_thinking(self._call_model(vibe_llm, emergency_prompt, gen_tokens, gen_temp, system_prompt=reasoning_sys))
+                    v2, vibe_pg_out, vibe_test_code = self._run_playground(vibe_llm, vibe_answer, "reasoning")
+                    if v2:
+                        if status_callback:
+                            status_callback("Emergency Search Healing SUCCESSFUL!", "success", "vibethinker", 100)
+                        router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
+                        viz = self._check_3d_gate(prompt, vibe_answer, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
+                        verification_block = (
+                            f"\n\n### Computational Verification (Emergency Healed)\n"
+                            f"```python\n{vibe_test_code}\n```\n\n"
+                            f"**Verification Output:**\n"
+                            f"```text\n{vibe_pg_out}\n```"
+                        )
+                        return f"### Verified Answer\n{vibe_answer}{verification_block}{viz}"
+            except Exception as es:
+                print(f"Emergency reasoning search recovery failed: {es}")
+
+            if status_callback:
+                status_callback("Max retries reached. Returning best effort.", "warning", "system", 98)
             router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
             viz = self._check_3d_gate(prompt, ds_answer, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
             verification_block = (
