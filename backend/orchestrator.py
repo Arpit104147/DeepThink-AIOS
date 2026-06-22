@@ -932,8 +932,9 @@ class AgentOrchestrator:
         Returns (verified: bool, output: str, test_code: str)
         """
         coder_model = model
-        # Redirect coding tasks away from VibeThinker 1.5B (which produces SyntaxErrors in Python generation)
-        if model_key == "vibethinker" or (hasattr(model, "model_path") and "vibethinker" in getattr(model, "model_path", "").lower()):
+        # Redirect all playground script writing to the Router to prevent DeepSeek-R1 thinking tokens
+        # from depleting the context window and causing code truncation, or VibeThinker syntax errors.
+        if purpose == "reasoning" or model_key in ["vibethinker", "deepseek_r1"]:
             coder_model = self._get_model("router", required_ctx=2048)
 
         playground_prompt = (
@@ -1500,7 +1501,10 @@ class AgentOrchestrator:
             "(energy, momentum, angular momentum) should be verified and how to check them.\n"
             "6. OUTPUT FORMAT: Write a numbered list of steps. Each step must state WHAT to compute, "
             "the EXACT formula, and the expected data structure (array shape, variable names).\n"
-            "7. Think step by step. If you are unsure about any formula, derive it from first principles."
+            "7. Think step by step. If you are unsure about any formula, derive it from first principles.\n"
+            "8. IMPORTANT: If 'Relevant past experience' is provided, use it ONLY for structure, formulas, or syntax logic. "
+            "Do NOT copy the specific numeric values, initial conditions, or dimensions from the past experience if they differ "
+            "from the User Query. Always prioritize the User Query's exact variables, launch angles, velocities, and parameters."
         )
 
         coder_sys = (
@@ -1728,7 +1732,10 @@ class AgentOrchestrator:
             "sign conventions, reference frame consistency.\n"
             "7. If you cite a formula, state where it comes from (Newton's 2nd law, etc.).\n"
             "8. Complete ALL derivations fully — do not skip steps or say 'it can be shown that'.\n"
-            "9. If uncertain about a specific value or fact, say so explicitly rather than guessing."
+            "9. If uncertain about a specific value or fact, say so explicitly rather than guessing.\n"
+            "10. IMPORTANT: If 'Relevant past experience' is provided, use it ONLY for structure, formulas, or syntax logic. "
+            "Do NOT copy the specific numeric values, initial conditions, or dimensions from the past experience if they differ "
+            "from the User Query. Always prioritize the User Query's exact variables, launch angles, velocities, and parameters."
         )
 
         if use_playground:
