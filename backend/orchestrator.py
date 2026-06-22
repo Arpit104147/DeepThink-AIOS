@@ -291,10 +291,12 @@ class AgentOrchestrator:
                 vram_free = self._get_vram_free_gb(gpu_idx)
                 if vram_free is None:
                     continue
-                # Use the larger of: static safety threshold OR (incoming model + 3GB buffer)
+                # Use the larger of: static safety threshold OR (incoming model + 1.5 GB buffer)
+                # Note: 3.0 GB was too aggressive — it demanded 9 GB free to load a 6 GB model
+                # on a 16 GB P100, causing unnecessary evictions and stalls.
                 effective_threshold = self.vram_safety_gb
                 if required_vram_gb is not None:
-                    effective_threshold = max(self.vram_safety_gb, required_vram_gb + 3.0)
+                    effective_threshold = max(self.vram_safety_gb, required_vram_gb + 1.5)
                 if vram_free < effective_threshold:
                     print(f"⚠️ DMA: CUDA GPU:{gpu_idx} VRAM low ({vram_free:.1f} GB free, need {effective_threshold:.1f} GB)")
                     while vram_free < effective_threshold and self.model_access_order:
@@ -308,7 +310,7 @@ class AgentOrchestrator:
         for free_gb, total_gb, card_name in sysfs_gpus:
             effective_threshold = self.vram_safety_gb
             if required_vram_gb is not None:
-                effective_threshold = max(self.vram_safety_gb, required_vram_gb + 3.0)
+                effective_threshold = max(self.vram_safety_gb, required_vram_gb + 1.5)
             if free_gb < effective_threshold:
                 print(f"⚠️ DMA: sysfs {card_name} VRAM low ({free_gb:.1f}/{total_gb:.1f} GB free)")
                 while free_gb < effective_threshold and self.model_access_order:
@@ -364,11 +366,18 @@ class AgentOrchestrator:
                 del self.loaded_models[model_key]
                 if model_key in self.model_access_order:
                     self.model_access_order.remove(model_key)
+                del model_obj
                 gc.collect()
-                import time
-                time.sleep(2)
+                # ⚠️ Critical: Flush CUDA cache synchronously BEFORE reloading
+                # Without this, the old allocation stays in VRAM during the reload
+                # causing a double-allocation OOM on a 16 GB P100.
+                if torch and torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    torch.cuda.empty_cache()
                 if torch and hasattr(torch, "xpu") and torch.xpu.is_available():
                     torch.xpu.empty_cache()
+                import time
+                time.sleep(1)  # Give llama.cpp's async CUDA deallocation time to complete
             else:
                 self._touch_model(model_key)
                 return model_obj
@@ -378,14 +387,14 @@ class AgentOrchestrator:
         est_model_gb = self._estimate_model_size_gb(model_key)
         print(f"📦 DMA: Preparing to load '{model_key}' (~{est_model_gb:.1f} GB)")
         
-        # ── Kaggle dGPU Hot-Swap Guard ────────────────────────────────────
-        # On Kaggle (16GB VRAM, 32GB RAM), we aggressively flush the GPU of all
-        # other models so the incoming model gets 100% of the VRAM for its KV Cache.
+        # ── Kaggle dGPU Hot-Swap Guard (EVM) ─────────────────────────────
+        # On Kaggle P100 (16GB VRAM, 32GB RAM), aggressively flush ALL other models
+        # from VRAM so the incoming model gets 100% of the VRAM KV Cache space.
         if getattr(self, 'kaggle_hotswap_mode', False) and self.loaded_models:
-            models_to_flush = list(self.loaded_models.keys())
-            for mk in models_to_flush:
-                if mk != model_key:
-                    print(f"🔄 DMA (Hot-Swap): Unloading '{mk}' from VRAM to make room...")
+            models_to_flush = [mk for mk in list(self.loaded_models.keys()) if mk != model_key]
+            if models_to_flush:
+                for mk in models_to_flush:
+                    print(f"🔄 DMA (EVM Hot-Swap): Unloading '{mk}' from VRAM...")
                     model_obj = self.loaded_models.pop(mk, None)
                     if mk in self.model_access_order:
                         self.model_access_order.remove(mk)
@@ -395,9 +404,22 @@ class AgentOrchestrator:
                         except Exception:
                             pass
                     del model_obj
-            gc.collect()
-            if torch and torch.cuda.is_available():
-                torch.cuda.empty_cache()
+                gc.collect()
+                # ⚠️ Critical: synchronize + flush AFTER eviction
+                # llama.cpp's CUDA deallocation is async — without synchronize()
+                # the new model's allocation overlaps with the old one → OOM
+                if torch and torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    torch.cuda.empty_cache()
+                import time
+                time.sleep(1)  # Extra safety margin for GPU memory system
+                # Verify eviction actually freed VRAM
+                try:
+                    free_vram, total_vram = torch.cuda.mem_get_info(0)
+                    free_vram_gb = free_vram / (1024 ** 3)
+                    print(f"✅ DMA (EVM): VRAM after eviction: {free_vram_gb:.1f} GB free / {total_vram/(1024**3):.0f} GB total")
+                except Exception:
+                    pass
                 
         self._check_memory_pressure(required_vram_gb=est_model_gb)
 
