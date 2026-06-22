@@ -698,8 +698,10 @@ class AgentOrchestrator:
                 after_think = after_think.replace('```', '</think>\n```', 1)
                 text = before_think + '<think>' + after_think
             else:
-                # If there's no code fence, the think block hit the token limit.
-                # Discard the incomplete thought process.
+                # If there's no code fence and before_think is empty, the model only generated thinking.
+                # Do NOT return empty. Return the thinking process (without <think> tag) so the user gets a response.
+                if not before_think.strip():
+                    return after_think.strip()
                 return before_think.strip()
                 
         cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
@@ -711,6 +713,7 @@ class AgentOrchestrator:
         # inside the think block. We must strip ONLY the tags, keeping the content!
         text_without_tags = re.sub(r'</?think>', '', text)
         return text_without_tags.strip()
+
 
 
     def _crunch_prompt(self, prompt, target_model, prompt_token_budget, status_callback=None, router_llm=None):
@@ -1970,15 +1973,15 @@ class AgentOrchestrator:
             ds_draft = self._strip_thinking(self._call_model(ds_llm, f"Provide a detailed answer:\n{ds_safe}", gen_tokens, gen_temp))
 
             if status_callback:
-                status_callback("VibeThinker refining answer...", "info", "vibethinker", 50)
-            vibe_llm = self._get_model("vibethinker", required_ctx=ds_ctx)
-            vibe_critique = self._strip_thinking(self._call_model(
-                vibe_llm, 
-                f"You are a helpful assistant. Integrate any improvements and rewrite this draft into a single, polished, and cohesive final response. Do NOT include any meta-commentary, intros, or critique headings. Output only the final response:\n{ds_draft}", 
-                gen_tokens, gen_temp
+                status_callback("DeepSeek-R1 refining answer...", "info", "deepseek_r1", 60)
+            ds_refined = self._strip_thinking(self._call_model(
+                ds_llm, 
+                f"Integrate any improvements and rewrite this draft into a single, polished, and cohesive final response. Do NOT include any meta-commentary, intros, or critique headings. Output only the final response:\n{ds_draft}", 
+                gen_tokens, gen_temp,
+                system_prompt="You are a helpful assistant and a technical writer. Refine the draft for maximum clarity and precision."
             ))
 
-            compiled = vibe_critique
+            compiled = ds_refined
             router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
             viz = self._check_3d_gate(prompt, compiled, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
             if status_callback:
