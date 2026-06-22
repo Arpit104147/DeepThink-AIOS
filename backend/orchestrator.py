@@ -231,16 +231,10 @@ class AgentOrchestrator:
         Takes into account the EVM hot-swap (unloading other models) and the size of the target model."""
         hard_limit = getattr(self, 'max_auto_ctx', 8192)
         
-        # 1. System RAM Constraints
+        # 1. System RAM Constraints (Emergency fallback only to prevent OS crash)
         free_ram = self._get_ram_free_gb()
-        if free_ram < 2.0:
-            ram_limit = 1024
-        elif free_ram < 4.0:
+        if free_ram < 1.5:
             ram_limit = 2048
-        elif free_ram < 8.0:
-            ram_limit = 4096
-        elif free_ram < 16.0:
-            ram_limit = 8192
         else:
             ram_limit = hard_limit
 
