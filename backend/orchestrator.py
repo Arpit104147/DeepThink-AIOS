@@ -229,7 +229,44 @@ class AgentOrchestrator:
     def _get_dynamic_context_ceiling(self, model_key):
         """Dynamically computes the safe context ceiling for a specific model based on actual free VRAM and free RAM.
         Takes into account the EVM hot-swap (unloading other models) and the size of the target model."""
-        hard_limit = getattr(self, 'max_auto_ctx', 8192)
+        # Determine base limit (8k)
+        base_limit = getattr(self, 'max_auto_ctx', 8192)
+        
+        # Check system RAM margins
+        vm = psutil.virtual_memory()
+        total_ram_gb = vm.total / (1024 ** 3)
+        free_ram_gb = vm.available / (1024 ** 3)
+        ram_used_pct = (vm.total - vm.available) / vm.total * 100
+        
+        # Scale context ceiling if there is plenty of system RAM (leaving 5% margin)
+        ram_allowed_ceiling = base_limit
+        if ram_used_pct < 95.0:
+            five_percent_ram_gb = total_ram_gb * 0.05
+            surplus_ram = free_ram_gb - five_percent_ram_gb
+            if surplus_ram > 0:
+                ram_allowed_ceiling = int(base_limit + surplus_ram * 4000)
+                ram_allowed_ceiling = min(32768, ram_allowed_ceiling)
+
+        # Check GPU VRAM margins
+        vram_allowed_ceiling = ram_allowed_ceiling
+        if torch and torch.cuda.is_available():
+            try:
+                free_vram, total_vram = torch.cuda.mem_get_info(0)
+                free_vram_gb = free_vram / (1024 ** 3)
+                total_vram_gb = total_vram / (1024 ** 3)
+                vram_used_pct = (total_vram - free_vram) / total_vram * 100
+                
+                if vram_used_pct < 95.0:
+                    five_percent_vram_gb = total_vram_gb * 0.05
+                    surplus_vram = free_vram_gb - five_percent_vram_gb
+                    if surplus_vram > 0:
+                        vram_allowed_ceiling = int(base_limit + surplus_vram * 8000)
+                        vram_allowed_ceiling = min(32768, vram_allowed_ceiling)
+            except Exception:
+                pass
+
+        hard_limit = min(ram_allowed_ceiling, vram_allowed_ceiling)
+        hard_limit = max(8192, hard_limit)
         
         # 1. System RAM Constraints (Emergency fallback only to prevent OS crash)
         free_ram = self._get_ram_free_gb()
@@ -1504,7 +1541,9 @@ class AgentOrchestrator:
             "7. Think step by step. If you are unsure about any formula, derive it from first principles.\n"
             "8. IMPORTANT: If 'Relevant past experience' is provided, use it ONLY for structure, formulas, or syntax logic. "
             "Do NOT copy the specific numeric values, initial conditions, or dimensions from the past experience if they differ "
-            "from the User Query. Always prioritize the User Query's exact variables, launch angles, velocities, and parameters."
+            "from the User Query. Always prioritize the User Query's exact variables, launch angles, velocities, and parameters.\n"
+            "9. THINKING CONSTRAINT: Keep your thinking thoughts focused, direct, and concise. Avoid looping over the same constraints. "
+            "Proceed to the planning steps as soon as you have derived the correct approach. Keep your reasoning brief."
         )
 
         coder_sys = (
@@ -1684,6 +1723,20 @@ class AgentOrchestrator:
                 if "```" in esc_resp:
                     code = Sandbox.extract_code(esc_resp)
                     ok, output = self.sandbox.execute(code)
+                    if not ok:
+                        # Attempt exactly 1 round of playground correction for emergency healing
+                        if status_callback:
+                            status_callback("Emergency script failed. Attempting 1 correction round...", "warning", "deepseek_r1", 97)
+                        patch_prompt = (
+                            f"The emergency script failed with the following traceback/error:\n{output[:800]}\n\n"
+                            f"Original code:\n{code[:1500]}\n\n"
+                            f"Using this traceback, rewrite the complete functional Python script to fix the error.\n"
+                            f"Output only the complete corrected script in a ```python``` block."
+                        )
+                        patch_resp = self._strip_thinking(self._call_model(ds_llm, patch_prompt, gen_tokens, gen_temp, system_prompt=coder_sys))
+                        if "```" in patch_resp:
+                            code = Sandbox.extract_code(patch_resp)
+                            ok, output = self.sandbox.execute(code)
                     if ok:
                         if status_callback:
                             status_callback("Emergency Search Healing SUCCESSFUL!", "success", "deepseek_r1", 100)
@@ -1735,7 +1788,9 @@ class AgentOrchestrator:
             "9. If uncertain about a specific value or fact, say so explicitly rather than guessing.\n"
             "10. IMPORTANT: If 'Relevant past experience' is provided, use it ONLY for structure, formulas, or syntax logic. "
             "Do NOT copy the specific numeric values, initial conditions, or dimensions from the past experience if they differ "
-            "from the User Query. Always prioritize the User Query's exact variables, launch angles, velocities, and parameters."
+            "from the User Query. Always prioritize the User Query's exact variables, launch angles, velocities, and parameters.\n"
+            "11. THINKING CONSTRAINT: Be concise, structured, and focused in your thinking thoughts. Avoid looping or repeating the "
+            "same mathematical derivations. State your reasoning path clearly and proceed directly to the solution once verified."
         )
 
         if use_playground:
@@ -1856,6 +1911,18 @@ class AgentOrchestrator:
                     )
                     vibe_answer = self._strip_thinking(self._call_model(ds_llm, emergency_prompt, gen_tokens, gen_temp, system_prompt=reasoning_sys))
                     v2, vibe_pg_out, vibe_test_code = self._run_playground(ds_llm, vibe_answer, "reasoning", model_key="deepseek_r1")
+                    if not v2:
+                        # Attempt exactly 1 round of playground correction for emergency healing
+                        if status_callback:
+                            status_callback("Emergency verification failed. Attempting 1 correction round...", "warning", "deepseek_r1", 97)
+                        corr_prompt = (
+                            f"The emergency explanation failed verification with this traceback:\n"
+                            f"{vibe_pg_out[:800]}\n\n"
+                            f"Explanation:\n{vibe_answer[:1500]}\n\n"
+                            f"Correct the derivation or logic to fix this error, and provide the complete corrected explanation."
+                        )
+                        vibe_answer = self._strip_thinking(self._call_model(ds_llm, corr_prompt, gen_tokens, gen_temp, system_prompt=reasoning_sys))
+                        v2, vibe_pg_out, vibe_test_code = self._run_playground(ds_llm, vibe_answer, "reasoning", model_key="deepseek_r1")
                     if v2:
                         if status_callback:
                             status_callback("Emergency Search Healing SUCCESSFUL!", "success", "deepseek_r1", 100)
