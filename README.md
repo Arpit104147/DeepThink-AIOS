@@ -49,36 +49,37 @@ User Prompt
 │  Phi-3.5-Mini (Master Router)  │  ← Classifies: SIMPLE / CODING / REASONING
 └───────────────┬─────────────────┘
                 │
-    ┌───────────┼───────────┐
-    ▼           ▼           ▼
- SIMPLE      CODING     REASONING
-    │           │           │
-    │    ┌──────┴──────┐    └──────────────┐
-    │    ▼             ▼                   ▼
-    │ DeepSeek-R1  DeepSeek-R1       DeepSeek-R1
-    │ (Logic Plan) (Logic Plan)      (Draft Answer)
-    │    │             │                   │
-    │    ▼             ▼                   ▼
-    │ Reasoning    Reasoning          Reasoning
-    │ Sandbox      Sandbox ──────► Playground
-    │ (Verify)     (Verify)        (Verify via Python)
-    │    │             │                   │
-    │    ▼             ▼                   ▼
-    │ VibeThinker  VibeThinker        VibeThinker
-    │ (Write Code) (Fix Logic)       (Critique & Refine)
-    │    │             │                   │
-    │    ▼             ▼                   ▼
-    │ Execution    Execution         3D Gate Check
-    │ Sandbox      Sandbox               │
-    │    │         (Reflexion             ▼
-    │    │          Loop ×3)    OpenCodeInterpreter
-    │    │             │        (Plotly 3D Chart)
-    │    ▼             ▼                   │
-    └────┴─────────────┴───────────────────┘
+    ┌───────────┼──────────────────────────────┐
+    ▼           ▼                              ▼
+ SIMPLE      CODING                        REASONING
+    │           │                              │
+    │           ▼                              ▼
+    │     DeepSeek-R1 (Logic Plan)       DeepSeek-R1 (Draft Answer)
+    │           │                              │
+    │           ▼                              ▼
+    │     Reasoning Sandbox             Reasoning Playground
+    │       (Logic Check)                 (Python Asserts Check)
+    │           │                              │
+    │           ├─► Fail: VibeThinker          ├─► Fail: DeepSeek-R1
+    │           │   (Fix Logic Plan)           │   (Correction Loop ×3)
+    │           ▼                              ▼
+    │     VibeThinker (Write Code)        3D Gate Check
+    │           │                              │
+    │           ▼                              ▼
+    │     Execution Sandbox (Polyglot)  OpenCodeInterpreter
+    │           │                       (Three.js/Plotly.js Visual)
+    │           ├─► Fail: VibeThinker/R1       │
+    │           │   (Reflexion Loop ×3)        │
+    │           │                              │
+    │           ├─► Critical Fail:             ├─► Critical Fail:
+    │           │   Emergency Search           │   Emergency Search
+    │           │   + Playground Correction    │   + Playground Correction
+    │           ▼                              ▼
+    └───────────┴──────────────────────────────┘
                        │
                        ▼
-              Streamed Response
-          (Answer + Code + 3D Chart)
+               Streamed Response
+           (Answer + Code + 3D Visual)
 ```
 
 ---
