@@ -173,6 +173,13 @@ const ArtifactSandbox = ({ htmlCode }) => {
 
           window.onerror = function(msg, url, line, col, error) {
             window.parent.postMessage({ type: 'CONSOLE_ERROR', text: msg + ' (Line ' + line + ')' }, '*');
+            
+            // Append error box to the page so it is visible to the user
+            const errDiv = document.createElement('div');
+            errDiv.className = 'error-box';
+            errDiv.innerHTML = '<strong>⚠️ Sandbox Runtime Error:</strong><br/>' + msg + ' (Line ' + line + ')';
+            document.body.appendChild(errDiv);
+            
             return false;
           };
         </script>
