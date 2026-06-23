@@ -308,6 +308,17 @@ class AgentOrchestrator:
                 
         # Sane bottleneck of RAM, VRAM, and hard limit
         dynamic_cap = min(hard_limit, ram_limit, vram_limit)
+        
+        # Model-specific physical context ceilings to prevent VRAM OOM and RoPE overflow
+        model_ceilings = {
+            "router": 8192,
+            "vibethinker": 8192,
+            "opencode": 16384,
+            "deepseek_r1": 16384
+        }
+        model_cap = model_ceilings.get(model_key, 16384)
+        dynamic_cap = min(dynamic_cap, model_cap)
+        
         dynamic_cap = max(1024, dynamic_cap)
         return dynamic_cap
 
