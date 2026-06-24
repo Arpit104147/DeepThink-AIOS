@@ -958,36 +958,7 @@ class AgentOrchestrator:
         if re.match(r"^[0-9+\-*/%().\s]+$", arithmetic_clean) and len(arithmetic_clean) > 0:
             return "SIMPLE"
 
-        # ── 5. Strong deterministic data-science & programming overrides ───────
-        strong_code_indicators = [
-            "sandboxdatahelper", "plotly", "pandas", "dataframe", "numpy", "matplotlib",
-            "write a python", "write python", "python script", "implement a python",
-            "write code to", "write a code to", "plotly layout", "forecast close price",
-            "standardized predictive_metrics", "pip install", "import pandas", "import numpy",
-            "flask", "fastapi", "django", "sql query", "react component", "javascript script",
-            "html code", "css styling", "dockerfile", "requirements.txt", "git command",
-            "bash script", "powershell script", "shell script", "api endpoint", "json metric"
-        ]
-        if any(kw in prompt_lower for kw in strong_code_indicators):
-            return "CODING"
-
-        # ── 6. Fast-track current-events & search-only requests (Direct SIMPLE) ──
-        recency_keywords = ["who won", "who lost", "last match", "latest match", "recent match", "score of", "latest score",
-                            "yesterday", "today's", "todays", "tonight", "last night", "this week", "this month",
-                            "latest news", "recent news", "breaking news", "current", "right now",
-                            "trending", "who is the president", "who is the pm", "who is the ceo",
-                            "weather today", "weather in", "temperature in", "stock price", "crypto price",
-                            "box office", "release date", "when is", "when does", "when did",
-                            "election result", "who won the", "match result", "ipl", "world cup"]
-        
-        search_intents = ["fetch from web", "search the web", "search for", "google for", "latest news", "weather news", "current weather", "weather of"]
-        code_intent_kws = ["write code", "write a code", "javascript code", "python code", "c++ code", "java code", "html code", "css code", "write a script", "code for", "script to", "build", "implement"]
-        has_code_intent = any(kw in prompt_lower for kw in code_intent_kws)
-
-        if any(kw in prompt_clean for kw in recency_keywords) or (any(intent in prompt_lower for intent in search_intents) and not has_code_intent):
-            return "SIMPLE"
-
-        # ── 7. Advanced LLM Few-Shot Classifier Prompt ─────────────────────────
+        # ── 5. Advanced LLM Few-Shot Classifier Prompt ─────────────────────────
         few_shot_prompt = (
             "Classify the following query into exactly ONE of the three categories: SIMPLE, CODING, or REASONING.\n\n"
             "CATEGORIES:\n"
@@ -1014,18 +985,47 @@ class AgentOrchestrator:
             "Category:"
         )
 
-        result = self._call_model(router_llm, few_shot_prompt, max_tokens=10, temperature=0.1)
-        upper = str(result).strip().upper()
+        try:
+            result = self._call_model(router_llm, few_shot_prompt, max_tokens=10, temperature=0.1)
+            upper = str(result).strip().upper()
+            if "CODING" in upper:
+                return "CODING"
+            if "REASONING" in upper:
+                return "REASONING"
+            if "SIMPLE" in upper:
+                return "SIMPLE"
+        except Exception as e:
+            print(f"LLM task classification failed, falling back to heuristics: {e}")
 
-        # Strict extraction from LLM response
-        if "CODING" in upper:
+        # ── 6. Heuristics & Deterministic overrides (only if LLM failed) ───────
+        strong_code_indicators = [
+            "sandboxdatahelper", "plotly", "pandas", "dataframe", "numpy", "matplotlib",
+            "write a python", "write python", "python script", "implement a python",
+            "write code to", "write a code to", "plotly layout", "forecast close price",
+            "standardized predictive_metrics", "pip install", "import pandas", "import numpy",
+            "flask", "fastapi", "django", "sql query", "react component", "javascript script",
+            "html code", "css styling", "dockerfile", "requirements.txt", "git command",
+            "bash script", "powershell script", "shell script", "api endpoint", "json metric"
+        ]
+        if any(kw in prompt_lower for kw in strong_code_indicators):
             return "CODING"
-        if "REASONING" in upper:
-            return "REASONING"
-        if "SIMPLE" in upper:
+
+        recency_keywords = ["who won", "who lost", "last match", "latest match", "recent match", "score of", "latest score",
+                            "yesterday", "today's", "todays", "tonight", "last night", "this week", "this month",
+                            "latest news", "recent news", "breaking news", "current", "right now",
+                            "trending", "who is the president", "who is the pm", "who is the ceo",
+                            "weather today", "weather in", "temperature in", "stock price", "crypto price",
+                            "box office", "release date", "when is", "when does", "when did",
+                            "election result", "who won the", "match result", "ipl", "world cup"]
+        
+        search_intents = ["fetch from web", "search the web", "search for", "google for", "latest news", "weather news", "current weather", "weather of"]
+        code_intent_kws = ["write code", "write a code", "javascript code", "python code", "c++ code", "java code", "html code", "css code", "write a script", "code for", "script to", "build", "implement"]
+        has_code_intent = any(kw in prompt_lower for kw in code_intent_kws)
+
+        if any(kw in prompt_clean for kw in recency_keywords) or (any(intent in prompt_lower for intent in search_intents) and not has_code_intent):
             return "SIMPLE"
 
-        # ── 8. Fallback Keyword Scan Safety Net ────────────────────────────────
+        # ── 7. Heuristics Scan Safety Net ────────────────────────────────
         code_keywords = [
             "write code", "write a code", "fix code", "debug", "script", "program", "compile",
             "function(", "def ", "class ", "import ", "coding", "develop", "web app", "website",
@@ -1124,6 +1124,17 @@ class AgentOrchestrator:
                 "that the roundtrip encryption and decryption matches the exact original plaintext, "
                 "or that generated security tokens/keys validate successfully using standard cryptographic "
                 "libraries (like cryptography, hashlib, or jwt). If simulating packets, verify header structures."
+            )
+
+        if purpose == "logic":
+            rules.append(
+                "If the task requires fetching data from a database, file, or API (like SandboxDataHelper or stock/weather symbols), "
+                "you MUST mock the data returned by these helper classes (e.g. mock SandboxDataHelper.get_stock_data to return a small, mock pandas DataFrame with 5 rows) "
+                "rather than trying to fetch actual data or calling APIs."
+            )
+            rules.append(
+                "If the task requires plotting (using plotly or matplotlib), do NOT write any code that calls plt.show(), fig.show(), "
+                "or tries to render charts. Verify only the data structures or mathematical calculations."
             )
 
         rules.extend([
@@ -1985,6 +1996,42 @@ class AgentOrchestrator:
                                         router_ctx, ds_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
         return self._clean_cutoff_notes(res)
 
+    def _synthesize_coding_response(self, prompt, compiled_plan, code, output,
+                                   router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None):
+        """Synthesize a beautiful, reasoning-like structured response from successful execution."""
+        if status_callback:
+            status_callback("Synthesizing final response...", "info", "deepseek_r1", 85)
+        
+        # Load deepseek_r1 to synthesize the response
+        ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
+        
+        synthesis_p = (
+            "You are a technical data scientist and senior software engineer.\n"
+            f"The user query was:\n{prompt}\n\n"
+            f"The Python script executed successfully in the sandbox.\n"
+            f"SCRIPT CODE:\n```python\n{code}\n```\n\n"
+            f"SCRIPT EXECUTION OUTPUT:\n{output}\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Generate a beautifully structured, comprehensive explanation of the results.\n"
+            "2. Present any numerical results, performance metrics (like R2, MAE, RMSE, accuracy, predicted prices), or tables in a clean, publication-grade Markdown format.\n"
+            "3. Explain how unit checking and dimensional consistency constraints have been satisfied.\n"
+            "4. End your response with the complete Python code block wrapped in ```python``` so the user can copy it.\n"
+            "5. Do NOT include any meta-commentary about the model execution or pipeline steps. Output only the polished technical response."
+        )
+        
+        final_response = self._strip_thinking(self._call_model(
+            ds_llm, 
+            synthesis_p, 
+            gen_tokens, 
+            gen_temp, 
+            system_prompt="You are a senior data scientist. Output a polished, professional markdown report."
+        ))
+        
+        viz = self._check_3d_gate(prompt, final_response, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
+        if status_callback:
+            status_callback("Done!", "success", "router", 100)
+        return f"{final_response}{viz}"
+
     # =====================================================================
     # CODING PIPELINE — Reasoning Sandbox → Code Sandbox → Reflexion
     # =====================================================================
@@ -2120,9 +2167,10 @@ class AgentOrchestrator:
                         router_llm = self._get_model("router", required_ctx=1024)
                         search_opt_p = (
                             "Generate a highly specific search query (3-6 words) to find the correct scientific formula, "
-                            "biological facts, or chemical properties to resolve this sandbox verification failure.\n\n"
+                            "biological facts, chemical properties, or Python coding syntax to resolve this sandbox verification failure.\n\n"
                             f"Original Prompt: {prompt}\n"
                             f"Sandbox Failure Output: {pg_out[:500]}\n"
+                            "Constraint: The search query must be strictly relevant to Python code, mathematics, or the science domain of the prompt. Do NOT search for JavaScript.\n"
                             "Output ONLY the search query."
                         )
                         search_term = self._call_model(router_llm, search_opt_p, max_tokens=30, temperature=0.1).strip()
@@ -2178,27 +2226,26 @@ class AgentOrchestrator:
                     if rnd > 0 or reset > 0:
                         self.memory.save_mistake(prompt, initial_failed_code, initial_failed_error, code)
                     router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                    viz = self._check_3d_gate(prompt, compiled_plan, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
-                    return f"### Logic Plan (Verified)\n{compiled_plan}\n\n### Execution Output\n{output}{viz}\n\n### Code\n```python\n{code}\n```"
+                    return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
 
                 # Save initial failures to register mistake later
                 if not initial_failed_code:
                     initial_failed_code = code
                     initial_failed_error = output
 
-                # ── Phase 4.5: Router Linter Intercept (Syntax/Import Errors) ──
+                # ── Phase 4.5: VibeThinker Linter Intercept (Syntax/Import Errors) ──
                 is_syntax_error = any(e in output for e in ["SyntaxError", "ModuleNotFoundError", "NameError", "IndentationError", "TypeError", "AttributeError", "ValueError"])
                 if is_syntax_error:
                     if status_callback:
-                        status_callback("Router (Phi-3.5) patching syntax error...", "warning", "router", 65 + rnd*10)
-                    router_linter = self._get_model("router", required_ctx=router_ctx)
+                        status_callback("VibeThinker patching syntax error...", "warning", "vibethinker", 65 + rnd*10)
+                    vibe_linter = self._get_model("vibethinker", required_ctx=ds_ctx)
                     lint_p = (
                         f"You are a fast Python Syntax Linter.\n"
                         f"The code failed with this error:\n{output[:600]}\n\n"
                         f"CODE:\n{code[:2500]}\n\n"
                         f"Identify the typo/error and rewrite the complete corrected script in a ```python``` block. Fix ONLY the exact error, do not change the core algorithm."
                     )
-                    lint_code = Sandbox.extract_code(self._strip_thinking(self._call_model(router_linter, lint_p, gen_tokens, 0.1, system_prompt="You are a strict syntax linter. Output only code.")))
+                    lint_code = Sandbox.extract_code(self._strip_thinking(self._call_model(vibe_linter, lint_p, gen_tokens, 0.1, system_prompt="You are a strict syntax linter. Output only code.")))
                     if lint_code and len(lint_code) > 20:
                         linter_ok, linter_output = self.sandbox.execute(lint_code)
                         if linter_ok:
@@ -2206,13 +2253,12 @@ class AgentOrchestrator:
                             output = linter_output
                             ok = True
                             if status_callback:
-                                status_callback("Router Linter successfully patched the code!", "success", "router", 70 + rnd*10)
+                                status_callback("VibeThinker successfully patched the code!", "success", "vibethinker", 70 + rnd*10)
                             self.memory.save(prompt, code)
                             if rnd > 0 or reset > 0:
                                 self.memory.save_mistake(prompt, initial_failed_code, initial_failed_error, code)
                             router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                            viz = self._check_3d_gate(prompt, compiled_plan, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
-                            return f"### Logic Plan (Verified)\n{compiled_plan}\n\n### Execution Output\n{output}{viz}\n\n### Code\n```python\n{code}\n```"
+                            return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
                 
                 # ── Phase 5 & 6: Reflexion / Self-Correction ─────────────────
                 if not ok:
@@ -2274,8 +2320,7 @@ class AgentOrchestrator:
                         self.memory.save(prompt, code)
                         self.memory.save_mistake(prompt, failed_code, failed_error, code)
                         router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                        viz = self._check_3d_gate(prompt, compiled_plan, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
-                        return f"### Logic Plan (Verified)\n{compiled_plan}\n\n### Execution Output\n{output}{viz}\n\n### Code\n```python\n{code}\n```"
+                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
 
                     # Don't let ds_safe grow unboundedly — cap the appended errors
                     error_summary = output[:300]
@@ -2350,8 +2395,7 @@ class AgentOrchestrator:
                         self.memory.save(prompt, code)
                         self.memory.save_mistake(prompt, failed_code, failed_error, code)
                         router_llm = None; ds_llm = None; vibe_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                        viz = self._check_3d_gate(prompt, compiled_plan, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
-                        return f"### Logic Plan (Verified via Emergency Search)\n{compiled_plan}\n\n### Execution Output\n{output}{viz}\n\n### Code\n```python\n{code}\n```"
+                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
         except Exception as es:
             print(f"Emergency web search recovery failed: {es}")
 

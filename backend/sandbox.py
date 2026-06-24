@@ -175,7 +175,7 @@ ALLOWED_MODULES = {
     # Abstract Base Classes
     'abc',
     # Scientific Libraries (if installed)
-    'numpy', 'sympy', 'scipy', 'pandas', 'plotly', 'sklearn', 'statsmodels',
+    'numpy', 'sympy', 'scipy', 'pandas', 'plotly', 'sklearn', 'statsmodels', 'matplotlib',
     # Physics & Unit Verification
     'pint',
     # Formal Logic & Theorem Proving
@@ -624,6 +624,11 @@ class Sandbox:
         compat_code = (
             "import sys\n"
             "try:\n"
+            "    import matplotlib\n"
+            "    matplotlib.use('Agg')\n"
+            "except Exception:\n"
+            "    pass\n"
+            "try:\n"
             "    import numpy as _np\n"
             "    if not hasattr(_np, 'trapezoid'):\n"
             "        _np.trapezoid = getattr(_np, 'trapz', None)\n"
@@ -714,11 +719,21 @@ class Sandbox:
         compat_code = (
             "import sys\n"
             "try:\n"
+            "    import matplotlib\n"
+            "    matplotlib.use('Agg')\n"
+            "except Exception:\n"
+            "    pass\n"
+            "try:\n"
             "    import numpy as _np\n"
             "    if not hasattr(_np, 'trapezoid'):\n"
             "        _np.trapezoid = getattr(_np, 'trapz', None)\n"
             "except Exception:\n"
-            "    pass\n\n"
+            "    pass\n"
+            "try:\n"
+            "    from backend.sandbox import SandboxDataHelper\n"
+            "except Exception:\n"
+            "    pass\n"
+            "sys.argv = ['script.py']\n\n"
         ) + code
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
