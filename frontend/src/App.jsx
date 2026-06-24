@@ -251,7 +251,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
           .bg { fill: transparent !important; }
           .error-box { margin: 20px; border: 1px solid #ff4444; padding: 15px; background: #2a0000; border-radius: 5px; color: #ff8888; }
         </style>
-        <script>
+        <script id="sandbox-injection">
           (function() {
             const _log = console.log;
             const _error = console.error;
@@ -294,6 +294,70 @@ const ArtifactSandbox = ({ htmlCode }) => {
         doc = doc.substring(0, index + 6) + injection + doc.substring(index + 6);
       } else {
         doc = injection + doc;
+      }
+
+      // Parse and rewrite script elements to guarantee sequential external script loading
+      // and prevent inline scripts from executing before their dependencies are ready.
+      try {
+        const parser = new DOMParser();
+        const tempDoc = parser.parseFromString(doc, "text/html");
+        const scripts = Array.from(tempDoc.querySelectorAll("script"));
+        
+        const loadList = [];
+        const inlineCodes = [];
+        
+        scripts.forEach(s => {
+          if (s.getAttribute("id") === "sandbox-injection") return; // Keep injection active immediately
+          if (s.src) {
+            loadList.push(s.src);
+          } else {
+            inlineCodes.push(s.textContent);
+          }
+          s.parentNode.removeChild(s);
+        });
+        
+        const loaderScript = tempDoc.createElement("script");
+        loaderScript.textContent = `
+          (function() {
+            const loadList = ${JSON.stringify(loadList)};
+            const inlineCodes = ${JSON.stringify(inlineCodes)};
+            
+            function loadNext() {
+              if (loadList.length > 0) {
+                const src = loadList.shift();
+                const s = document.createElement("script");
+                s.src = src;
+                s.async = false;
+                s.onload = loadNext;
+                s.onerror = function() {
+                  console.error("Failed to load script: " + src);
+                  loadNext();
+                };
+                document.head.appendChild(s);
+              } else {
+                inlineCodes.forEach(code => {
+                  try {
+                    const s = document.createElement("script");
+                    s.textContent = code;
+                    document.body.appendChild(s);
+                  } catch(e) {
+                    console.error("Error executing inline script:", e);
+                  }
+                });
+              }
+            }
+            
+            if (document.readyState === "loading") {
+              window.addEventListener("DOMContentLoaded", loadNext);
+            } else {
+              loadNext();
+            }
+          })();
+        `;
+        tempDoc.body.appendChild(loaderScript);
+        doc = "<!DOCTYPE html>\\n" + tempDoc.documentElement.outerHTML;
+      } catch (parseErr) {
+        console.error("Failed to apply sandbox script loader rewrite:", parseErr);
       }
 
       // Write directly into the iframe's document
