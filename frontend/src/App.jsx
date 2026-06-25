@@ -269,6 +269,41 @@ const ArtifactSandbox = ({ htmlCode }) => {
               _warn.apply(console, args);
               window.parent.postMessage({ type: 'CONSOLE_WARN', text: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ') }, '*');
             };
+
+            // Intercept event listeners for late-loaded script compatibility
+            const originalAddEventListener = window.addEventListener;
+            window.addEventListener = function(type, listener, options) {
+              if (type === 'load' && document.readyState === 'complete') {
+                setTimeout(() => { try { listener({ type: 'load' }); } catch(e) {} }, 0);
+              } else if (type === 'DOMContentLoaded' && (document.readyState === 'interactive' || document.readyState === 'complete')) {
+                setTimeout(() => { try { listener({ type: 'DOMContentLoaded' }); } catch(e) {} }, 0);
+              } else {
+                originalAddEventListener.call(window, type, listener, options);
+              }
+            };
+
+            const originalDocAddEventListener = document.addEventListener;
+            document.addEventListener = function(type, listener, options) {
+              if (type === 'DOMContentLoaded' && (document.readyState === 'interactive' || document.readyState === 'complete')) {
+                setTimeout(() => { try { listener({ type: 'DOMContentLoaded' }); } catch(e) {} }, 0);
+              } else if (type === 'load' && document.readyState === 'complete') {
+                setTimeout(() => { try { listener({ type: 'load' }); } catch(e) {} }, 0);
+              } else {
+                originalDocAddEventListener.call(document, type, listener, options);
+              }
+            };
+
+            let _onload = null;
+            Object.defineProperty(window, 'onload', {
+              get: () => _onload,
+              set: (fn) => {
+                _onload = fn;
+                if (fn && document.readyState === 'complete') {
+                  setTimeout(() => { try { fn({ type: 'load' }); } catch(e) {} }, 0);
+                }
+              },
+              configurable: true
+            });
           })();
 
           window.onerror = function(msg, url, line, col, error) {

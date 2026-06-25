@@ -2123,14 +2123,14 @@ class AgentOrchestrator:
                                         router_ctx, ds_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
         return self._clean_cutoff_notes(res)
 
-    def _clean_synthesis_format(self, final_response, code):
+    def _clean_synthesis_format(self, final_response, code, req_lang="python"):
         """Ensures that explanation text is not wrapped in code blocks,
-        and that the python script code is strictly wrapped in a ```python``` block at the end.
+        and that the script code is strictly wrapped in a ```{req_lang}``` block at the end.
         """
         response_clean = final_response.strip()
         
         # 1. If the model wrapped the entire response in a single code block, strip it
-        if (response_clean.startswith("```python") or response_clean.startswith("```")) and response_clean.endswith("```"):
+        if (response_clean.startswith(f"```{req_lang}") or response_clean.startswith("```")) and response_clean.endswith("```"):
             lines = response_clean.split("\n")
             if lines[0].startswith("```"):
                 lines = lines[1:]
@@ -2140,13 +2140,13 @@ class AgentOrchestrator:
             
         # 2. Extract code blocks from the response
         import re
-        code_blocks = re.findall(r'```python[\s\S]*?```|```[\s\S]*?```', response_clean)
+        code_blocks = re.findall(rf'```{req_lang}[\s\S]*?```|```[\s\S]*?```', response_clean)
         
-        # Check if the actual python code is already present inside a code block
+        # Check if the actual code is already present inside a code block
         has_actual_code_block = False
         for block in code_blocks:
-            block_content = re.sub(r'^```(python)?\n|```$', '', block, flags=re.IGNORECASE).strip()
-            code_lines = [l.strip() for l in code.split("\n") if l.strip() and not l.strip().startswith("#")]
+            block_content = re.sub(rf'^```({req_lang})?\n|```$', '', block, flags=re.IGNORECASE).strip()
+            code_lines = [l.strip() for l in code.split("\n") if l.strip()]
             matching_lines = sum(1 for line in code_lines[:10] if line in block_content)
             if matching_lines >= min(3, len(code_lines)):
                 has_actual_code_block = True
@@ -2155,14 +2155,14 @@ class AgentOrchestrator:
         if has_actual_code_block:
             cleaned_response = response_clean
             for block in code_blocks:
-                block_content = re.sub(r'^```(python)?\n|```$', '', block, flags=re.IGNORECASE).strip()
+                block_content = re.sub(rf'^```({req_lang})?\n|```$', '', block, flags=re.IGNORECASE).strip()
                 is_this_code = False
-                code_indicators = ["import ", "def ", "class ", " = ", "print(", "sol = ", "plt."]
+                code_indicators = ["import ", "def ", "class ", " = ", "print(", "console.log", "function ", "const ", "let "]
                 if any(ind in block_content for ind in code_indicators):
                     is_this_code = True
                 
                 # If it's the actual code block, leave it alone
-                code_lines = [l.strip() for l in code.split("\n") if l.strip() and not l.strip().startswith("#")]
+                code_lines = [l.strip() for l in code.split("\n") if l.strip()]
                 matching_lines = sum(1 for line in code_lines[:10] if line in block_content)
                 if matching_lines >= min(3, len(code_lines)):
                     is_this_code = True
@@ -2173,12 +2173,12 @@ class AgentOrchestrator:
         else:
             cleaned_response = response_clean
             for block in code_blocks:
-                block_content = re.sub(r'^```(python)?\n|```$', '', block, flags=re.IGNORECASE).strip()
+                block_content = re.sub(rf'^```({req_lang})?\n|```$', '', block, flags=re.IGNORECASE).strip()
                 cleaned_response = cleaned_response.replace(block, block_content)
-            return f"{cleaned_response}\n\n```python\n{code}\n```"
+            return f"{cleaned_response}\n\n```{req_lang}\n{code}\n```"
 
     def _synthesize_coding_response(self, prompt, compiled_plan, code, output,
-                                   router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None):
+                                   router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None, req_lang="python"):
         """Synthesize a beautiful, reasoning-like structured response from successful execution."""
         if status_callback:
             status_callback("Synthesizing final response...", "info", "deepseek_r1", 85)
@@ -2200,17 +2200,29 @@ class AgentOrchestrator:
                 stripped = stripped[:2000] + '\n... [OUTPUT TRUNCATED]'
             clean_output = stripped
         
+        lang_name = {
+            "python": "Python",
+            "javascript": "JavaScript",
+            "typescript": "TypeScript",
+            "cpp": "C++",
+            "c": "C",
+            "bash": "Bash",
+            "java": "Java",
+            "go": "Go",
+            "rust": "Rust"
+        }.get(req_lang, req_lang)
+
         synthesis_p = (
             "You are a technical data scientist and senior software engineer.\n"
             f"The user query was:\n{prompt}\n\n"
-            f"The Python script executed successfully in the sandbox.\n"
-            f"SCRIPT CODE:\n```python\n{code}\n```\n\n"
+            f"The {lang_name} script executed successfully in the sandbox.\n"
+            f"SCRIPT CODE:\n```{req_lang}\n{code}\n```\n\n"
             f"SCRIPT EXECUTION OUTPUT:\n{clean_output}\n\n"
             "INSTRUCTIONS:\n"
             "1. Generate a beautifully structured, comprehensive explanation of the results.\n"
-            "2. Present any numerical results, performance metrics (like R2, MAE, RMSE, accuracy, predicted prices), or tables in a clean, publication-grade Markdown format.\n"
+            "2. Present any numerical results, performance metrics, or tables in a clean, publication-grade Markdown format.\n"
             "3. Explain how unit checking and dimensional consistency constraints have been satisfied.\n"
-            "4. End your response with the complete Python code block wrapped in ```python``` so the user can copy it.\n"
+            f"4. End your response with the complete {lang_name} code block wrapped in ```{req_lang}``` so the user can copy it.\n"
             "5. Do NOT include any meta-commentary about the model execution or pipeline steps. Output only the polished technical response.\n"
             "6. Do NOT include raw JSON data dumps in your response. If the code generated a Plotly chart, mention that the visualization is rendered in the UI."
         )
@@ -2220,11 +2232,11 @@ class AgentOrchestrator:
             synthesis_p, 
             gen_tokens, 
             gen_temp, 
-            system_prompt="You are a senior data scientist. Output a polished, professional markdown report."
+            system_prompt=f"You are a senior {lang_name} data scientist. Output a polished, professional markdown report."
         ))
         
         # Apply strict defensive layout formatting filter
-        final_response = self._clean_synthesis_format(final_response, code)
+        final_response = self._clean_synthesis_format(final_response, code, req_lang=req_lang)
         
         viz = self._check_3d_gate(prompt, final_response, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
         if status_callback:
@@ -2236,6 +2248,38 @@ class AgentOrchestrator:
     # =====================================================================
     def _coding_pipeline(self, prompt, enriched_prompt, router_llm,
                          router_ctx, ds_ctx, oc_ctx, gen_tokens, gen_temp, status_callback=None):
+        # Determine language constraints
+        prompt_lower = prompt.lower()
+        req_lang = "python"
+        if "javascript" in prompt_lower or " js " in prompt_lower or " node " in prompt_lower:
+            req_lang = "javascript"
+        elif "typescript" in prompt_lower or " ts " in prompt_lower:
+            req_lang = "typescript"
+        elif "c++" in prompt_lower or "cpp" in prompt_lower:
+            req_lang = "cpp"
+        elif "c code" in prompt_lower or " c lang" in prompt_lower:
+            req_lang = "c"
+        elif "bash" in prompt_lower or "shell script" in prompt_lower or " sh " in prompt_lower:
+            req_lang = "bash"
+        elif " java " in prompt_lower:
+            req_lang = "java"
+        elif "golang" in prompt_lower or "go lang" in prompt_lower:
+            req_lang = "go"
+        elif " rust " in prompt_lower:
+            req_lang = "rust"
+
+        lang_name = {
+            "python": "Python",
+            "javascript": "JavaScript",
+            "typescript": "TypeScript",
+            "cpp": "C++",
+            "c": "C",
+            "bash": "Bash",
+            "java": "Java",
+            "go": "Go",
+            "rust": "Rust"
+        }.get(req_lang, req_lang)
+
         logic_temp = 0.6
         ds_safe = self._crunch_prompt(enriched_prompt, "deepseek_r1", ds_ctx - self.max_tokens, status_callback, router_llm=router_llm)
 
@@ -2441,19 +2485,26 @@ class AgentOrchestrator:
                 # Truncate compiled_plan to fit context
                 max_code_prompt_chars = (oc_ctx - gen_tokens - 200) * 3
                 plan_for_code = compiled_plan[:max(max_code_prompt_chars, 1500)] if len(compiled_plan) > max_code_prompt_chars else compiled_plan
-                code_p = f"Write a complete Python script for this plan:\n{plan_for_code}\n\nWrap in ```python```."
-                code = Sandbox.extract_code(self._strip_thinking(self._call_model(oc_llm, code_p, gen_tokens, gen_temp, system_prompt=coder_sys)))
+                
+                if req_lang == "python":
+                    code_p = f"Write a complete Python script for this plan:\n{plan_for_code}\n\nWrap in ```python```."
+                    sys_prompt = coder_sys
+                else:
+                    code_p = f"Write a complete, self-contained {lang_name} script for this plan:\n{plan_for_code}\n\nWrap in ```{req_lang}```."
+                    sys_prompt = f"You are a master {lang_name} programmer. Output only code inside ```{req_lang}``` blocks."
+                    
+                code = Sandbox.extract_code(self._strip_thinking(self._call_model(oc_llm, code_p, gen_tokens, gen_temp, system_prompt=sys_prompt)))
 
                 # ── Phase 4: Execution Sandbox ───────────────────────────────
                 if status_callback:
                     status_callback(f"Executing in Sandbox (Attempt {rnd+1}/{max_rounds})...", "info", "sandbox", 60 + rnd*10)
-                ok, output = self.sandbox.execute(code)
+                ok, output = self.sandbox.execute(code, language=req_lang)
                 if ok:
                     self.memory.save(prompt, code)
                     if rnd > 0 or reset > 0:
                         self.memory.save_mistake(prompt, initial_failed_code, initial_failed_error, code)
                     router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                    return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
+                    return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
 
                 # Save initial failures to register mistake later
                 if not initial_failed_code:
@@ -2461,20 +2512,21 @@ class AgentOrchestrator:
                     initial_failed_error = output
 
                 # ── Phase 4.5: OpenCode Linter Intercept (Syntax/Import Errors) ──
-                is_syntax_error = any(e in output for e in ["SyntaxError", "ModuleNotFoundError", "NameError", "IndentationError", "TypeError", "AttributeError", "ValueError"])
+                is_syntax_error = any(e in output for e in ["SyntaxError", "ModuleNotFoundError", "NameError", "IndentationError", "TypeError", "AttributeError", "ValueError", "ReferenceError", "Error:"])
                 if is_syntax_error:
                     if status_callback:
-                        status_callback("OpenCode patching syntax error...", "warning", "opencode", 65 + rnd*10)
+                        status_callback(f"OpenCode patching {lang_name} syntax error...", "warning", "opencode", 65 + rnd*10)
                     oc_linter = self._get_model("opencode", required_ctx=oc_ctx)
                     lint_p = (
-                        f"You are a fast Python Syntax Linter.\n"
+                        f"You are a fast {lang_name} Syntax Linter.\n"
                         f"The code failed with this error:\n{output[:600]}\n\n"
                         f"CODE:\n{code[:2500]}\n\n"
-                        f"Identify the typo/error and rewrite the complete corrected script in a ```python``` block. Fix ONLY the exact error, do not change the core algorithm."
+                        f"Identify the typo/error and rewrite the complete corrected script in a ```{req_lang}``` block. Fix ONLY the exact error, do not change the core algorithm."
                     )
-                    lint_code = Sandbox.extract_code(self._strip_thinking(self._call_model(oc_linter, lint_p, gen_tokens, 0.1, system_prompt="You are a strict syntax linter. Output only code.")))
+                    lint_sys = f"You are a strict {lang_name} syntax linter. Output only code."
+                    lint_code = Sandbox.extract_code(self._strip_thinking(self._call_model(oc_linter, lint_p, gen_tokens, 0.1, system_prompt=lint_sys)))
                     if lint_code and len(lint_code) > 20:
-                        linter_ok, linter_output = self.sandbox.execute(lint_code)
+                        linter_ok, linter_output = self.sandbox.execute(lint_code, language=req_lang)
                         if linter_ok:
                             code = lint_code
                             output = linter_output
@@ -2485,7 +2537,7 @@ class AgentOrchestrator:
                             if rnd > 0 or reset > 0:
                                 self.memory.save_mistake(prompt, initial_failed_code, initial_failed_error, code)
                             router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                            return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
+                            return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
                 
                 # ── Phase 5 & 6: Reflexion / Self-Correction ─────────────────
                 if not ok:
@@ -2511,58 +2563,57 @@ class AgentOrchestrator:
                     fix_p = (
                         f"ORIGINAL USER REQUEST CONSTRAINTS:\n{prompt}\n\n"
                         f"{search_str}"
-                        f"The following Python code FAILED with an error.\n\n"
+                        f"The following {lang_name} code FAILED with an error.\n\n"
                         f"CODE:\n{safe_code}\n\n"
                         f"ERROR:\n{safe_error}\n\n"
                         f"INSTRUCTIONS:\n"
                         f"1. Identify the exact line and cause of the error\n"
                         f"2. Fix ONLY the bug — do not rewrite unrelated parts\n"
-                        f"3. Make sure all imports are present\n"
+                        f"3. Make sure all imports/dependencies are present\n"
                         f"4. Test edge cases (division by zero, empty arrays, etc.)\n"
                     )
                     # Add error-specific recovery hints
                     if 'TimeoutError' in safe_error or 'took longer than' in safe_error:
                         fix_p += (
                             f"5. TIMEOUT FIX: The code took too long. Reduce computation — use smaller arrays, "
-                            f"fewer iterations, vectorized numpy operations instead of Python loops, or reduce simulation time span.\n"
-                         )
+                            f"fewer iterations, or reduce simulation time span.\n"
+                        )
                     elif 'MemoryError' in safe_error or 'RLIMIT' in safe_error or 'Cannot allocate' in safe_error:
                         fix_p += (
-                            f"5. MEMORY FIX: The code used too much memory. Use generators instead of lists, "
-                            f"process data in chunks, use smaller array sizes, or use float32 instead of float64.\n"
+                            f"5. MEMORY FIX: The code used too much memory. Use generators/iterators, "
+                            f"process data in chunks, or use smaller array sizes.\n"
                         )
-                    elif 'ModuleNotFoundError' in safe_error:
+                    elif 'ModuleNotFoundError' in safe_error or 'Cannot find module' in safe_error:
                         fix_p += (
-                            f"5. IMPORT FIX: A required module is not installed. Replace it with a standard library alternative "
-                            f"or one of these pre-installed packages: numpy, scipy, sympy, pandas, sklearn, plotly, matplotlib, networkx, cryptography.\n"
+                            f"5. IMPORT FIX: A required module/package is not installed. Replace it with a standard library alternative.\n"
                         )
-                    fix_p += f"6. Output the COMPLETE corrected script in ```python``` blocks."
+                    fix_p += f"6. Output the COMPLETE corrected script in ```{req_lang}``` blocks."
 
                     # Try OpenCode first (already loaded, no model swap needed)
                     oc_fix = self._get_model("opencode", required_ctx=oc_ctx)
-                    code = Sandbox.extract_code(self._strip_thinking(self._call_model(oc_fix, fix_p, gen_tokens, gen_temp, system_prompt=coder_sys)))
-                    ok, output = self.sandbox.execute(code)
+                    code = Sandbox.extract_code(self._strip_thinking(self._call_model(oc_fix, fix_p, gen_tokens, gen_temp, system_prompt=sys_prompt)))
+                    ok, output = self.sandbox.execute(code, language=req_lang)
                     if ok:
                         if status_callback:
                             status_callback("OpenCode's correction VERIFIED!", "success", "opencode", 78 + rnd*10)
                         self.memory.save(prompt, code)
                         self.memory.save_mistake(prompt, failed_code, failed_error, code)
                         router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
+                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
 
                     # Escalate to DeepSeek-R1 only if OpenCode's correction also failed
                     if status_callback:
                         status_callback(f"DeepSeek-R1 correcting code (Attempt {rnd+1}/{max_rounds})...", "warning", "deepseek_r1", 80 + rnd*10)
                     ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
-                    code = Sandbox.extract_code(self._strip_thinking(self._call_model(ds_llm, fix_p, gen_tokens, gen_temp, system_prompt=coder_sys)))
-                    ok, output = self.sandbox.execute(code)
+                    code = Sandbox.extract_code(self._strip_thinking(self._call_model(ds_llm, fix_p, gen_tokens, gen_temp, system_prompt=sys_prompt)))
+                    ok, output = self.sandbox.execute(code, language=req_lang)
                     if ok:
                         if status_callback:
                             status_callback("DeepSeek-R1's correction VERIFIED!", "success", "deepseek_r1", 85 + rnd*10)
                         self.memory.save(prompt, code)
                         self.memory.save_mistake(prompt, failed_code, failed_error, code)
                         router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
-                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback)
+                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
 
                     # Don't let ds_safe grow unboundedly — cap the appended errors
                     error_summary = output[:300]

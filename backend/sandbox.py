@@ -117,7 +117,7 @@ LANG_SIGNATURES = {
         'strong': [r'\binterface\s+\w+\b', r'\btype\s+\w+\s*=', r'console\.log\s*\('],
         'ext': '.ts',
         'compile': None,
-        'run': ['ts-node', '{src}'],
+        'run': ['npx', '-y', 'tsx', '{src}'],
     },
 }
 
