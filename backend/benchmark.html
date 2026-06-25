@@ -248,7 +248,7 @@
         }
 
         // Render baseline comparison table
-        function renderBaselines(currentCategory, currentAccuracy) {
+        function renderBaselines(currentCategory, currentAccuracy, history = {}) {
             const tableBody = document.getElementById("baselineTableBody");
             
             // Raw static data
@@ -267,7 +267,10 @@
                 const item = baselines[key];
                 const isCurrent = key === currentCategory;
                 const rowHighlight = isCurrent ? "bg-blue-500/5 border-l-2 border-l-blue-500" : "border-b border-slate-900";
-                const displayAccuracy = isCurrent ? `${currentAccuracy}%` : "N/A (Pending)";
+                
+                // Retrieve score from persistent history if not currently running
+                const historyScore = history[key];
+                const displayAccuracy = isCurrent ? `${currentAccuracy}%` : (historyScore !== undefined ? `${historyScore}%` : "N/A (Pending)");
                 
                 tableBody.innerHTML += `
                     <tr class="${rowHighlight} transition">
@@ -304,7 +307,7 @@
                 renderTpuCores(state.workers);
                 
                 // Baseline tables
-                renderBaselines(state.category, state.accuracy);
+                renderBaselines(state.category, state.accuracy, state.history);
                 
                 // Logs stream
                 const logContainer = document.getElementById("consoleLogs");

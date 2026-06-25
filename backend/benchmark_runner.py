@@ -22,6 +22,7 @@ BENCHMARK_STATE = {
     "tokens_per_sec": 0.0,
     "avg_latency": 0.0,
     "elapsed_seconds": 0.0,
+    "history": {},
     "workers": [{"id": i, "status": "Idle", "task": "N/A", "progress": 0} for i in range(8)],
     "logs": [],
     "comparison_baselines": {
@@ -290,6 +291,10 @@ async def run_benchmark_suite(category: str, sample_size: int, orchestrator: Any
     total_time = time.time() - start_time
     update_state("active", False)
     
+    # Save to persistent history
+    with STATE_LOCK:
+        BENCHMARK_STATE["history"][category] = BENCHMARK_STATE["accuracy"]
+        
     add_log(f"🏁 Benchmark finished in {total_time:.1f} seconds.")
     add_log(f"Final Score: {BENCHMARK_STATE['passed']}/{BENCHMARK_STATE['total']} passed ({BENCHMARK_STATE['accuracy']}% accuracy)")
     add_log(f"TPU v5e Throughput: {BENCHMARK_STATE['tokens_per_sec']} tokens/sec average per core.")
