@@ -1815,7 +1815,22 @@ class AgentOrchestrator:
                 viz_output = "Model failed to output a valid code block."
 
         cleaned_final = _strip_sandbox_prefix(viz_output).strip() if viz_output else ""
-        if viz_success and cleaned_final.startswith("{"):
+        json_extracted = False
+        if "{" in cleaned_final:
+            start_idx = cleaned_final.find("{")
+            end_idx = cleaned_final.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                json_candidate = cleaned_final[start_idx:end_idx+1]
+                try:
+                    import json
+                    parsed_cand = json.loads(json_candidate)
+                    if isinstance(parsed_cand, dict) and ("data" in parsed_cand or "layout" in parsed_cand):
+                        cleaned_final = json_candidate
+                        json_extracted = True
+                except Exception:
+                    pass
+
+        if viz_success and json_extracted:
             # Strip out any Warnings/Stderr block appended by the sandbox
             if "\nWarnings/Stderr:\n" in cleaned_final:
                 cleaned_final = cleaned_final.split("\nWarnings/Stderr:\n")[0].strip()
@@ -2744,7 +2759,10 @@ class AgentOrchestrator:
             "Do NOT copy the physical system or specific numeric values if they differ from the User Query. Always prioritize the User Query's exact physics system and exact variables.\n"
             "11. THINKING CONSTRAINT: Be concise, structured, and focused in your thinking thoughts. Avoid looping or repeating the "
             "same mathematical derivations. State your reasoning path clearly and proceed directly to the solution once verified.\n"
-            "12. MATHEMATICAL DETAILS: You MUST write out all algebraic equations, derivative steps, and algebraic manipulations in clear LaTeX / Markdown format. If numerical constants or gases are specified, substitute the values and output the final calculated numerical answers.\n"
+            "12. MATHEMATICAL DETAILS & FORMULA FORMATTING: You MUST write out all algebraic equations, derivative steps, and algebraic manipulations in clear LaTeX format.\n"
+            "    - NEVER wrap formulas, derivatives, or equations in backtick code blocks (e.g. ``` or `). Code blocks must only be used for actual runnable programming code, never for text math equations.\n"
+            "    - ALWAYS format mathematical equations using proper LaTeX delimiters: use single dollar signs $...$ for inline equations, and double dollar signs $$...$$ for display block equations.\n"
+            "    - If numerical constants are specified in the prompt, substitute them and output the final calculated numerical answers.\n"
             "13. BIOCHEMISTRY FORMULA CORRECTNESS: For enzyme kinetics equations (Michaelis-Menten, Lineweaver-Burk, etc.), "
             "you MUST verify the DIRECTIONALITY of your derived formula before presenting it. For example: "
             "in Competitive Inhibition, the apparent Km INCREASES (Km_app = Km * (1 + [I]/Ki)) while Vmax stays the same. "
