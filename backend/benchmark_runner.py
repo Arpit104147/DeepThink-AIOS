@@ -286,8 +286,12 @@ async def execute_task_on_tpu(worker_id: int, category: str, problem: Dict[str, 
                         if entry_point and f"def {entry_point}" not in extracted_code:
                             extracted_code = problem.get("prompt", "") + extracted_code
                         
+                        # Automatically inject standard typing imports to prevent false-negative NameErrors
+                        # (Many models write PEP 484 type hints like List, Dict, Tuple without importing them).
+                        typing_imports = "from typing import List, Dict, Tuple, Set, Optional, Union, Any, Callable\n\n"
+                        
                         # Append the hidden test cases from the dataset
-                        test_code = extracted_code + "\n\n" + problem["test"]
+                        test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
                         
                         # HumanEval: The dataset defines check(candidate) but never calls it.
                         # We must physically invoke it to trigger the assertions.
