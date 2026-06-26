@@ -686,11 +686,12 @@ class AgentOrchestrator:
                 kwargs["n_ubatch"] = 256
                 kwargs["flash_attn"] = False
 
-            # Dual-GPU: send heavy 7B models to GPU 1, lighter ones to GPU 0
-            if self.dual_gpu_pipeline and model_key in ["deepseek_r1", "opencode"]:
-                kwargs["main_gpu"] = 1
-            elif self.dual_gpu_pipeline:
-                kwargs["main_gpu"] = 0
+            # Dual-GPU: balance VRAM by distributing the heavy models across both cards
+            if self.dual_gpu_pipeline:
+                if model_key in ["deepseek_r1", "qwen_vl"]:
+                    kwargs["main_gpu"] = 1  # GPU 1 holds DeepSeek-R1 (5.8 GB) and Qwen-VL (7.8 GB)
+                else:
+                    kwargs["main_gpu"] = 0  # GPU 0 holds OpenCode (5.2 GB) and Router (2.9 GB)
 
             try:
                 llm = Llama(**kwargs)
