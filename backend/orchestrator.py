@@ -999,6 +999,10 @@ class AgentOrchestrator:
             # Smart token allocation with Model-Aware Minimums
             is_reasoning = "deepseek" in getattr(llm, "model_path", "").lower()
             absolute_min = 2048 if is_reasoning else 512
+            # CRITICAL FIX: On constrained GPUs where n_ctx can be as low as 2048,
+            # the absolute_min must never exceed the context window itself.
+            # Cap it at (ctx - 128) to guarantee at least 128 tokens of prompt space.
+            absolute_min = min(absolute_min, max(256, ctx - 128))
             
             if est_prompt_tokens + max_tokens > ctx:
                 # Force a larger generation runway for reasoning models
