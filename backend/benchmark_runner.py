@@ -231,7 +231,7 @@ async def execute_task_on_tpu(worker_id: int, category: str, problem: Dict[str, 
                             subprocess.run(["git", "checkout", commit], cwd=temp_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                             
                             status_cb("Generating AST Repo Map...", "info", "system", 10)
-                            repo_map = RepoMapGenerator(temp_dir).generate_map()
+                            repo_map = RepoMapGenerator(temp_dir).generate_map(prompt=prompt, max_chars=24000)
                             return f"Repository Architecture Map:\n{repo_map}\n\nUser Issue:\n{prompt}"
                             
                     prompt = await asyncio.to_thread(clone_and_map)
