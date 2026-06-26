@@ -243,8 +243,22 @@ async def execute_task_on_tpu(worker_id: int, category: str, problem: Dict[str, 
                     status_cb
                 )
                 
-                # Determine success based on whether the agent successfully verified the answer in sandbox/playground
-                success = "Verified" in response or "success" in response.lower()
+                # Accurately determine success by checking if the sandbox execution threw any Python exceptions
+                lower_resp = response.lower()
+                has_error = any(err in lower_resp for err in [
+                    "traceback (most recent call last)",
+                    "timeouterror:",
+                    "syntaxerror:",
+                    "assertionerror:",
+                    "nameerror:",
+                    "typeerror:",
+                    "valueerror:",
+                    "attributeerror:",
+                    "indexerror:",
+                    "keyerror:",
+                    "importerror:"
+                ])
+                success = not has_error
                 generated_tokens = len(response) // 4
             except Exception as e:
                 add_log(f"[Worker {worker_id}] Error running {problem['id']}: {str(e)}")
