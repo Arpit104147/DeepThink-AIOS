@@ -1,8 +1,8 @@
 <div align="center">
   
-# 🧠 DeepThinker Multi-Agent Hub
+# 🧠 DeepThink AIOS (Artificial Intelligence Operating System)
 
-### A Fully Local Multi-Agent AI System with Dual Sandbox Verification & Dynamic Hardware Scaling
+### A Fully Local Multi-Agent AIOS with Dual Sandbox Verification & Dynamic Hardware Scaling
 
 *Running an orchestrated fleet of specialized LLMs on local hardware — from Intel iGPUs to NVIDIA H100s*
 
@@ -16,7 +16,7 @@
 
 ---
 
-DeepThinker is a **production-grade, fully local multi-agent AI system** designed to run multiple specialized LLMs locally on consumer and enterprise hardware. By leveraging a high-performance **6-Way Routing Pipeline**, DeepThinker analyzes user intent to route queries through optimal reasoning, coding, math, predictive, and visual paths—**all executing 100% offline with zero cloud API dependencies.**
+DeepThink AIOS is a **production-grade, fully local multi-agent Artificial Intelligence Operating System (AIOS)** designed to run multiple specialized LLMs locally on consumer and enterprise hardware. By leveraging a high-performance **6-Way Routing Pipeline**, DeepThink AIOS analyzes user intent to route queries through optimal reasoning, coding, math, predictive, and visual paths—**all executing 100% offline with zero cloud API dependencies.**
 
 At startup, the system auto-calibrates to the available compute environment (CUDA, Intel XPU/SYCL, or CPU), scaling context windows, batch sizes, scraping depth, memory thresholds, and execution configurations dynamically.
 
@@ -304,7 +304,7 @@ Open `http://localhost:5173` in your web browser. Model weights will download au
 
 ## 📊 Project Statistics & Final Audit
 
-DeepThinker has undergone a comprehensive system audit to verify code quality, structure, and execution safety before submission.
+DeepThink AIOS has undergone a comprehensive system audit to verify code quality, structure, and execution safety before submission.
 
 ### Core Architectural Features Audited & Verified
 1. **📦 Automated Model Ingestion (`downloader.py`):**
