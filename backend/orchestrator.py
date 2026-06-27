@@ -278,8 +278,9 @@ class AgentOrchestrator:
                     major, minor = torch.cuda.get_device_capability(0)
                     if major < 8:  # SM 6.0 (P100), SM 7.5 (T4)
                         # Without Flash Attention, attention memory scales quadratically.
-                        # Cap at 4096 on older GPUs to prevent quadratic VRAM OOM crashes.
-                        vram_allowed_ceiling = min(4096, vram_allowed_ceiling)
+                        # Cap at 8192 on older GPUs to prevent quadratic VRAM OOM crashes, while
+                        # allowing enough tokens for DeepSeek-R1 to finish long mathematical derivations.
+                        vram_allowed_ceiling = min(8192, vram_allowed_ceiling)
                 except Exception:
                     pass
             except Exception:
@@ -1807,7 +1808,8 @@ class AgentOrchestrator:
             "6. SINGULARITY SAFETY: Bound ranges away from division-by-zero. Clip extreme values.\n"
             "7. For Three.js: use OrbitControls AFTER renderer is appended. Never use non-existent APIs like ArcGeometry.\n"
             "8. For biological structures (DNA, proteins): use Three.js with realistic colors, MeshPhongMaterial, OrbitControls, auto-rotation, hide axes.\n"
-            "9. CDNS, IMPORTS & SCOPE: If using Three.js, you MUST load OrbitControls by adding: <script src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js'></script> AFTER the main three.js script. Do NOT use ES6 'import' statements in your inline script; assume THREE, OrbitControls, and Plotly are loaded in the global window scope.\n\n"
+            "9. CDNS, IMPORTS & SCOPE: If using Three.js, you MUST load OrbitControls by adding: <script src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js'></script> AFTER the main three.js script. Do NOT use ES6 'import' statements in your inline script; assume THREE, OrbitControls, and Plotly are loaded in the global window scope.\n"
+            "10. PLOTLY RACE CONDITIONS: Do NOT use `<body onload=\"...\">`. Put your plotting code directly in a standard `<script>` tag at the end of the `<body>` so it executes safely.\n\n"
             f"Topic: {clean_plan}"
         )
 
@@ -3142,7 +3144,8 @@ class AgentOrchestrator:
                         f"ORIGINAL USER REQUEST CONSTRAINTS:\n{prompt}\n\n"
                         f"{search_str}"
                         f"This answer failed verification.\nAnswer:\n{ds_answer[:2000]}\n"
-                        f"Error:\n{pg_out[:1000]}\nProvide a corrected, complete answer."
+                        f"Error:\n{pg_out[:1000]}\nProvide a corrected, complete answer. "
+                        f"IMPORTANT: You MUST write out all algebraic equations and derivations in clear LaTeX format ($...$ and $$...$$)."
                     )
                     ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
                     vibe_answer = self._strip_thinking(self._call_model(ds_llm, vibe_p, gen_tokens, gen_temp, system_prompt=reasoning_sys))

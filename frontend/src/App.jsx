@@ -336,6 +336,14 @@ const ArtifactSandbox = ({ htmlCode }) => {
       try {
         const parser = new DOMParser();
         const tempDoc = parser.parseFromString(doc, "text/html");
+        
+        // CRITICAL FIX: Prevent body onload from firing before our sequential loader finishes.
+        // If the LLM generated `<body onload="init()">`, it would execute immediately 
+        // upon iframeDoc.write, throwing "Plotly is not defined" because the CDN hasn't loaded.
+        if (tempDoc.body && tempDoc.body.hasAttribute("onload")) {
+          tempDoc.body.removeAttribute("onload");
+        }
+
         const scripts = Array.from(tempDoc.querySelectorAll("script"));
         
         const loadList = [];
