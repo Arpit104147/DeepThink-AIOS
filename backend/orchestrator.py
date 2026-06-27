@@ -839,24 +839,35 @@ class AgentOrchestrator:
     # =========================================================================
     # VISION: Qwen 2.5 VL Image Parsing
     # =========================================================================
-    def transcribe_image(self, image_path, status_callback=None):
+    def transcribe_image(self, image_input, status_callback=None):
         if status_callback:
             status_callback("Qwen 2.5-VL parsing image...", "info", "qwen_vl", 5)
         llm = self._get_model("qwen_vl")
         vision_prompt = "Describe this image and extract all text and logic from it."
         
-        # Convert image to base64 data URL
         import base64
-        try:
-            with open(image_path, "rb") as f:
-                img_data = base64.b64encode(f.read()).decode("utf-8")
-            ext = os.path.splitext(image_path)[1].lower().replace(".", "")
-            mime = "image/jpeg"
-            if ext in ["png", "webp", "gif"]:
-                mime = f"image/{ext}"
-            data_url = f"data:{mime};base64,{img_data}"
-        except Exception as e:
-            return f"Error reading image: {e}"
+        data_url = None
+        
+        # ── Case 1: Already a data URL from frontend (data:image/...;base64,...) ──
+        if isinstance(image_input, str) and image_input.startswith("data:"):
+            data_url = image_input
+        # ── Case 2: File path on disk ──
+        elif isinstance(image_input, str) and os.path.isfile(image_input):
+            try:
+                with open(image_input, "rb") as f:
+                    img_data = base64.b64encode(f.read()).decode("utf-8")
+                ext = os.path.splitext(image_input)[1].lower().replace(".", "")
+                mime = "image/jpeg"
+                if ext in ["png", "webp", "gif"]:
+                    mime = f"image/{ext}"
+                data_url = f"data:{mime};base64,{img_data}"
+            except Exception as e:
+                return f"Error reading image file: {e}"
+        else:
+            return f"Error: Invalid image input (not a data URL or valid file path)."
+
+        if not data_url:
+            return "Error: Could not process image data."
 
         with self.inference_lock:
             # Construct message payload for vision chat completion
@@ -871,6 +882,8 @@ class AgentOrchestrator:
             ]
             try:
                 res = llm.create_chat_completion(messages=messages, max_tokens=500)
+                if status_callback:
+                    status_callback("Qwen 2.5-VL transcription complete!", "success", "qwen_vl", 100)
                 return res["choices"][0]["message"]["content"]
             except Exception as e:
                 print(f"⚠️ Vision chat completion failed: {e}. Falling back to standard completion...")
@@ -1102,11 +1115,18 @@ class AgentOrchestrator:
             absolute_min = min(absolute_min, max(256, ctx - 128))
             
             if est_prompt_tokens + max_tokens > ctx:
-                # Force a larger generation runway for reasoning models
-                max_tokens = max(absolute_min, ctx - est_prompt_tokens - 50)
+                # Calculate the hard ceiling: how many tokens are genuinely free
+                available = ctx - est_prompt_tokens - 50
+                if available < 64:
+                    available = 64
+                # Use the larger of absolute_min and available, but NEVER exceed available
+                # The old bug: max(absolute_min, available) could return absolute_min > available → OOM
+                max_tokens = min(max(absolute_min, available), available)
             
             # If even with minimum generation tokens the prompt doesn't fit, truncate the prompt semantically
             max_prompt_tokens = ctx - max_tokens - 120
+            if max_prompt_tokens < 200:
+                max_prompt_tokens = 200
             if est_prompt_tokens > max_prompt_tokens:
                 chars_allowed = max_prompt_tokens * 3
                 if chars_allowed < 900: chars_allowed = 900
@@ -1146,7 +1166,7 @@ class AgentOrchestrator:
                 else:
                     est_prompt_tokens = len(prompt) // 3 + 120
             
-            # Ensure we never request more tokens than the available space
+            # ── HARD FINAL CLAMP — guarantees prompt + gen_tokens ≤ n_ctx ──
             safe_max = ctx - est_prompt_tokens
             if safe_max < 64:
                 safe_max = 64  # Desperate fallback — at least try to get something
