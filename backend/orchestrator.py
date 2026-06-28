@@ -3544,7 +3544,7 @@ class AgentOrchestrator:
             mode = "Playground-Verified" if use_playground else "Theoretical Analysis"
             status_callback(f"Reasoning mode: {mode}", "info", "router", 15)
 
-        ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
+        ds_llm = self._get_model("vibethinker", required_ctx=ds_ctx)
 
         reasoning_sys = (
             "You are a rigorous scientific researcher and expert logic reasoner.\n\n"
@@ -3589,10 +3589,14 @@ class AgentOrchestrator:
                 helper_search_context = ""
                 for rnd in range(max_rounds):
                     # Re-acquire ds_llm because other models may have evicted it in the previous round
-                    ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
+                    is_nuclear = (reset > 0)
+                    model_key = "deepseek_r1" if is_nuclear else "vibethinker"
+                    model_name = "DeepSeek-R1" if is_nuclear else "VibeThinker"
+                    
+                    ds_llm = self._get_model(model_key, required_ctx=ds_ctx)
                     if status_callback:
-                        lbl = f"Nuclear Reset #{reset} (Attempt {rnd+1}/{max_rounds}): DeepSeek-R1 re-reasoning..." if reset else f"DeepSeek-R1 reasoning + playground (Attempt {rnd+1}/{max_rounds})..."
-                        status_callback(lbl, "info" if not reset else "warning", "deepseek_r1", 25 + rnd*12)
+                        lbl = f"Nuclear Reset #{reset} (Attempt {rnd+1}/{max_rounds}): {model_name} re-reasoning..." if reset else f"{model_name} reasoning + playground (Attempt {rnd+1}/{max_rounds})..."
+                        status_callback(lbl, "info" if not reset else "warning", model_key, 25 + rnd*12)
                     draft_p = f"Provide a detailed, rigorous answer:\n{ds_safe}"
                     if rnd > 0:
                         last_failed = vibe_answer if vibe_answer else ds_answer
@@ -3613,12 +3617,12 @@ class AgentOrchestrator:
                     ds_answer = self._strip_thinking(self._call_model(ds_llm, draft_p, gen_tokens, gen_temp, system_prompt=reasoning_sys))
 
                     if status_callback:
-                        status_callback(f"Verifying in Reasoning Playground (Attempt {rnd+1}/{max_rounds})...", "info", "deepseek_r1", 35 + rnd*12)
-                    verified, pg_out, test_code = self._run_playground(ds_llm, ds_answer, "reasoning", model_key="deepseek_r1", original_prompt=prompt)
+                        status_callback(f"Verifying in Reasoning Playground (Attempt {rnd+1}/{max_rounds})...", "info", model_key, 35 + rnd*12)
+                    verified, pg_out, test_code = self._run_playground(ds_llm, ds_answer, "reasoning", model_key=model_key, original_prompt=prompt)
 
                     if verified:
                         if status_callback:
-                            status_callback("Reasoning VERIFIED!", "success", "deepseek_r1", 80)
+                            status_callback("Reasoning VERIFIED!", "success", model_key, 80)
                         self.memory.save(prompt, ds_answer)
                         router_llm = None; ds_llm = None; gc.collect()
                         viz = self._check_3d_gate(prompt, ds_answer, router_ctx, oc_ctx, gen_tokens, gen_temp, status_callback)
@@ -3766,7 +3770,7 @@ class AgentOrchestrator:
         else:
             # ── Standard LLM Debate (non-testable reasoning) ─────────────
             if status_callback:
-                status_callback("DeepSeek-R1 drafting analysis...", "info", "deepseek_r1", 50)
+                status_callback("VibeThinker drafting analysis...", "info", "vibethinker", 50)
             ds_draft = self._strip_thinking(self._call_model(ds_llm, f"Provide a detailed answer:\n{ds_safe}", gen_tokens, gen_temp, system_prompt=reasoning_sys))
 
             compiled = ds_draft
