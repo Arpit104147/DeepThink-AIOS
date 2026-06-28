@@ -1817,7 +1817,13 @@ class AgentOrchestrator:
             status_callback("Checking 3D Visualization Eligibility...", "info", "router", 90)
 
         # Rule-based auto-match for graphing/visualization tasks to ensure 100% reliability
-        auto_keywords = ["3d", "plotly", "three.js", "visualize", "visualization", "plot", "graph", "simulation", "simulate", "trajectory", "vector field", "surface plot", "dna helix", "dna structure", "protein structure", "mitochondria", "cell structure", "organelle", "molecular model", "molecular structure", "double helix"]
+        # NOTE: Avoid short ambiguous words like 'plot' or 'graph' alone — they false-match on
+        # "movie plot", "knowledge graph", etc. Use multi-word phrases or specific 3D/science terms.
+        auto_keywords = ["3d", "plotly", "three.js", "visualize", "visualization", "3d plot", "3d graph",
+                         "scatter plot", "bar chart", "line chart", "histogram",
+                         "simulation", "simulate", "trajectory", "vector field", "surface plot",
+                         "dna helix", "dna structure", "protein structure", "mitochondria",
+                         "cell structure", "organelle", "molecular model", "molecular structure", "double helix"]
         prompt_lower = prompt.lower()
         is_3d_flag = False
         if any(kw in prompt_lower for kw in auto_keywords):
@@ -1897,7 +1903,7 @@ class AgentOrchestrator:
             temperature=gen_temp,
             system_prompt=(
                 "You are an expert JavaScript/Plotly.js/Three.js coder. "
-                "Declare all variables globally. Use DOMContentLoaded. "
+                "Declare all variables globally. Place plotting code in a <script> tag at the end of <body>. "
                 "Output ONLY the complete HTML document inside ```html``` blocks."
             )
         )
@@ -2332,8 +2338,20 @@ class AgentOrchestrator:
         if any(prompt_lower_check == trig or prompt_lower_check.startswith(trig) for trig in generate_3d_triggers):
             if status_callback:
                 status_callback("Generating 3D Visualization from last response...", "info", "opencode", 10)
-            # Retrieve the last successful answer from memory to use as context
-            last_context = self.memory.recall(prompt_lower_check, n_results=1)
+            # Retrieve the most recent memory entry to use as context for 3D generation
+            last_context = ""
+            try:
+                import sqlite3
+                with sqlite3.connect(self.memory.sqlite_path, timeout=10.0) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT doc FROM memories ORDER BY created_at DESC LIMIT 1")
+                    row = cursor.fetchone()
+                    if row:
+                        last_context = row[0]
+            except Exception:
+                pass
+            if not last_context:
+                last_context = self.memory.recall("visualization 3d simulation", n_results=1)
             if not last_context:
                 last_context = "No previous context found. Generate a generic 3D demo visualization."
             router_ctx = self._get_dynamic_context_ceiling("router")
