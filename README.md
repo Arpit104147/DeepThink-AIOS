@@ -87,12 +87,12 @@ The system is constructed with a highly decoupled client-server architecture uti
    SIMPLE         CODING        REASONING       PREDICTION      EXTREME SEARCH    3D VIZ
     │               │               │               │                │              │
     ▼               ▼               ▼               ▼                ▼              ▼
-Phi-3.5-Mini   OpenCodeDS      VibeThinker 3B  OpenCodeDS       DeepSeek R1    OpenCodeDS
- Direct Ans    Actor-Critic     Reasoning Plan  ML Regression   Deep Analysis   WebGL & JS
+Phi-3.5-Mini   OpenCodeDS     VibeThinker 3B  OpenCodeDS       DeepSeek R1    OpenCodeDS
+ Direct Ans    Actor-Critic    / DeepSeek R1   ML Regression   Deep Analysis   WebGL & JS
     │               │               │               │                │              │
     ▼               ▼               ▼               ▼                ▼              ▼
-Web Search    Execution       Sandbox         Data Cleaning    OpenCodeDS     Reflexion
- (Simple)     Sandbox         Verification     Loop (SciPy)    Plotly Charts  Sandbox Loop
+Web Search    Execution      Verification +    Data Cleaning   OpenCodeDS     Reflexion
+ (Simple)     Sandbox        DS-R1 Synthesis   Loop (SciPy)   Plotly Charts  Sandbox Loop
     │               │               │               │                │              │
     └───────────────┴───────────────┴───────────────┴────────────────┴──────────────┘
                                     │
@@ -124,14 +124,19 @@ flowchart TD
     PATH_SIMPLE --> SIMPLE_ANS["Phi-3.5 Mini: Answer directly with web context"]
 
     %% ── 2. REASONING PATHWAY ──
-    PATH_REASONING --> VT_DRAFT["VibeThinker 3B: Draft Math/Logic Plan"]
-    VT_DRAFT --> OC_TEST["OpenCodeInterpreter 7B: Write Python Verification Script"]
-    OC_TEST --> REASON_SB{"Execution Sandbox"}
+    PATH_REASONING --> REASON_BRANCH{"Playground Verifiable?"}
+    REASON_BRANCH -->|Yes| VT_DRAFT["VibeThinker 3B: Draft Core Logic Plan"]
+    VT_DRAFT --> REASON_SB{"Execution Sandbox"}
     
-    REASON_SB -->|Verified Success| REASON_PASS["Pass logic plan to Coding or Output"]
+    REASON_SB -->|Verified Success| DS_SYNTH["DeepSeek R1-7B: Synthesize detailed LaTeX Explanation"]
+    DS_SYNTH --> REASON_PASS["Pass final verified math solution"]
+    
     REASON_SB -->|Crash/Failure| REASON_FAIL["Emergency Web Search"]
     REASON_FAIL --> DS_MATH_FIX["DeepSeek R1-7B: Correct logic plan using SearchQA web facts"]
     DS_MATH_FIX --> REASON_SB
+
+    REASON_BRANCH -->|No| DS_THEORY["DeepSeek R1-7B: Direct detailed academic LaTeX derivation"]
+    DS_THEORY --> REASON_PASS
 
     %% ── 3. CODING PATHWAY ──
     PATH_CODING --> OC_DRAFT["OpenCodeInterpreter 7B: Draft Python/JS Script"]
@@ -207,7 +212,7 @@ flowchart TD
 
 1. **SIMPLE:** Fast, direct answers utilizing Phi-3.5-Mini. Best for general conversations and basic tasks.
 2. **CODING:** OpenCodeInterpreter 6.7B acts as the generator, with an execution-driven feedback loop verifying code correctness.
-3. **REASONING:** Powered by VibeThinker 3B, providing chain-of-thought mathematical and logic verification.
+3. **REASONING:** A two-stage hybrid flow. VibeThinker 3B executes verifiable symbolic logic in the playground sandbox, and DeepSeek-R1-7B synthesizes the final detailed LaTeX explanation. Conceptual math/physics queries bypass the playground and route directly to DeepSeek-R1-7B.
 4. **PREDICTION:** A specialized ML pipeline that scrapes target web sources, cleans data frames, performs model fitting (Scikit-Learn/SciPy), and outputs regression/forecast statistics.
 5. **EXTREME WEBSEARCH:** Employs DeepSeek R1-7B to perform deep thematic synthesis over scraped pages, feeding key data arrays into OpenCodeInterpreter to produce Plotly visualizations.
 6. **3D VISUALIZATION:** Generates interactive Three.js physics scenes or Plotly.js canvases rendered directly in the web frontend.
