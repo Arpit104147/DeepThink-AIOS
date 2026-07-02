@@ -487,7 +487,7 @@ class Sandbox:
         """
         try:
             tokens = list(tokenize.generate_tokens(_io_top.StringIO(code).readline))
-        except (tokenize.TokenizeError, IndentationError, SyntaxError):
+        except (tokenize.TokenError, IndentationError, SyntaxError):
             return code
 
         # We rebuild the source line-by-line, blanking out ranges that belong
