@@ -149,6 +149,7 @@ class AgentOrchestrator:
         self.model_lock = threading.RLock()  # Synchronizes model loads across threads (reentrant to prevent offload deadlocks)
         self.inference_lock = threading.RLock()  # Synchronizes generation to prevent llama.cpp C++ deadlocks
         self.model_access_order = []  # LRU tracker: oldest first
+        self._in_offload_reload = False  # Recursion guard: prevents _check_memory_pressure re-entry during CPU offload
         
         # Dual-GPU Setup Detection
         self.dual_gpu_pipeline = False
@@ -460,7 +461,24 @@ class AgentOrchestrator:
         """
         if not self.model_access_order:
             return False
-        lru_key = self.model_access_order.pop(0)
+
+        # When offloading to CPU (VRAM pressure), skip models that are already
+        # on CPU — evicting them would not free any VRAM and would cause
+        # unnecessary reload churn.  Walk the LRU list to find the first
+        # GPU-resident model.  If none exist, fall through to evict the
+        # true LRU (which will be a CPU model) to free system RAM.
+        lru_key = None
+        if offload_to_cpu:
+            for candidate in list(self.model_access_order):
+                candidate_obj = self.loaded_models.get(candidate)
+                if candidate_obj and getattr(candidate_obj, "_n_gpu_layers", 0) > 0:
+                    lru_key = candidate
+                    break
+        # Fallback: pick the true LRU (oldest) regardless of device
+        if lru_key is None:
+            lru_key = self.model_access_order[0]
+
+        self.model_access_order.remove(lru_key)
         model_obj = self.loaded_models.pop(lru_key, None)
         if model_obj is None:
             return False
@@ -486,15 +504,18 @@ class AgentOrchestrator:
                 del model_obj
             gc.collect()
             
-            # Load the model on CPU
+            # Load the model on CPU (with recursion guard to prevent
+            # _check_memory_pressure from re-entering this function)
             try:
+                self._in_offload_reload = True
                 self._load_model_synchronized(lru_key, required_ctx=ctx_size, force_cpu=True)
                 print(f"  ✅ Offloaded '{lru_key}' to CPU. RAM now: {self._get_ram_free_gb():.1f} GB free")
-                return True
             except Exception as e:
                 print(f"⚠️ Failed to load '{lru_key}' on CPU during offload: {e}")
-                # If CPU fallback fails, it is already closed so we just return True
-                return True
+                # Model is already closed; eviction still freed VRAM.
+            finally:
+                self._in_offload_reload = False
+            return True
         else:
             print(f"🧹 DMA-LRU: Evicting '{lru_key}' (least recently used)...")
             with self.inference_lock:
@@ -701,6 +722,8 @@ class AgentOrchestrator:
                 with self.model_lock:
                     # Unload CPU version
                     self.loaded_models.pop(model_key, None)
+                    if model_key in self.model_access_order:
+                        self.model_access_order.remove(model_key)
                     self._close_model(model_obj, model_key)
                     del model_obj
                     gc.collect()
@@ -710,6 +733,8 @@ class AgentOrchestrator:
                 with self.model_lock:
                     # Unload GPU version
                     self.loaded_models.pop(model_key, None)
+                    if model_key in self.model_access_order:
+                        self.model_access_order.remove(model_key)
                     self._close_model(model_obj, model_key)
                     del model_obj
                     gc.collect()
@@ -791,7 +816,9 @@ class AgentOrchestrator:
                 evm_flushed = True  # Only our model is loaded, all VRAM is ours
                 
         # Skip memory pressure check if EVM already cleared VRAM
-        if not evm_flushed and not force_cpu:
+        # Also skip if we are inside an offload-reload cycle (_in_offload_reload)
+        # to prevent infinite recursion: offload → CPU reload → pressure check → offload.
+        if not evm_flushed and not force_cpu and not self._in_offload_reload:
             target_gpu = 0
             if self.dual_gpu_pipeline:
                 if model_key in ["deepseek_r1", "qwen_vl"]:
