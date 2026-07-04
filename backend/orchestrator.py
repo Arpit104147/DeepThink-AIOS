@@ -104,9 +104,12 @@ class TransformerWrapper:
                     stopping_criteria=stopping_criteria
                 )
         except RuntimeError as e:
-            print(f"⚠️ XPU compute error ({e}). Attempting fallback to CPU for this prompt...")
-            # If XPU crashes during generation, fall back to CPU on the fly
+            print(f"⚠️ GPU compute error ({e}). Attempting one-time fallback to CPU for this prompt...")
+            # Move to CPU for THIS generation only — restore to original device afterward
+            # to prevent permanently degrading all future inference to CPU.
+            original_device = self.device
             self.model = self.model.to("cpu")
+            self.device = "cpu"
             inputs = self.tokenizer(prompt, return_tensors="pt").to("cpu")
             with torch.inference_mode():
                 outputs = self.model.generate(
@@ -116,6 +119,13 @@ class TransformerWrapper:
                     do_sample=True,
                     stopping_criteria=stopping_criteria
                 )
+            # Attempt to restore to original GPU device so subsequent calls stay on GPU
+            try:
+                self.model = self.model.to(original_device)
+                self.device = original_device
+                print(f"✅ Restored model to {original_device} after CPU fallback.")
+            except Exception as restore_err:
+                print(f"⚠️ Could not restore model to {original_device} ({restore_err}), staying on CPU.")
         
         if self.cancel_event and self.cancel_event.is_set():
             raise RuntimeError("Generation cancelled by user.")
@@ -482,9 +492,13 @@ class AgentOrchestrator:
                     print(f"⚡ EVM: 95% utilization enabled — VRAM reserve={self.vram_safety_gb:.1f} GB per GPU, RAM reserve={self.ram_safety_gb:.1f} GB")
                 else:
                     self.kaggle_hotswap_mode = False
-                    # On larger GPUs (or multi-GPU), lower the reserve threshold to 15% (instead of 40%)
-                    # to allow more models to remain loaded concurrently in VRAM.
-                    self.vram_safety_gb = round(single_gpu_vram_gb * 0.15, 1)
+                    # On larger GPUs (or multi-GPU), lower the reserve threshold.
+                    # Scale by GPU size: 10% for large GPUs (≥40GB like A100/H100)
+                    # where all models fit comfortably, 15% for mid-range (24-39GB).
+                    if single_gpu_vram_gb >= 40:
+                        self.vram_safety_gb = round(single_gpu_vram_gb * 0.10, 1)
+                    else:
+                        self.vram_safety_gb = round(single_gpu_vram_gb * 0.15, 1)
                 
                 if num_gpus >= 2:
                     print(f"🎮 DMA: NVIDIA GPU detected — {num_gpus}x {single_gpu_vram_gb:.0f} GB VRAM ({single_gpu_vram_gb * num_gpus:.0f} GB combined), "
@@ -530,6 +544,29 @@ class AgentOrchestrator:
         """True if any layers are on GPU. n_gpu_layers: -1 = ALL layers on GPU,
         >0 = partial offload, 0 = pure CPU. NEVER compare with '> 0'."""
         return getattr(model_obj, "_n_gpu_layers", 0) != 0
+
+    def _gpu_can_fit_all_models(self):
+        """Check if total VRAM is large enough to hold ALL currently loaded models
+        simultaneously. On large GPUs (A100/H100), there is no need to offload
+        models to CPU just to free VRAM for a new load — they all fit.
+        Returns True if all models fit, False otherwise."""
+        if not (torch and torch.cuda.is_available()):
+            return False
+        try:
+            _free, total_vram = torch.cuda.mem_get_info(0)
+            total_vram_gb = total_vram / (1024 ** 3)
+            # Sum estimated sizes of all currently loaded GPU-resident models
+            total_loaded_gb = sum(
+                self._estimate_model_size_gb(mk)
+                for mk, m in self.loaded_models.items()
+                if self._is_gpu_resident(m)
+            )
+            # Check if all loaded models + a generous buffer fit in total VRAM.
+            # Use 20% headroom for KV caches, CUDA context, activations, etc.
+            headroom_gb = total_vram_gb * 0.20
+            return (total_loaded_gb + headroom_gb) < total_vram_gb
+        except Exception:
+            return False
 
     def _empty_gpu_caches(self):
         gc.collect()
@@ -852,7 +889,11 @@ class AgentOrchestrator:
             offload_to_cpu and
             not getattr(self, 'kaggle_hotswap_mode', False) and
             on_gpu and                                      # FIX Bug 1 (was: current_gpu_layers > 0)
-            (free_ram - est_size) > self.ram_safety_gb
+            (free_ram - est_size) > self.ram_safety_gb and
+            # Don't offload to CPU if total VRAM can comfortably fit ALL loaded
+            # models. Prevents unnecessary CPU offload cascade on large GPUs
+            # (A100/H100) where all models fit simultaneously in VRAM.
+            not self._gpu_can_fit_all_models()
         )
 
         if should_offload:
@@ -1111,10 +1152,13 @@ class AgentOrchestrator:
             else:
                 evm_flushed = True  # Only our model is loaded, all VRAM is ours
                 
-        # Skip memory pressure check if EVM already cleared VRAM
+        # Skip memory pressure check if EVM already cleared VRAM.
         # Also skip if we are inside an offload-reload cycle (_in_offload_reload)
         # to prevent infinite recursion: offload → CPU reload → pressure check → offload.
-        if not evm_flushed and not force_cpu and not self._in_offload_reload:
+        # Also skip if the target model is ALREADY loaded — running pressure check
+        # in that case can trigger a cascade where the model we're about to return
+        # gets evicted/offloaded to CPU by its own load call.
+        if not evm_flushed and not force_cpu and not self._in_offload_reload and model_key not in self.loaded_models:
             target_gpu = 0
             if self.dual_gpu_pipeline:
                 if model_key in ["deepseek_r1", "qwen_vl"]:
@@ -1211,6 +1255,8 @@ class AgentOrchestrator:
                             print(f"⚠️ DMA: GPU loaded '{model_key}' with reduced context ({ctx_size} instead of {required_ctx})")
                         break
                     except Exception as e:
+                        import traceback
+                        traceback.print_exc()
                         print(f"⚠️ DMA: GPU context creation failed for '{model_key}' (n_ctx={ctx_size}): {e}")
                         gc.collect()
                         self._wait_for_gpu_deallocation()
