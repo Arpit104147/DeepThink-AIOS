@@ -1220,10 +1220,18 @@ class AgentOrchestrator:
             
             loading_on_cpu = (self.device_mode == "cpu" or force_cpu)
             
+            # ── CPU Thread Optimization ──────────────────────────────────
+            # Maximize CPU core utilization for prompt evaluation and
+            # CPU-offloaded layers. Use all available cores (capped at 8
+            # to prevent thread-contention overhead on high-core machines).
+            optimal_threads = min(8, os.cpu_count() or 4)
+            
             kwargs = {
                 "model_path": model_path,
                 "n_ctx": required_ctx,
                 "n_gpu_layers": 0 if loading_on_cpu else self.gpu_layers,
+                "n_threads": optimal_threads,
+                "n_threads_batch": optimal_threads,
                 "verbose": False
             }
             # Kaggle Input Speedup
@@ -1246,6 +1254,25 @@ class AgentOrchestrator:
                 kwargs["flash_attn"] = False
             else:
                 kwargs["flash_attn"] = True
+
+            # ── KV Cache GPU Offloading ──────────────────────────────────
+            # Pin the attention KV cache to VRAM when GPU layers are active.
+            # This avoids costly PCIe round-trips during token generation.
+            if not loading_on_cpu:
+                kwargs["offload_kqv"] = True
+
+            # ── KV Cache Quantization (8-bit) ────────────────────────────
+            # Quantize the Key and Value caches to INT8 to reduce VRAM
+            # consumption by ~50% compared to FP16 KV. This allows
+            # significantly larger context windows to fit in GPU memory
+            # without measurable accuracy loss for Q6_K models.
+            try:
+                import llama_cpp
+                if hasattr(llama_cpp, 'GGML_TYPE_Q8_0'):
+                    kwargs["type_k"] = llama_cpp.GGML_TYPE_Q8_0
+                    kwargs["type_v"] = llama_cpp.GGML_TYPE_Q8_0
+            except Exception:
+                pass  # Older llama-cpp-python versions may not support KV quantization
 
             if model_key == "qwen_vl":
                 model_dir = os.path.dirname(model_path)
@@ -1886,6 +1913,61 @@ class AgentOrchestrator:
             context_lines.append(f"{marker} {i+1:4d} | {lines[i]}")
         return '\n'.join(context_lines)
 
+    def _get_ast_context(self, code, error_line):
+        """AST-Aware Surgical Context Extraction.
+        
+        Instead of extracting a fixed ±10 line window, parse the code with
+        Python's ast module and extract the ENTIRE function or class that
+        contains the error line. This gives the patching model structurally
+        complete context (no dangling indentation, no missing return types)
+        while reducing irrelevant lines that waste tokens.
+        
+        Falls back to the fixed-window approach if AST parsing fails
+        (e.g., for SyntaxError where the AST itself is broken).
+        """
+        import ast as ast_module
+        try:
+            tree = ast_module.parse(code)
+        except SyntaxError:
+            # AST can't parse broken code — fall back to line window
+            return None
+        
+        lines = code.split('\n')
+        best_node = None
+        best_span = (1, len(lines))  # default: entire file
+        
+        for node in ast_module.walk(tree):
+            if isinstance(node, (ast_module.FunctionDef, ast_module.AsyncFunctionDef, ast_module.ClassDef)):
+                node_start = node.lineno
+                node_end = getattr(node, 'end_lineno', None)
+                if node_end is None:
+                    # Fallback for older Python: estimate end from next sibling
+                    continue
+                if node_start <= error_line <= node_end:
+                    # Pick the tightest enclosing node (smallest span)
+                    span_size = node_end - node_start
+                    if best_node is None or span_size < (best_span[1] - best_span[0]):
+                        best_node = node
+                        best_span = (node_start, node_end)
+        
+        if best_node is None:
+            return None
+        
+        # Extract the function/class with numbered lines and error marker
+        start_idx = best_span[0] - 1  # 0-indexed
+        end_idx = best_span[1]        # exclusive
+        
+        # Add 3 lines of surrounding context for imports/globals above the function
+        ctx_start = max(0, start_idx - 3)
+        ctx_end = min(len(lines), end_idx + 2)
+        
+        context_lines = []
+        for i in range(ctx_start, ctx_end):
+            marker = " >>>" if (i + 1) == error_line else "    "
+            context_lines.append(f"{marker} {i+1:4d} | {lines[i]}")
+        
+        return '\n'.join(context_lines)
+
     def _apply_search_replace_patch(self, original_code, patch_text):
         """Parse Aider-style <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks and apply them."""
         if not patch_text or '<<<<<<< SEARCH' not in patch_text:
@@ -1925,14 +2007,26 @@ class AgentOrchestrator:
         return patched if applied > 0 else None
 
     def _agent_ide_patch(self, code, error_output, linter_model, gen_tokens, lang="python", system_prompt=None):
-        """Agent IDE: Attempt surgical patching of code using search/replace blocks."""
+        """Agent IDE: Attempt surgical patching of code using search/replace blocks.
+        
+        Uses AST-aware context extraction for Python code to provide the exact
+        broken function/class instead of a fixed line window.
+        """
         error_line = self._extract_error_line(error_output)
-        if error_line:
-            context = self._get_code_context_window(code, error_line, window=10)
-        else:
-            # Fallback: show first 30 numbered lines
-            lines = code.split('\n')[:30]
-            context = '\n'.join([f"    {i+1:4d} | {l}" for i, l in enumerate(lines)])
+        context = None
+        
+        # Try AST-aware extraction first (Python only)
+        if lang == "python" and error_line:
+            context = self._get_ast_context(code, error_line)
+        
+        # Fall back to fixed window if AST extraction failed or non-Python
+        if context is None:
+            if error_line:
+                context = self._get_code_context_window(code, error_line, window=10)
+            else:
+                # Fallback: show first 30 numbered lines
+                lines = code.split('\n')[:30]
+                context = '\n'.join([f"    {i+1:4d} | {l}" for i, l in enumerate(lines)])
 
         error_snippet = error_output[:600] if error_output else "No output"
         patch_prompt = (
@@ -3670,34 +3764,62 @@ class AgentOrchestrator:
                 
                 results = self.web_search.search(search_query, max_results=max_results)
                 
-                # 2. Compile Snippets Block & Scrape top pages
+                # 2. Compile Snippets Block & Scrape top pages (PARALLEL)
                 snippets_list = []
                 scraped_pages = []
                 scraped_raw_texts = []
                 scraped_count = 0
                 
                 if results:
+                    # Build snippets and collect scrape-eligible links
+                    scrape_candidates = []
                     for idx, r in enumerate(results):
                         title = r.get("title", "")
                         link = r.get("link", "")
                         snippet = r.get("snippet", "")
                         snippets_list.append(f"[{idx+1}] Title: {title}\nURL: {link}\nSnippet: {snippet}")
                         
-                        # Try to scrape the page content if we haven't reached the limit
-                        if scraped_count < max_scraped and link:
-                            # Skip Google News index pages to avoid scraping massive, noisy, cross-mixed aggregates
+                        if len(scrape_candidates) < max_scraped and link:
+                            # Skip Google News index pages
                             if "news.google.com" in link.lower() and ("/topics/" in link.lower() or "/stories/" in link.lower() or "/publications/" in link.lower()):
                                 continue
-                            
-                            if status_callback:
-                                status_callback(f"Scraping ({scraped_count+1}/{max_scraped}): {link[:40]}...", "info", "router", 12 + scraped_count * (2 if not is_predictive else 0.5))
-                            
-                            text = self.web_search.scrape_url(link)
+                            scrape_candidates.append((idx, link))
+
+                    # ── Parallel Scraping via ThreadPoolExecutor ─────────
+                    # Fetch all pages concurrently to reduce total latency
+                    # from N*timeout to ~1*timeout (the single slowest page).
+                    if scrape_candidates:
+                        from concurrent.futures import ThreadPoolExecutor, as_completed
+                        
+                        if status_callback:
+                            status_callback(f"Scraping {len(scrape_candidates)} pages in parallel...", "info", "router", 12)
+                        
+                        def _scrape_one(item):
+                            _idx, _link = item
+                            try:
+                                text = self.web_search.scrape_url(_link)
+                                return (_idx, _link, text)
+                            except Exception:
+                                return (_idx, _link, "")
+                        
+                        scraped_results = []
+                        with ThreadPoolExecutor(max_workers=min(len(scrape_candidates), 6)) as executor:
+                            futures = {executor.submit(_scrape_one, c): c for c in scrape_candidates}
+                            for future in as_completed(futures):
+                                try:
+                                    scraped_results.append(future.result())
+                                except Exception:
+                                    pass
+                        
+                        # Sort by original order to maintain ranking priority
+                        scraped_results.sort(key=lambda x: x[0])
+                        
+                        # Apply Jaccard dedup and assemble scraped pages
+                        def get_words(t):
+                            return set(re.findall(r'\w+', t.lower()))
+                        
+                        for _idx, _link, text in scraped_results:
                             if text and len(text.strip()) > 200:
-                                # Apply word-based Jaccard similarity deduplication to filter duplicate sites/syndicated pages
-                                def get_words(t):
-                                    return set(re.findall(r'\w+', t.lower()))
-                                
                                 new_words = get_words(text)
                                 is_dup = False
                                 for prev_text in scraped_raw_texts:
@@ -3707,7 +3829,7 @@ class AgentOrchestrator:
                                         union_len = len(new_words.union(prev_words))
                                         if union_len > 0:
                                             jaccard = intersection_len / union_len
-                                            if jaccard > 0.65: # 65% overlap is duplicate
+                                            if jaccard > 0.65:
                                                 is_dup = True
                                                 break
                                 if is_dup:
@@ -3715,7 +3837,7 @@ class AgentOrchestrator:
                                 
                                 scraped_raw_texts.append(text)
                                 scraped_pages.append(
-                                    f"=== START SCRAPED PAGE ===\nURL: {link}\nContent:\n{text[:char_limit]}\n=== END SCRAPED PAGE ==="
+                                    f"=== START SCRAPED PAGE ===\nURL: {_link}\nContent:\n{text[:char_limit]}\n=== END SCRAPED PAGE ==="
                                 )
                                 scraped_count += 1
                 
@@ -5015,6 +5137,33 @@ class AgentOrchestrator:
                 if not initial_failed_code:
                     initial_failed_code = code
                     initial_failed_error = output
+
+                # ── Early Stopping: Warning-Only Detection ────────────────
+                # If the sandbox returned ok=False but the output only contains
+                # non-fatal warnings (DeprecationWarning, UserWarning, etc.)
+                # with no actual Error/AssertionError, treat it as success.
+                # This prevents the self-correction loop from wasting cycles
+                # trying to "fix" benign library warnings.
+                if not ok and output and req_lang == "python":
+                    warning_types = ["DeprecationWarning", "UserWarning", "FutureWarning",
+                                     "PendingDeprecationWarning", "RuntimeWarning", "ResourceWarning"]
+                    fatal_markers = ["Error:", "Exception:", "Traceback (most recent call last)",
+                                     "AssertionError", "SyntaxError", "NameError", "TypeError",
+                                     "ValueError", "IndexError", "KeyError", "AttributeError",
+                                     "ModuleNotFoundError", "ImportError", "ZeroDivisionError",
+                                     "FileNotFoundError", "PermissionError", "OSError"]
+                    has_warning = any(w in output for w in warning_types)
+                    has_fatal = any(f in output for f in fatal_markers)
+                    has_tests_passed = "ALL TESTS PASSED" in output or "VERIFIED" in output
+                    
+                    if has_warning and not has_fatal and has_tests_passed:
+                        if status_callback:
+                            status_callback("⚡ Early stop: warnings only, all tests passed!", "success", "sandbox", 75)
+                        self.memory.save(prompt, code)
+                        if rnd > 0 or reset > 0:
+                            self.memory.save_mistake(prompt, initial_failed_code, initial_failed_error, code)
+                        router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
+                        return self._synthesize_coding_response(prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
 
                 # ── Phase 4.5: Agent IDE Surgical Patch → Full Rewrite Fallback ──
                 is_syntax_error = any(e in output for e in ["SyntaxError", "ModuleNotFoundError", "NameError", "IndentationError", "TypeError", "AttributeError", "ValueError", "ReferenceError", "Error:"])
