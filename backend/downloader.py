@@ -32,7 +32,7 @@ MODEL_DEFINITIONS = {
         'type': 'text',
     },
     'ornith': {
-        'repo_id': 'AtomicChat/ornith-9b-GGUF',
+        'repo_id': 'deepreinforce-ai/Ornith-1.0-9B-GGUF',
         'filename': 'ornith-1.0-9b-Q6_K.gguf',
         'name': 'Ornith 1.0-9B (Agentic Coder)',
         'type': 'text',
