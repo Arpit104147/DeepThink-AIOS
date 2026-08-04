@@ -1,0 +1,56 @@
+# Large model weights (Never commit to Git!)
+models/
+*.gguf
+*.bin
+*.zip
+*.pth
+*.safetensors
+
+# Python virtual environments & compiler cache
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Frontend Node.js dependencies & production bundles
+frontend/node_modules/
+frontend/dist/
+frontend/.svelte-kit/
+frontend/.next/
+
+# Generated media outputs & scratchpads
+outputs/
+scratch/
+backend/outputs/
+
+# Local configuration secrets (API Keys, etc.)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Runtime databases & logs (generated at runtime, never commit)
+forge_memory_db/
+*.db
+*.sqlite3
+*.log
+crash_log.txt
+server_logs.txt
+
+# Scratch test files & embedded repos
+/test_*.py
+agentic_benchmark_prompt.txt
+BitNet/
+*.md
+!README.md
+!README_SETUP.md
+!STARTUP.md
+!SECURITY.md
+!CONTRIBUTING.md
+!CODE_OF_CONDUCT.md
+!PULL_REQUEST_TEMPLATE.md
+benchmark_Data/
