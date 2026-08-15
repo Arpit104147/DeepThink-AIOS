@@ -515,14 +515,17 @@ class VulkanServerWrapper:
             print("⚠️ GPU Engine warning: Health check timed out, proceeding with request retry handler.", flush=True)
 
     def create_chat_completion(self, messages, max_tokens=1024, temperature=0.7, **kwargs):
+        stream = kwargs.pop("stream", False)
         payload = {
             "messages": messages,
             "max_tokens": max_tokens,
-            "temperature": temperature
+            "temperature": temperature,
+            "stream": False  # Always non-streaming to llama-server HTTP
         }
         
         # Retry loop for 503 Service Unavailable (Model loading in VRAM)
         max_retries = 30
+        result = None
         for attempt in range(max_retries):
             try:
                 res = requests.post(f"{self.url}/v1/chat/completions", json=payload, timeout=300)
@@ -531,12 +534,37 @@ class VulkanServerWrapper:
                     time.sleep(2)
                     continue
                 res.raise_for_status()
-                return res.json()
+                result = res.json()
+                break
             except requests.exceptions.HTTPError as err:
                 if hasattr(err, 'response') and err.response is not None and err.response.status_code == 503 and attempt < max_retries - 1:
                     time.sleep(2)
                     continue
                 raise err
+
+        if result is None:
+            raise RuntimeError("GPU Engine failed to respond after all retries.")
+
+        # If caller requested stream=True, emulate streaming by yielding a single chunk
+        if stream:
+            content = ""
+            if isinstance(result, dict):
+                choices = result.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+            elif isinstance(result, str):
+                content = result
+
+            def _fake_stream():
+                yield {
+                    "choices": [{
+                        "delta": {"content": content},
+                        "finish_reason": "stop"
+                    }]
+                }
+            return _fake_stream()
+
+        return result
 
     def close(self):
         if hasattr(self, "proc") and self.proc:
