@@ -176,7 +176,33 @@ def get_model_filenames(definition):
         filenames.append(definition["mmproj_filename"])
     return filenames
 
+def auto_discover_local_gguf_models():
+    """Scans MODELS_DIR recursively for any .gguf files on disk and registers them into MODEL_DEFINITIONS."""
+    if not os.path.exists(MODELS_DIR):
+        return
+
+    for root, dirs, files in os.walk(MODELS_DIR):
+        for file in files:
+            if file.endswith(".gguf") and not file.endswith(".incomplete") and not file.startswith("mmproj"):
+                # Match existing definition
+                found = False
+                for k, d in MODEL_DEFINITIONS.items():
+                    if d.get("filename") == file:
+                        found = True
+                        break
+                if not found:
+                    folder_name = os.path.basename(root)
+                    key_name = re.sub(r'[^a-zA-Z0-9_]', '_', file.replace(".gguf", "")).lower()[:32]
+                    MODEL_DEFINITIONS[key_name] = {
+                        "repo_id": f"local/{folder_name}",
+                        "filename": file,
+                        "name": file.replace(".gguf", "").replace("-", " ").title(),
+                        "type": "text"
+                    }
+
 def is_model_downloaded(model_key):
+    """Check if all files for a model key exist on disk (checking standard, flat, or recursive paths)."""
+    auto_discover_local_gguf_models()
     if model_key not in MODEL_DEFINITIONS:
         return False
     definition = MODEL_DEFINITIONS[model_key]
@@ -186,17 +212,24 @@ def is_model_downloaded(model_key):
         subfolder = subfolder.split("/")[-1]
     target_dir = os.path.join(MODELS_DIR, subfolder, model_key)
     
-    # Check standard nested structure
-    nested_exists = all(os.path.exists(os.path.join(target_dir, fname)) for fname in filenames)
-    if nested_exists:
+    # Standard nested structure
+    if all(os.path.exists(os.path.join(target_dir, fname)) for fname in filenames):
         return True
         
-    # Check flat structure (common in Kaggle datasets)
-    flat_exists = all(os.path.exists(os.path.join(MODELS_DIR, fname)) for fname in filenames)
-    return flat_exists
+    # Flat structure
+    if all(os.path.exists(os.path.join(MODELS_DIR, fname)) for fname in filenames):
+        return True
+
+    # Recursive search anywhere in MODELS_DIR
+    for root, dirs, files in os.walk(MODELS_DIR):
+        if all(fname in files for fname in filenames):
+            return True
+
+    return False
 
 def get_any_available_model_key():
     """Find and return any model key that is currently downloaded on disk."""
+    auto_discover_local_gguf_models()
     status = check_models_status()
     for key, info in status.items():
         if info.get("downloaded", False):
@@ -204,7 +237,8 @@ def get_any_available_model_key():
     return None
 
 def get_model_path(model_key):
-    """Get the local path for a model key, downloading it if not present (returns the path to the first shard/file)."""
+    """Get the local path for a model key, finding it recursively if present."""
+    auto_discover_local_gguf_models()
     if model_key not in MODEL_DEFINITIONS:
         raise ValueError(f"Unknown model key: {model_key}")
         
@@ -213,20 +247,28 @@ def get_model_path(model_key):
     if "/" in subfolder:
         subfolder = subfolder.split("/")[-1]
         
+    # Standard path
+    target_dir = os.path.join(MODELS_DIR, subfolder, model_key)
+    standard_path = os.path.join(target_dir, definition["filename"])
+    if os.path.exists(standard_path):
+        return standard_path
+
     # Check if it exists in a flat structure (Kaggle datasets)
     flat_path = os.path.join(MODELS_DIR, definition["filename"])
     if os.path.exists(flat_path):
         return flat_path
 
-    # Target directory under models/<subcategory>/<model_key>/
-    target_dir = os.path.join(MODELS_DIR, subfolder, model_key)
+    # Recursive disk search
+    for root, dirs, files in os.walk(MODELS_DIR):
+        if definition["filename"] in files:
+            return os.path.join(root, definition["filename"])
+
     try:
         os.makedirs(target_dir, exist_ok=True)
     except OSError:
-        pass # Handle read-only file systems (like mounted Kaggle Datasets)
+        pass
     
-    local_path = os.path.join(target_dir, definition["filename"])
-    return local_path
+    return standard_path
 
 DOWNLOAD_PROGRESS = {}
 CANCEL_DOWNLOAD_EVENTS = {}
@@ -241,41 +283,21 @@ def cancel_model_download(model_key):
 
 def check_models_status():
     """Check which models are downloaded and ready."""
+    auto_discover_local_gguf_models()
     status = {}
     for key, definition in MODEL_DEFINITIONS.items():
-        subfolder = definition.get("type", "text")
-        if "/" in subfolder:
-            subfolder = subfolder.split("/")[-1]
-        target_dir = os.path.join(MODELS_DIR, subfolder, key)
-        
-        filenames = get_model_filenames(definition)
-        all_downloaded = True
+        all_downloaded = is_model_downloaded(key)
+        first_path = get_model_path(key) if all_downloaded else None
         total_size = 0
-        first_path = os.path.join(target_dir, filenames[0])
-        
-        for fname in filenames:
-            path = os.path.join(target_dir, fname)
-            if not os.path.exists(path):
-                all_downloaded = False
-            else:
-                total_size += os.path.getsize(path)
+        if all_downloaded and first_path and os.path.exists(first_path):
+            try:
+                total_size = os.path.getsize(first_path)
+            except Exception:
+                total_size = 0
 
-        if all_downloaded:
-            prog_info = None
-            if key in DOWNLOAD_PROGRESS:
-                del DOWNLOAD_PROGRESS[key]
-        else:
+        prog_info = None
+        if not all_downloaded:
             prog_info = DOWNLOAD_PROGRESS.get(key, None)
-            if not prog_info:
-                inc_path = os.path.join(target_dir, filenames[0] + ".incomplete")
-                if os.path.exists(inc_path):
-                    inc_size = os.path.getsize(inc_path)
-                    prog_info = {
-                        "status": "downloading",
-                        "downloaded_gb": round(inc_size / (1024**3), 2),
-                        "total_gb": 0,
-                        "percent": 0
-                    }
 
         status[key] = {
             "name": definition["name"],
