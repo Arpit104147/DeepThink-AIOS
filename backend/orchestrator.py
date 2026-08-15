@@ -1635,21 +1635,30 @@ class AgentOrchestrator:
                 else:
                     kwargs["main_gpu"] = 0
 
-            # Robust GPU load with retry — if the GPU context fails (OOM / race condition),
-            # retry once with a smaller context, then fall back to CPU as last resort.
+            # Robust GPU load with retry — if the GPU context fails (OOM, flash_attn, or context limit),
+            # strip experimental flags, reduce context size, and load cleanly.
             llm = None
             if not loading_on_cpu:
-                for attempt, ctx_size in enumerate([required_ctx, max(2048, required_ctx // 2)]):
+                safe_kwargs = kwargs.copy()
+                # Clean risky defaults upfront that cause llama_context failures on Gemma/Qwen
+                safe_kwargs.pop("flash_attn", None)
+                safe_kwargs.pop("offload_kqv", None)
+                safe_kwargs.pop("type_k", None)
+                safe_kwargs.pop("type_v", None)
+                
+                for attempt, ctx_size in enumerate([required_ctx, min(4096, required_ctx), 2048]):
                     try:
-                        kwargs["n_ctx"] = ctx_size
-                        llm = Llama(**kwargs)
+                        safe_kwargs["n_ctx"] = ctx_size
+                        llm = Llama(**safe_kwargs)
                         if ctx_size != required_ctx:
-                            print(f"⚠️ DMA: GPU loaded '{model_key}' with reduced context ({ctx_size} instead of {required_ctx})")
+                            print(f"⚠️ DMA: GPU loaded '{model_key}' with safe context ({ctx_size} instead of {required_ctx})")
+                        else:
+                            print(f"✅ DMA: GPU loaded '{model_key}' with full context ({ctx_size})")
                         break
                     except Exception as e:
-                        import traceback
-                        traceback.print_exc()
                         print(f"⚠️ DMA: GPU context creation failed for '{model_key}' (n_ctx={ctx_size}): {e}")
+                        safe_kwargs.pop("n_ubatch", None)
+                        safe_kwargs.pop("use_mmap", None)
                         gc.collect()
                         self._wait_for_gpu_deallocation()
                 
