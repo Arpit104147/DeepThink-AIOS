@@ -481,15 +481,24 @@ class VulkanServerWrapper:
         print(f"🚀 Launching Pre-compiled GPU Engine (VRAM Offload -ngl {gpu_offload_layers}): {' '.join(cmd)}")
         self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         
-        # Poll health endpoint until ready
-        for _ in range(40):
+        # Poll health endpoint until ready (wait up to 120s for VRAM model load)
+        print("⏳ Waiting for GPU Engine to finish loading model weights into VRAM...", flush=True)
+        ready = False
+        for _ in range(120):
             try:
-                res = requests.get(f"{self.url}/health", timeout=1)
-                if res.ok:
-                    print("✅ Pre-compiled Vulkan Engine is LIVE and ready!")
-                    break
+                res = requests.get(f"{self.url}/health", timeout=2)
+                if res.status_code == 200:
+                    data = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
+                    if data.get("status") in ["ok", "ready"] or not data:
+                        ready = True
+                        print("✅ Pre-compiled GPU Engine is LIVE & ready in VRAM!", flush=True)
+                        break
             except Exception:
-                time.sleep(0.5)
+                pass
+            time.sleep(1)
+
+        if not ready:
+            print("⚠️ GPU Engine warning: Health check timed out, proceeding with request retry handler.", flush=True)
 
     def create_chat_completion(self, messages, max_tokens=1024, temperature=0.7, **kwargs):
         payload = {
@@ -497,9 +506,23 @@ class VulkanServerWrapper:
             "max_tokens": max_tokens,
             "temperature": temperature
         }
-        res = requests.post(f"{self.url}/v1/chat/completions", json=payload, timeout=300)
-        res.raise_for_status()
-        return res.json()
+        
+        # Retry loop for 503 Service Unavailable (Model loading in VRAM)
+        max_retries = 30
+        for attempt in range(max_retries):
+            try:
+                res = requests.post(f"{self.url}/v1/chat/completions", json=payload, timeout=300)
+                if res.status_code == 503:
+                    print(f"⏳ GPU Engine is finishing VRAM load (503 Service Unavailable, attempt {attempt+1}/{max_retries})... Waiting 2s.", flush=True)
+                    time.sleep(2)
+                    continue
+                res.raise_for_status()
+                return res.json()
+            except requests.exceptions.HTTPError as err:
+                if hasattr(err, 'response') and err.response is not None and err.response.status_code == 503 and attempt < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                raise err
 
     def close(self):
         if hasattr(self, "proc") and self.proc:
