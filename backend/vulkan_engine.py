@@ -54,16 +54,32 @@ def get_vulkan_gpu_diagnostics():
         free_ram_gb = 8.0
 
     gpu_name = "Unknown Graphics Adapter"
-    # Detect GPU hardware via lspci
+    # Detect GPU hardware via torch, nvidia-smi, or lspci
     try:
-        lspci = subprocess.check_output("lspci -vmm", shell=True, stderr=subprocess.DEVNULL).decode()
-        for block in lspci.split("\n\n"):
-            if "VGA compatible controller" in block or "3D controller" in block or "Display controller" in block:
-                lines = dict([line.split(":\t") for line in block.split("\n") if ":\t" in line])
-                gpu_name = lines.get("Device", lines.get("Vendor", "GPU Device"))
-                break
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
     except Exception:
         pass
+
+    if gpu_name == "Unknown Graphics Adapter":
+        try:
+            smi = subprocess.check_output(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], stderr=subprocess.DEVNULL).decode().strip()
+            if smi:
+                gpu_name = smi.split("\n")[0]
+        except Exception:
+            pass
+
+    if gpu_name == "Unknown Graphics Adapter":
+        try:
+            lspci = subprocess.check_output("lspci -vmm", shell=True, stderr=subprocess.DEVNULL).decode()
+            for block in lspci.split("\n\n"):
+                if "VGA compatible controller" in block or "3D controller" in block or "Display controller" in block:
+                    lines = dict([line.split(":\t") for line in block.split("\n") if ":\t" in line])
+                    gpu_name = lines.get("Device", lines.get("Vendor", "GPU Device"))
+                    break
+        except Exception:
+            pass
 
     binary_path = get_vulkan_binary_path()
     is_installed = binary_path is not None
