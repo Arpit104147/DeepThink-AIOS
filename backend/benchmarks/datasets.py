@@ -92,25 +92,34 @@ async def fetch_real_dataset(category: str, add_log_fn=None) -> List[Dict[str, A
             dataset = load_dataset("google-research-datasets/mbpp", "sanitized", split="test")
             if add_log_fn:
                 add_log_fn(f"Successfully loaded MBPP Sanitized dataset ({len(dataset)} items).")
-            return [{"id": f"MBPP/{item['task_id']}", "prompt": item["prompt"], "test": "\n".join(item["test_list"])} for item in dataset]
+            out = []
+            for item in dataset:
+                tests = "\n".join(item["test_list"])
+                ep = None
+                m = re.search(r"assert\s+([a-zA-Z_]\w*)\s*\(", tests)
+                if m:
+                    ep = m.group(1)
+                prompt_str = f"Write a Python function to solve this task:\n{item['prompt']}\n\nEnsure your function is named `{ep}`." if ep else f"Write a Python function to solve this task:\n{item['prompt']}"
+                out.append({"id": f"MBPP/{item['task_id']}", "prompt": prompt_str, "test": tests, "entry_point": ep})
+            return out
             
         elif category == "GSM8K":
             dataset = load_dataset("openai/gsm8k", "main", split="test")
             if add_log_fn:
                 add_log_fn(f"Successfully loaded GSM8K dataset ({len(dataset)} items).")
-            return [{"id": f"GSM8K/{i}", "prompt": item["question"], "answer": item["answer"]} for i, item in enumerate(dataset)]
+            return [{"id": f"GSM8K/{i}", "prompt": f"Solve the following math word problem step-by-step and state the final answer clearly:\n\n{item['question']}", "answer": item["answer"]} for i, item in enumerate(dataset)]
             
         elif category == "MATH":
             dataset = load_dataset("hendrycks/competition_math", split="test")
             if add_log_fn:
                 add_log_fn(f"Successfully loaded MATH dataset ({len(dataset)} items).")
-            return [{"id": f"MATH/{i}", "prompt": item["problem"], "answer": item["solution"]} for i, item in enumerate(dataset)]
+            return [{"id": f"MATH/{i}", "prompt": f"Solve the following mathematics problem step-by-step:\n\n{item['problem']}", "answer": item["solution"]} for i, item in enumerate(dataset)]
             
         elif category == "GPQA (PhD Science)":
             dataset = load_dataset("IdaB/GPQA", "gpqa_diamond", split="train")
             if add_log_fn:
                 add_log_fn(f"Successfully loaded GPQA Diamond PhD dataset ({len(dataset)} items).")
-            return [{"id": f"GPQA/{i}", "prompt": item["question"], "answer": item["correct_answer"]} for i, item in enumerate(dataset)]
+            return [{"id": f"GPQA/{i}", "prompt": f"Answer the following PhD-level science question step-by-step:\n\n{item['question']}", "answer": item["correct_answer"]} for i, item in enumerate(dataset)]
             
         elif category == "AIME (Olympiad Logic)":
             dataset = load_dataset("hendrycks/competition_math", split="test")
@@ -119,7 +128,7 @@ async def fetch_real_dataset(category: str, add_log_fn=None) -> List[Dict[str, A
                 aime_problems = dataset[:30]
             if add_log_fn:
                 add_log_fn(f"Successfully loaded AIME math subset ({len(aime_problems)} items).")
-            return [{"id": f"AIME/{i}", "prompt": item["problem"], "answer": item["solution"]} for i, item in enumerate(aime_problems)]
+            return [{"id": f"AIME/{i}", "prompt": f"Solve the following AIME math competition problem step-by-step:\n\n{item['problem']}", "answer": item["solution"]} for i, item in enumerate(aime_problems)]
             
         elif category == "MuSR (PhD Logic)":
             dataset = load_dataset("cais/musr", "murder_mystery", split="test")
