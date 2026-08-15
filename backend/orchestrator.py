@@ -1506,40 +1506,63 @@ class AgentOrchestrator:
 
         model_path = get_model_path(model_key)
         
-        # ── GGUF Models (Pre-Compiled GPU Engine) ─────────────────────────
+        # ── GGUF Models ────────────────────────────────────────────────────
         if model_path.endswith('.gguf'):
-            from backend.vulkan_engine import get_vulkan_binary_path, _download_and_extract_vulkan
-            vk_binary = get_vulkan_binary_path()
-            if not vk_binary or not os.path.exists(vk_binary):
-                print("⚡ Pre-compiled engine binary not found. Auto-downloading engine now...")
+            # Detect if CUDA is available (Kaggle T4, Colab, RTX systems with CUDA drivers)
+            has_cuda_runtime = False
+            try:
+                import torch as _torch
+                has_cuda_runtime = _torch.cuda.is_available()
+            except ImportError:
                 try:
-                    _download_and_extract_vulkan()
-                    vk_binary = get_vulkan_binary_path()
-                except Exception as e:
-                    print(f"⚠️ Auto-download of engine failed: {e}")
+                    subprocess.check_output(["nvidia-smi"], stderr=subprocess.DEVNULL)
+                    has_cuda_runtime = True
+                except Exception:
+                    pass
 
-            if not vk_binary or not os.path.exists(vk_binary):
-                raise RuntimeError("Pre-compiled GPU engine binary not found in bin/vulkan/. Please click 'Download Pre-compiled Engine' in Model Hub.")
+            if has_cuda_runtime:
+                # ── CUDA Path: Use llama-cpp-python Python bindings (true CUDA GPU VRAM) ──
+                print(f"🔥 CUDA GPU detected! Using llama-cpp-python for true GPU VRAM loading...")
+                try:
+                    from llama_cpp import Llama
+                except ImportError:
+                    print("⚡ Auto-installing llama-cpp-python with CUDA support...")
+                    import sys
+                    subprocess.check_call([
+                        sys.executable, "-m", "pip", "install",
+                        "llama-cpp-python",
+                        "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cu124",
+                        "-q"
+                    ])
+                    from llama_cpp import Llama
+            else:
+                # ── Non-CUDA Path: Use Pre-Compiled Vulkan/Metal Engine Binary ──
+                from backend.vulkan_engine import get_vulkan_binary_path, _download_and_extract_vulkan
+                vk_binary = get_vulkan_binary_path()
+                if not vk_binary or not os.path.exists(vk_binary):
+                    print("⚡ Pre-compiled engine binary not found. Auto-downloading engine now...")
+                    try:
+                        _download_and_extract_vulkan()
+                        vk_binary = get_vulkan_binary_path()
+                    except Exception as e:
+                        print(f"⚠️ Auto-download of engine failed: {e}")
 
-            print(f"⚡ Loading GGUF model with Pre-Compiled Vulkan Engine ({vk_binary})...")
-            n_layers = 0 if (self.device_mode == "cpu" or force_cpu) else self.gpu_layers
-            wrapper = VulkanServerWrapper(
-                binary_path=vk_binary,
-                model_path=model_path,
-                port=8088,
-                n_gpu_layers=n_layers,
-                n_ctx=required_ctx
-            )
-            self.loaded_models[model_key] = wrapper
-            return wrapper
-            
+                if not vk_binary or not os.path.exists(vk_binary):
+                    raise RuntimeError("Pre-compiled GPU engine binary not found. Please click 'Download Pre-compiled Engine' in Model Hub.")
+
+                print(f"⚡ Loading GGUF model with Pre-Compiled Vulkan/Metal Engine ({vk_binary})...")
+                n_layers = 0 if (self.device_mode == "cpu" or force_cpu) else self.gpu_layers
+                wrapper = VulkanServerWrapper(
+                    binary_path=vk_binary,
+                    model_path=model_path,
+                    port=8088,
+                    n_gpu_layers=n_layers,
+                    n_ctx=required_ctx
+                )
+                self.loaded_models[model_key] = wrapper
+                return wrapper
+
             loading_on_cpu = (self.device_mode == "cpu" or force_cpu)
-            
-            # ── CPU Thread Optimization ──────────────────────────────────
-            # Maximize CPU core utilization for prompt evaluation and
-            # CPU-offloaded layers. Use all available cores (capped at 8
-            # to prevent thread-contention overhead on high-core machines).
-            optimal_threads = min(8, os.cpu_count() or 4)
             
             kwargs = {
                 "model_path": model_path,
