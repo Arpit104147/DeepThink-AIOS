@@ -6,6 +6,7 @@ import time
 import shutil
 import uuid
 import subprocess
+import requests
 try:
     import psutil
 except ImportError:
@@ -468,15 +469,16 @@ class VulkanServerWrapper:
         except Exception:
             pass
 
+        gpu_offload_layers = 99 if (n_gpu_layers is None or n_gpu_layers < 0) else n_gpu_layers
         cmd = [
             binary_path,
             "-m", model_path,
             "-c", str(n_ctx),
-            "-ngl", str(n_gpu_layers),
+            "-ngl", str(gpu_offload_layers),
             "--port", str(port),
             "--host", "127.0.0.1"
         ]
-        print(f"🚀 Launching Pre-compiled Vulkan Engine: {' '.join(cmd)}")
+        print(f"🚀 Launching Pre-compiled GPU Engine (VRAM Offload -ngl {gpu_offload_layers}): {' '.join(cmd)}")
         self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         
         # Poll health endpoint until ready
