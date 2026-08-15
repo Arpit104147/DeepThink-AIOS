@@ -161,8 +161,48 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
 
         queue.task_done()
 
-async def run_benchmark_suite(category: str, orchestrator: Any = None):
-    """Executes the benchmark evaluation loop."""
+ALL_BENCHMARK_SUITES = [
+    "HumanEval",
+    "MBPP",
+    "GSM8K",
+    "MATH",
+    "GPQA (PhD Science)",
+    "AIME (Olympiad Logic)",
+    "MuSR (PhD Logic)",
+    "MMLU-Pro (Prof STEM)",
+    "SWE-bench Lite",
+    "SWE-bench Pro",
+    "SearchQA / HotpotQA"
+]
+
+async def run_all_benchmark_suites(orchestrator: Any = None):
+    """Executes all available benchmark suites sequentially and stores results for every category."""
+    add_log("🚀 Starting ALL Benchmark Suites Batch Evaluation...")
+    total_suites = len(ALL_BENCHMARK_SUITES)
+    
+    with STATE_LOCK:
+        BENCHMARK_STATE["active"] = True
+
+    for idx, category in enumerate(ALL_BENCHMARK_SUITES):
+        with STATE_LOCK:
+            if not BENCHMARK_STATE.get("active", False):
+                add_log("⏹️ Batch Benchmark Run stopped by user.")
+                break
+
+        if orchestrator and hasattr(orchestrator, 'cancel_event') and orchestrator.cancel_event and orchestrator.cancel_event.is_set():
+            add_log("⏹️ Batch Benchmark Run stopped by user.")
+            break
+
+        add_log(f"📋 [{idx + 1}/{total_suites}] Launching suite: {category}...")
+        await _run_single_suite(category, orchestrator)
+        await asyncio.sleep(0.5)
+
+    with STATE_LOCK:
+        BENCHMARK_STATE["active"] = False
+        add_log("🎉 ALL Benchmark Suites Completed! All category results stored in history.")
+
+async def _run_single_suite(category: str, orchestrator: Any = None):
+    """Internal helper to execute a single benchmark suite."""
     start_time = time.time()
     
     with STATE_LOCK:
@@ -176,13 +216,12 @@ async def run_benchmark_suite(category: str, orchestrator: Any = None):
         BENCHMARK_STATE["avg_latency"] = 0.0
         BENCHMARK_STATE["elapsed_seconds"] = 0.0
         BENCHMARK_STATE["_start_time"] = start_time
-        BENCHMARK_STATE["logs"] = []
         for w in BENCHMARK_STATE["workers"]:
             w["status"] = "Initializing"
             w["progress"] = 0
 
     add_log(f"🚀 Starting benchmark suite for {category}...")
-    
+
     dataset = await fetch_real_dataset(category, add_log_fn=add_log)
     total_problems = len(dataset)
     
@@ -220,7 +259,6 @@ async def run_benchmark_suite(category: str, orchestrator: Any = None):
     total_time = round(time.time() - start_time, 1)
     
     with STATE_LOCK:
-        BENCHMARK_STATE["active"] = False
         BENCHMARK_STATE["elapsed_seconds"] = total_time
         final_acc = BENCHMARK_STATE["accuracy"]
         BENCHMARK_STATE["history"][category] = {
@@ -238,6 +276,13 @@ async def run_benchmark_suite(category: str, orchestrator: Any = None):
         add_log(f"🎉 Benchmark suite {category} completed in {total_time}s! Final Accuracy: {final_acc}%")
     else:
         add_log(f"⏹️ Benchmark suite {category} stopped by user at {total_time}s. Accuracy: {final_acc}%")
+
+async def run_benchmark_suite(category: str, orchestrator: Any = None):
+    """Executes the benchmark evaluation loop for single or all suites."""
+    if category.upper() == "ALL" or category.lower() in ["all", "run_all", "run all"]:
+        await run_all_benchmark_suites(orchestrator)
+    else:
+        await _run_single_suite(category, orchestrator)
 
 def run_benchmark(category: str = "HumanEval", orchestrator: Any = None):
     """Main entry point to start a benchmark run."""

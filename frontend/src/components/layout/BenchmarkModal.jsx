@@ -90,6 +90,21 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
     }
   };
 
+  const handleRunAll = async () => {
+    setLoading(true);
+    try {
+      await fetch(`${serverUrl}/api/benchmark/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: "ALL" })
+      });
+    } catch (err) {
+      console.error("Failed to start all benchmarks:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStop = async () => {
     try {
       await fetch(`${serverUrl}/api/benchmark/stop`, { method: "POST" });
@@ -141,18 +156,39 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
             </select>
           </div>
 
-          <div className="action-buttons">
+          <div className="action-buttons" style={{ display: "flex", gap: "8px" }}>
             {!status.active ? (
-              <button
-                className="btn-run-benchmark"
-                onClick={handleStart}
-                disabled={loading}
-              >
-                {loading ? "Starting..." : "▶ Run Benchmark"}
-              </button>
+              <>
+                <button
+                  className="btn-run-benchmark"
+                  onClick={handleStart}
+                  disabled={loading}
+                >
+                  {loading ? "Starting..." : "▶ Run Suite"}
+                </button>
+                <button
+                  className="btn-run-all-benchmark"
+                  onClick={handleRunAll}
+                  disabled={loading}
+                  style={{
+                    background: "linear-gradient(135deg, #a855f7, #ec4899)",
+                    color: "#ffffff",
+                    border: "none",
+                    padding: "10px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    fontSize: "0.88rem",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(168, 85, 247, 0.3)",
+                    transition: "transform 0.2s ease, box-shadow 0.2s ease"
+                  }}
+                >
+                  ⚡ Run All Benchmarks
+                </button>
+              </>
             ) : (
               <button className="btn-stop-benchmark" onClick={handleStop}>
-                ⏹ Cancel Suite
+                ⏹ Cancel Evaluation
               </button>
             )}
           </div>
@@ -275,13 +311,46 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
           </div>
         </div>
 
+        {/* Stored Benchmark History Table */}
+        {status?.history && Object.keys(status.history).length > 0 && (
+          <div className="benchmark-section">
+            <h3>🏆 Stored Benchmark Results ({Object.keys(status.history).length} Suites Evaluated)</h3>
+            <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "10px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", color: "#e2e8f0" }}>
+                <thead>
+                  <tr style={{ background: "rgba(255,255,255,0.05)", textTransform: "uppercase", fontSize: "0.74rem", color: "#94a3b8" }}>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Category / Suite</th>
+                    <th style={{ padding: "10px 14px", textAlign: "center" }}>Accuracy</th>
+                    <th style={{ padding: "10px 14px", textAlign: "center" }}>Passed / Total</th>
+                    <th style={{ padding: "10px 14px", textAlign: "center" }}>Duration</th>
+                    <th style={{ padding: "10px 14px", textAlign: "right" }}>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(status.history).map(([cat, res]) => (
+                    <tr key={cat} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <td style={{ padding: "10px 14px", fontWeight: "600", color: "#cbd5e1" }}>{cat}</td>
+                      <td style={{ padding: "10px 14px", textAlign: "center", color: res.accuracy >= 75 ? "#34d399" : res.accuracy >= 50 ? "#fbbf24" : "#f87171", fontWeight: "700" }}>
+                        {res.accuracy}%
+                      </td>
+                      <td style={{ padding: "10px 14px", textAlign: "center" }}>{res.passed} / {res.total}</td>
+                      <td style={{ padding: "10px 14px", textAlign: "center" }}>{res.elapsed_seconds}s</td>
+                      <td style={{ padding: "10px 14px", textAlign: "right", color: "#94a3b8", fontSize: "0.76rem" }}>{res.timestamp}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Live Execution Console Log */}
         <div className="benchmark-section">
           <h3>Live Telemetry & Execution Log</h3>
           <div className="benchmark-console" ref={consoleRef}>
             {status.logs?.length === 0 ? (
               <div className="console-empty">
-                Console ready. Select a benchmark suite above and click "Run Benchmark".
+                Console ready. Select a benchmark suite above and click "Run Suite" or "Run All Benchmarks".
               </div>
             ) : (
               status.logs.map((log, index) => (
