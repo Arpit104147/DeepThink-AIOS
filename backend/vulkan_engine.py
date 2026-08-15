@@ -126,14 +126,20 @@ def _download_and_extract_vulkan():
         machine_name = platform.machine().lower()
 
         if system_name == "windows":
-            target_asset = next((a for a in assets if "win-vulkan-x64" in a["name"].lower()), None)
+            target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["win-vulkan-x64", "win-vulkan", "windows-vulkan", "win-x64-vulkan"])), None)
         elif system_name == "linux":
             if "arm" in machine_name or "aarch" in machine_name:
-                target_asset = next((a for a in assets if "ubuntu-vulkan-arm64" in a["name"].lower()), None)
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-arm64", "linux-vulkan-arm64", "ubuntu-arm64-vulkan"])), None)
             else:
-                target_asset = next((a for a in assets if "ubuntu-vulkan-x64" in a["name"].lower() or "ubuntu-x64-vulkan" in a["name"].lower()), None)
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-x64", "ubuntu-x64-vulkan", "linux-vulkan-x64", "linux-x64-vulkan", "bin-ubuntu-vulkan"])), None)
         elif system_name == "darwin":
-            target_asset = next((a for a in assets if "mac-arm64" in a["name"].lower() or "osx" in a["name"].lower()), None)
+            is_arm = "arm" in machine_name or "aarch" in machine_name
+            if is_arm:
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac-arm64", "macos-arm64", "osx-arm64"])), None)
+            else:
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac-x64", "macos-x64", "osx-x64"])), None)
+            if not target_asset:
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac", "macos", "osx"])), None)
 
         if not target_asset:
             raise Exception(f"No pre-compiled Vulkan binary release asset found for OS: {system_name} ({machine_name})")
