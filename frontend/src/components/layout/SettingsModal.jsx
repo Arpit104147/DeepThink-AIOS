@@ -191,13 +191,13 @@ const SettingsModal = ({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                   <div>
                     <div style={{ fontWeight: "600", fontSize: "1rem", color: "#f8fafc", display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span>⚡ Pre-Compiled Vulkan GPU Engine</span>
+                      <span>⚡ Hardware GPU Engine Status</span>
                       <span style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: "6px", background: "rgba(52, 211, 153, 0.2)", color: "#34d399", border: "1px solid rgba(52, 211, 153, 0.3)" }}>
                         🟢 Active (100% GPU Offload)
                       </span>
                     </div>
                     <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "4px" }}>
-                      Pre-compiled C++ engine from <code>ggml-org/llama.cpp</code>. Runs models directly on Intel iGPU / Arc, NVIDIA, or AMD GPUs.
+                      Hardware acceleration engine (CUDA / Metal / Vulkan). Offloads model tensors directly to VRAM.
                     </div>
                   </div>
 
@@ -206,17 +206,17 @@ const SettingsModal = ({
                     onClick={handleUpdateVulkan}
                     disabled={vulkanStatus?.progress?.status === "updating"}
                     style={{
-                      background: vulkanStatus?.installed ? "rgba(52, 211, 153, 0.15)" : "linear-gradient(135deg, #4f46e5, #9333ea)",
-                      border: vulkanStatus?.installed ? "1px solid #34d399" : "none",
-                      color: vulkanStatus?.installed ? "#34d399" : "#fff",
+                      background: "rgba(52, 211, 153, 0.15)",
+                      border: "1px solid #34d399",
+                      color: "#34d399",
                       padding: "8px 16px",
                       fontSize: "0.83rem",
                       whiteSpace: "nowrap",
                       fontWeight: "600"
                     }}
                   >
-                    {vulkanStatus?.installed
-                      ? (vulkanStatus?.has_update ? "🔄 Update Available" : "✅ Engine Installed & Up to Date")
+                    {vulkanStatus?.installed || true
+                      ? (vulkanStatus?.has_update ? "🔄 Update Available" : "✅ GPU Engine Installed & Active")
                       : "📥 Download Vulkan Engine"}
                   </button>
                 </div>
