@@ -141,13 +141,33 @@ def _download_and_extract_vulkan():
         system_name = platform.system().lower()
         machine_name = platform.machine().lower()
 
+        # Detect if CUDA is available (Kaggle, Colab, NVIDIA GPU servers)
+        has_cuda = False
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except ImportError:
+            import subprocess as _sp
+            try:
+                _sp.check_output(["nvidia-smi"], stderr=_sp.DEVNULL)
+                has_cuda = True
+            except Exception:
+                pass
+
         if system_name == "windows":
-            target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["win-vulkan-x64", "win-vulkan", "windows-vulkan", "win-x64-vulkan"])), None)
+            if has_cuda:
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["win-cuda", "windows-cuda"]) and "x64" in a["name"].lower()), None)
+            if not target_asset:
+                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["win-vulkan-x64", "win-vulkan", "windows-vulkan", "win-x64-vulkan"])), None)
         elif system_name == "linux":
-            if "arm" in machine_name or "aarch" in machine_name:
-                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-arm64", "linux-vulkan-arm64", "ubuntu-arm64-vulkan"])), None)
-            else:
-                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-x64", "ubuntu-x64-vulkan", "linux-vulkan-x64", "linux-x64-vulkan", "bin-ubuntu-vulkan"])), None)
+            if has_cuda:
+                # Prefer CUDA build on Linux with NVIDIA GPU (Kaggle, Colab, etc.)
+                target_asset = next((a for a in assets if "cuda" in a["name"].lower() and "x64" in a["name"].lower() and a["name"].endswith(".zip")), None)
+            if not target_asset:
+                if "arm" in machine_name or "aarch" in machine_name:
+                    target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-arm64", "linux-vulkan-arm64", "ubuntu-arm64-vulkan"])), None)
+                else:
+                    target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-x64", "ubuntu-x64-vulkan", "linux-vulkan-x64", "linux-x64-vulkan", "bin-ubuntu-vulkan"])), None)
         elif system_name == "darwin":
             is_arm = "arm" in machine_name or "aarch" in machine_name
             if is_arm:
@@ -158,7 +178,7 @@ def _download_and_extract_vulkan():
                 target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac", "macos", "osx"])), None)
 
         if not target_asset:
-            raise Exception(f"No pre-compiled Vulkan binary release asset found for OS: {system_name} ({machine_name})")
+            raise Exception(f"No pre-compiled binary release asset found for OS: {system_name} ({machine_name}), CUDA: {has_cuda}")
 
         download_url = target_asset["browser_download_url"]
         file_name = target_asset["name"]
