@@ -315,10 +315,11 @@ async def run_all_benchmark_suites(orchestrator: Any = None):
     
     with STATE_LOCK:
         BENCHMARK_STATE["active"] = True
+        BENCHMARK_STATE["cancel_requested"] = False
 
     for idx, category in enumerate(ALL_BENCHMARK_SUITES):
         with STATE_LOCK:
-            if not BENCHMARK_STATE.get("active", False):
+            if not BENCHMARK_STATE.get("active", False) or BENCHMARK_STATE.get("cancel_requested", False):
                 add_log("⏹️ Batch Benchmark Run stopped by user.")
                 break
 
@@ -330,6 +331,11 @@ async def run_all_benchmark_suites(orchestrator: Any = None):
         await _run_single_suite(category, orchestrator)
         await asyncio.sleep(0.5)
 
+        with STATE_LOCK:
+            if BENCHMARK_STATE.get("cancel_requested", False):
+                add_log("⏹️ Batch Benchmark Run stopped by user.")
+                break
+
     with STATE_LOCK:
         BENCHMARK_STATE["active"] = False
         add_log("🎉 ALL Benchmark Suites Completed! All category results stored in history.")
@@ -340,6 +346,8 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
     start_time = time.time()
     
     with STATE_LOCK:
+        if BENCHMARK_STATE.get("cancel_requested", False):
+            return
         BENCHMARK_STATE["active"] = True
         BENCHMARK_STATE["category"] = category
         BENCHMARK_STATE["progress"] = 0
@@ -437,10 +445,12 @@ def stop_benchmark(orchestrator: Any = None):
     """Stops the active benchmark run immediately."""
     with STATE_LOCK:
         BENCHMARK_STATE["active"] = False
-        add_log("⏹️ Benchmark run cancelled by user.")
+        BENCHMARK_STATE["cancel_requested"] = True
+        add_log("⏹️ Benchmark evaluation cancelled by user.")
         for w in BENCHMARK_STATE["workers"]:
             w["status"] = "Idle"
             w["progress"] = 0
+            w["task"] = "N/A"
     if orchestrator and hasattr(orchestrator, "cancel_event") and orchestrator.cancel_event:
         orchestrator.cancel_event.set()
     return {"status": "stopped", "message": "Benchmark execution cancelled."}

@@ -447,9 +447,10 @@ def update_settings(settings: SettingsRequest):
 
 @app.post("/api/cancel")
 async def cancel_generation():
-    """Stop active generation but keep models loaded in RAM for instant reuse."""
+    """Stop active generation & active benchmarks while keeping models loaded in memory."""
     generation_cancel.set()
-    return {"status": "success", "message": "Generation cancelled. Models remain loaded."}
+    stop_benchmark(orchestrator)
+    return {"status": "success", "message": "Generation and benchmarks cancelled."}
 
 @app.post("/api/offload")
 async def offload_memory():
