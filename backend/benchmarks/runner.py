@@ -18,25 +18,8 @@ import json
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 def get_default_worker_count() -> int:
-    try:
-        import torch
-        if torch.cuda.is_available():
-            num_workers = max(1, torch.cuda.device_count())
-            try:
-                if num_workers == 1:
-                    total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                    if total_vram_gb >= 70:
-                        return 12
-                    elif total_vram_gb >= 35:
-                        return 4
-                    elif total_vram_gb >= 22:
-                        return 2
-            except Exception:
-                pass
-            return num_workers
-    except Exception:
-        pass
-    return max(1, (os.cpu_count() or 8) // 4)
+    # Use 1 dedicated worker to prevent multi-thread RLock contention and C++ deadlocks
+    return 1
 
 BENCHMARK_STATE = {
     "active": False,

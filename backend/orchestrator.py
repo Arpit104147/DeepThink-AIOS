@@ -2606,8 +2606,9 @@ class AgentOrchestrator:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        # Prevent concurrent C++ deadlocks in llama.cpp by serializing the generation
-        with self.inference_lock:
+        # Prevent concurrent C++ deadlocks in llama.cpp with non-blocking timeout safety
+        acquired = self.inference_lock.acquire(timeout=60.0)
+        try:
             # Use streaming to support instant cancellation for GGUF/llama-cpp-python models
             chunks = llm.create_chat_completion(
                 messages=messages,
@@ -2631,6 +2632,12 @@ class AgentOrchestrator:
                 except Exception:
                     pass
             return "".join(content_pieces)
+        finally:
+            if acquired:
+                try:
+                    self.inference_lock.release()
+                except Exception:
+                    pass
 
     # =========================================================================
     # DYNAMIC ACTOR-CRITIC VERIFIER PIPELINE — Helper Methods
