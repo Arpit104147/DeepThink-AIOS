@@ -24,9 +24,12 @@ frontend/.next/
 # Generated media outputs & scratchpads
 outputs/
 scratch/
-backend/outputs/
+# Compiled binary executables and Vulkan libraries
+bin/vulkan/
 bin/gh_bin/
 bin/gh_cli
+*.so
+*.so.*
 
 # Local configuration secrets (API Keys, etc.)
 .env
