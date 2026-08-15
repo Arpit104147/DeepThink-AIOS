@@ -488,8 +488,22 @@ class VulkanServerWrapper:
             try:
                 res = requests.get(f"{self.url}/health", timeout=2)
                 if res.status_code == 200:
-                    data = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
-                    if data.get("status") in ["ok", "ready"] or not data:
+                    try:
+                        data = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
+                    except Exception:
+                        data = {}
+
+                    is_ready = False
+                    if isinstance(data, str):
+                        if data.lower() in ["ok", "ready", "status: ok"]:
+                            is_ready = True
+                    elif isinstance(data, dict):
+                        if data.get("status") in ["ok", "ready"] or not data:
+                            is_ready = True
+                    else:
+                        is_ready = True
+
+                    if is_ready:
                         ready = True
                         print("✅ Pre-compiled GPU Engine is LIVE & ready in VRAM!", flush=True)
                         break
