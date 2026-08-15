@@ -233,11 +233,11 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                 try:
                     response = await asyncio.wait_for(
                         asyncio.to_thread(orchestrator.process_query, problem["prompt"], cb),
-                        timeout=45.0
+                        timeout=180.0
                     )
                     success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
                 except asyncio.TimeoutError:
-                    add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after 45s — moving to next problem")
+                    add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after 180s — moving to next problem")
                     success = False
                     generated_tokens = 50
             except Exception as e:
