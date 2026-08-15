@@ -704,7 +704,10 @@ def start_benchmark_suite(req: BenchmarkStartRequest, background_tasks: Backgrou
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(run_benchmark_suite(req.category, orchestrator=orchestrator))
+            models_status = check_models_status()
+            has_downloaded = any(info.get("downloaded", False) for info in models_status.values())
+            active_orchestrator = orchestrator if has_downloaded else None
+            loop.run_until_complete(run_benchmark_suite(req.category, orchestrator=active_orchestrator))
             loop.close()
         except Exception as e:
             import traceback
