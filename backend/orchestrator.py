@@ -1439,12 +1439,20 @@ class AgentOrchestrator:
 
         model_path = get_model_path(model_key)
         
-        # ── GGUF Models (Pre-Compiled Vulkan Engine Only) ─────────────────
+        # ── GGUF Models (Pre-Compiled GPU Engine) ─────────────────────────
         if model_path.endswith('.gguf'):
-            from backend.vulkan_engine import get_vulkan_binary_path
+            from backend.vulkan_engine import get_vulkan_binary_path, _download_and_extract_vulkan
             vk_binary = get_vulkan_binary_path()
             if not vk_binary or not os.path.exists(vk_binary):
-                raise RuntimeError("Pre-compiled Vulkan engine binary not found in bin/vulkan/. Please click 'Download Pre-compiled Vulkan Engine' in Model Hub.")
+                print("⚡ Pre-compiled engine binary not found. Auto-downloading engine now...")
+                try:
+                    _download_and_extract_vulkan()
+                    vk_binary = get_vulkan_binary_path()
+                except Exception as e:
+                    print(f"⚠️ Auto-download of engine failed: {e}")
+
+            if not vk_binary or not os.path.exists(vk_binary):
+                raise RuntimeError("Pre-compiled GPU engine binary not found in bin/vulkan/. Please click 'Download Pre-compiled Engine' in Model Hub.")
 
             print(f"⚡ Loading GGUF model with Pre-Compiled Vulkan Engine ({vk_binary})...")
             n_layers = 0 if (self.device_mode == "cpu" or force_cpu) else self.gpu_layers
