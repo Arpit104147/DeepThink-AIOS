@@ -449,6 +449,63 @@ global.console = {
 """
 
 
+class VulkanServerWrapper:
+    """Wrapper that launches and communicates with the pre-compiled Vulkan llama-server binary over HTTP REST API."""
+    def __init__(self, binary_path: str, model_path: str, port: int = 8088, n_gpu_layers: int = 99, n_ctx: int = 4096):
+        self.port = port
+        self.model_path = model_path
+        self.binary_path = binary_path
+        self.url = f"http://127.0.0.1:{port}"
+        
+        # Check if an existing server is running on port 8088
+        try:
+            r = requests.get(f"{self.url}/health", timeout=1)
+            if r.ok:
+                print(f"✅ Found running Vulkan llama-server on port {port}.")
+                self.proc = None
+                return
+        except Exception:
+            pass
+
+        cmd = [
+            binary_path,
+            "-m", model_path,
+            "-c", str(n_ctx),
+            "-ngl", str(n_gpu_layers),
+            "--port", str(port),
+            "--host", "127.0.0.1"
+        ]
+        print(f"🚀 Launching Pre-compiled Vulkan Engine: {' '.join(cmd)}")
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        
+        # Poll health endpoint until ready
+        for _ in range(40):
+            try:
+                res = requests.get(f"{self.url}/health", timeout=1)
+                if res.ok:
+                    print("✅ Pre-compiled Vulkan Engine is LIVE and ready!")
+                    break
+            except Exception:
+                time.sleep(0.5)
+
+    def create_chat_completion(self, messages, max_tokens=1024, temperature=0.7, **kwargs):
+        payload = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+        res = requests.post(f"{self.url}/v1/chat/completions", json=payload, timeout=300)
+        res.raise_for_status()
+        return res.json()
+
+    def close(self):
+        if hasattr(self, "proc") and self.proc:
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+
+
 class AgentOrchestrator:
     def __init__(self, cancel_event=None):
         self.cancel_event = cancel_event  # threading.Event for cancel support
@@ -489,32 +546,12 @@ class AgentOrchestrator:
         self.llama_cpp_has_cuda = True  # Backward-compat attribute name for GPU acceleration
         self.llama_cpp_has_gpu = True
         try:
-            from llama_cpp import Llama
-            import llama_cpp as _lc
-            _lc_inner = getattr(_lc, 'llama_cpp', None)
-            _has_gpu_fn = getattr(_lc, 'llama_supports_gpu_offload', None)
-            _has_gpu_backend = (
-                (_has_gpu_fn() if callable(_has_gpu_fn) else False) or
-                getattr(_lc, 'LLAMA_SUPPORTS_GPU_OFFLOAD', False) or
-                hasattr(_lc_inner, 'ggml_backend_vulkan_init') or
-                hasattr(_lc_inner, 'ggml_vulkan_init') or
-                hasattr(_lc_inner, 'ggml_backend_cuda_init') or
-                hasattr(_lc_inner, 'ggml_cuda_init') or
-                hasattr(_lc_inner, 'ggml_backend_metal_init') or
-                hasattr(_lc_inner, 'ggml_metal_init') or
-                hasattr(_lc_inner, 'ggml_backend_sycl_init') or
-                hasattr(_lc_inner, 'ggml_sycl_init')
-            )
-            self.llama_cpp_has_gpu = _has_gpu_backend
-            self.llama_cpp_has_cuda = _has_gpu_backend
-            if _has_gpu_backend:
-                print(f"✅ llama-cpp-python: GPU backend (Vulkan/CUDA/Metal/SYCL) detected — GPU acceleration active!")
-            else:
-                print(f"⚠️ llama-cpp-python build lacks GPU acceleration flags (Vulkan/CUDA). Falling back to CPU inference.")
-        except ImportError:
-            self.llama_cpp_has_gpu = False
-            self.llama_cpp_has_cuda = False
-            print(f"ℹ️ `llama-cpp-python` is not installed. Pre-compiled Vulkan engine / Transformers engine active.")
+            from backend.vulkan_engine import get_vulkan_binary_path
+            vk_binary = get_vulkan_binary_path()
+            if vk_binary and os.path.exists(vk_binary):
+                print(f"✅ Pre-compiled Vulkan Engine active: {vk_binary}")
+        except Exception:
+            pass
 
         # ── Dynamic Threshold Calibration ────────────────────────────────
         total_ram = psutil.virtual_memory()
@@ -1401,12 +1438,24 @@ class AgentOrchestrator:
 
         model_path = get_model_path(model_key)
         
-        # ── GGUF Models (llama_cpp) ──────────────────────────────────────
+        # ── GGUF Models (Pre-Compiled Vulkan Engine Only) ─────────────────
         if model_path.endswith('.gguf'):
-            try:
-                from llama_cpp import Llama
-            except ImportError:
-                raise RuntimeError("`llama-cpp-python` is not installed in the python environment.")
+            from backend.vulkan_engine import get_vulkan_binary_path
+            vk_binary = get_vulkan_binary_path()
+            if not vk_binary or not os.path.exists(vk_binary):
+                raise RuntimeError("Pre-compiled Vulkan engine binary not found in bin/vulkan/. Please click 'Download Pre-compiled Vulkan Engine' in Model Hub.")
+
+            print(f"⚡ Loading GGUF model with Pre-Compiled Vulkan Engine ({vk_binary})...")
+            n_layers = 0 if (self.device_mode == "cpu" or force_cpu) else self.gpu_layers
+            wrapper = VulkanServerWrapper(
+                binary_path=vk_binary,
+                model_path=model_path,
+                port=8088,
+                n_gpu_layers=n_layers,
+                n_ctx=required_ctx
+            )
+            self.loaded_models[model_key] = wrapper
+            return wrapper
             
             loading_on_cpu = (self.device_mode == "cpu" or force_cpu)
             
