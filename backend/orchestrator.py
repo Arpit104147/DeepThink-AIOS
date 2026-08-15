@@ -512,9 +512,17 @@ class AgentOrchestrator:
             else:
                 print(f"⚠️ llama-cpp-python build lacks GPU acceleration flags (Vulkan/CUDA). Falling back to CPU inference.")
         except ImportError:
-            self.llama_cpp_has_gpu = False
-            self.llama_cpp_has_cuda = False
-            print(f"⚠️ llama-cpp-python is not installed. GGUF models will not load.")
+            try:
+                print("⚡ Auto-installing missing `llama-cpp-python` module...")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "llama-cpp-python", "-q"])
+                from llama_cpp import Llama
+                self.llama_cpp_has_gpu = True
+                self.llama_cpp_has_cuda = True
+                print("✅ `llama-cpp-python` successfully auto-installed and loaded!")
+            except Exception as e:
+                self.llama_cpp_has_gpu = False
+                self.llama_cpp_has_cuda = False
+                print(f"⚠️ llama-cpp-python is not installed and auto-install failed: {e}")
 
         # ── Dynamic Threshold Calibration ────────────────────────────────
         total_ram = psutil.virtual_memory()
@@ -1406,7 +1414,12 @@ class AgentOrchestrator:
             try:
                 from llama_cpp import Llama
             except ImportError:
-                raise RuntimeError("`llama-cpp-python` is not installed in the python environment. Please run `pip install llama-cpp-python`.")
+                try:
+                    print("⚡ Auto-installing missing `llama-cpp-python` module...")
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "llama-cpp-python", "-q"])
+                    from llama_cpp import Llama
+                except Exception as err:
+                    raise RuntimeError(f"`llama-cpp-python` module is not installed: {err}")
             
             loading_on_cpu = (self.device_mode == "cpu" or force_cpu)
             
