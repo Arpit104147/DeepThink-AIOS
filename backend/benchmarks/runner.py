@@ -230,8 +230,16 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                         if prog:
                             BENCHMARK_STATE["workers"][worker_id]["progress"] = min(95, prog)
                             
-                response = await asyncio.to_thread(orchestrator.process_query, problem["prompt"], cb)
-                success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
+                try:
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(orchestrator.process_query, problem["prompt"], cb),
+                        timeout=45.0
+                    )
+                    success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
+                except asyncio.TimeoutError:
+                    add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after 45s — moving to next problem")
+                    success = False
+                    generated_tokens = 50
             except Exception as e:
                 err_msg = str(e)
                 if "llama_cpp" in err_msg or "No downloaded models" in err_msg or "not installed" in err_msg or "ModuleNotFoundError" in err_msg:
