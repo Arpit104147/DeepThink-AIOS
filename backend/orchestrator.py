@@ -1563,6 +1563,7 @@ class AgentOrchestrator:
                 return wrapper
 
             loading_on_cpu = (self.device_mode == "cpu" or force_cpu)
+            optimal_threads = min(8, os.cpu_count() or 4)
             
             kwargs = {
                 "model_path": model_path,
