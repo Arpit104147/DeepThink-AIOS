@@ -174,25 +174,22 @@ def _download_and_extract_vulkan():
             if not target_asset:
                 target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["win-vulkan-x64", "win-vulkan", "windows-vulkan", "win-x64-vulkan"])), None)
         elif system_name == "linux":
-            if has_cuda:
-                # Prefer CUDA build on Linux with NVIDIA GPU (Kaggle, Colab, etc.)
-                target_asset = next((a for a in assets if "cuda" in a["name"].lower() and "x64" in a["name"].lower() and a["name"].endswith(".zip")), None)
-            if not target_asset:
-                if "arm" in machine_name or "aarch" in machine_name:
-                    target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-arm64", "linux-vulkan-arm64", "ubuntu-arm64-vulkan"])), None)
-                else:
-                    target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["ubuntu-vulkan-x64", "ubuntu-x64-vulkan", "linux-vulkan-x64", "linux-x64-vulkan", "bin-ubuntu-vulkan"])), None)
+            if "arm" in machine_name or "aarch" in machine_name:
+                target_asset = next((a for a in assets if "ubuntu-vulkan-arm64" in a["name"].lower() or "ubuntu-arm64" in a["name"].lower()), None)
+            else:
+                # Target Linux x64 assets (.tar.gz)
+                target_asset = next((a for a in assets if "ubuntu-vulkan-x64" in a["name"].lower() and a["name"].endswith(".tar.gz")), None)
+                if not target_asset:
+                    target_asset = next((a for a in assets if "ubuntu-x64" in a["name"].lower() and a["name"].endswith(".tar.gz")), None)
         elif system_name == "darwin":
             is_arm = "arm" in machine_name or "aarch" in machine_name
             if is_arm:
-                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac-arm64", "macos-arm64", "osx-arm64"])), None)
+                target_asset = next((a for a in assets if "mac-arm64" in a["name"].lower() or "macos-arm64" in a["name"].lower()), None)
             else:
-                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac-x64", "macos-x64", "osx-x64"])), None)
-            if not target_asset:
-                target_asset = next((a for a in assets if any(k in a["name"].lower() for k in ["mac", "macos", "osx"])), None)
+                target_asset = next((a for a in assets if "mac-x64" in a["name"].lower() or "macos-x64" in a["name"].lower()), None)
 
         if not target_asset:
-            raise Exception(f"No pre-compiled binary release asset found for OS: {system_name} ({machine_name}), CUDA: {has_cuda}")
+            raise Exception(f"No pre-compiled binary release asset found for OS: {system_name} ({machine_name})")
 
         download_url = target_asset["browser_download_url"]
         file_name = target_asset["name"]
@@ -200,7 +197,7 @@ def _download_and_extract_vulkan():
         VULKAN_UPDATE_PROGRESS = {
             "status": "updating",
             "percent": 15,
-            "message": f"Downloading pre-compiled Vulkan Engine ({file_name})..."
+            "message": f"Downloading pre-compiled GPU Engine ({file_name})..."
         }
 
         os.makedirs(VULKAN_DIR, exist_ok=True)
@@ -221,7 +218,7 @@ def _download_and_extract_vulkan():
                         pct = int(15 + (downloaded / total_len) * 70)
                         VULKAN_UPDATE_PROGRESS["percent"] = min(pct, 85)
 
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 85, "message": "Extracting Vulkan binary files..."}
+        VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 85, "message": "Extracting GPU binary files..."}
 
         # Extract archive
         if file_name.endswith(".tar.gz") or file_name.endswith(".tgz"):
@@ -235,10 +232,15 @@ def _download_and_extract_vulkan():
         if os.path.exists(archive_path):
             os.remove(archive_path)
 
-        # Ensure executable permissions on Linux/macOS
-        binary_path = get_vulkan_binary_path()
-        if binary_path and sys.platform != "win32":
-            os.chmod(binary_path, 0o755)
+        # Ensure executable permissions recursively on Linux/macOS
+        for root, dirs, files in os.walk(VULKAN_DIR):
+            for file in files:
+                full_p = os.path.join(root, file)
+                if sys.platform != "win32":
+                    try:
+                        os.chmod(full_p, 0o755)
+                    except Exception:
+                        pass
 
         # Write version tag file
         with open(VERSION_FILE, "w") as f:
