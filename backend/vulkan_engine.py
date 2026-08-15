@@ -20,14 +20,29 @@ VULKAN_UPDATE_PROGRESS = {
 def get_vulkan_binary_path():
     """Return absolute path to precompiled llama-server binary if present."""
     target_name = "llama-server.exe" if sys.platform == "win32" else "llama-server"
+    
+    # 1. Direct path in bin/vulkan/
     direct_path = os.path.join(VULKAN_DIR, target_name)
     if os.path.exists(direct_path):
         return direct_path
-        
+
+    # 2. Recursive search inside bin/vulkan/
     if os.path.exists(VULKAN_DIR):
         for root, dirs, files in os.walk(VULKAN_DIR):
             if target_name in files:
-                return os.path.join(root, target_name)
+                found = os.path.join(root, target_name)
+                if os.access(found, os.X_OK):
+                    return found
+
+    # 3. Search entire bin/ directory (handles CUDA extractions with different folder names)
+    bin_dir = os.path.join(PROJECT_ROOT, "bin")
+    if os.path.exists(bin_dir):
+        for root, dirs, files in os.walk(bin_dir):
+            if target_name in files:
+                found = os.path.join(root, target_name)
+                if os.access(found, os.X_OK):
+                    return found
+
     return None
 
 def get_installed_version():
