@@ -81,7 +81,12 @@ async def fetch_real_dataset(category: str, add_log_fn=None) -> List[Dict[str, A
             dataset = load_dataset("openai/openai_humaneval", split="test")
             if add_log_fn:
                 add_log_fn(f"Successfully loaded OpenAI HumanEval dataset ({len(dataset)} items).")
-            return [{"id": item["task_id"], "prompt": item["prompt"], "test": item["test"], "entry_point": item["entry_point"]} for item in dataset]
+            return [{
+                "id": item["task_id"], 
+                "prompt": f"Complete the following Python function. Return ONLY valid executable Python code:\n\n{item['prompt']}", 
+                "test": item["test"], 
+                "entry_point": item["entry_point"]
+            } for item in dataset]
             
         elif category == "MBPP":
             dataset = load_dataset("google-research-datasets/mbpp", "sanitized", split="test")

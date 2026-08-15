@@ -46,7 +46,9 @@ async def evaluate_problem_solution(
             )
             
             prompt_clean = problem.get("prompt", "")
-            if prompt_clean.strip() in extracted_code:
+            if entry_point and f"def {entry_point}" in extracted_code:
+                test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
+            elif prompt_clean.strip() in extracted_code:
                 test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
             else:
                 test_code = typing_imports + prompt_clean + "\n" + extracted_code + "\n\n" + problem["test"]
