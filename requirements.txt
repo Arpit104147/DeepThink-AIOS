@@ -38,10 +38,8 @@ gdstk>=0.9.0; sys_platform != "win32"
 # Phase 4: Git Workspace Automation
 gitpython>=3.1.0
 
-# GGUF Inference Engine
-llama-cpp-python>=0.2.70
-
 # Benchmark Plotting & Telemetry Visualizations
 matplotlib>=3.8.0
+
 
 
