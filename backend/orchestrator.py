@@ -60,7 +60,7 @@ except ImportError:
             return MockVirtualMemory()
     psutil = MockPsutil()
 import threading
-from backend.downloader import get_model_path, is_model_downloaded
+from backend.downloader import get_model_path, is_model_downloaded, resolve_model_key, MODEL_DEFINITIONS
 from backend.sandbox import Sandbox
 from backend.memory import Memory
 from backend.search import WebSearch
@@ -486,32 +486,33 @@ class AgentOrchestrator:
         # without CUDA, the GPU exists but can't be used for inference.
         # We must downgrade has_dgpu so context ceilings are calculated
         # from System RAM (not VRAM), preventing OOM segfaults.
-        self.llama_cpp_has_cuda = True  # Assume yes until proven otherwise
+        self.llama_cpp_has_cuda = True  # Backward-compat attribute name for GPU acceleration
+        self.llama_cpp_has_gpu = True
         try:
             from llama_cpp import Llama
             import llama_cpp as _lc
-            _has_cuda_backend = (
-                hasattr(_lc, 'LLAMA_SUPPORTS_GPU_OFFLOAD') or
-                hasattr(getattr(_lc, 'llama_cpp', None), 'ggml_backend_cuda_init') or
-                hasattr(getattr(_lc, 'llama_cpp', None), 'ggml_cuda_init')
+            _lc_inner = getattr(_lc, 'llama_cpp', None)
+            _has_gpu_fn = getattr(_lc, 'llama_supports_gpu_offload', None)
+            _has_gpu_backend = (
+                (_has_gpu_fn() if callable(_has_gpu_fn) else False) or
+                getattr(_lc, 'LLAMA_SUPPORTS_GPU_OFFLOAD', False) or
+                hasattr(_lc_inner, 'ggml_backend_vulkan_init') or
+                hasattr(_lc_inner, 'ggml_vulkan_init') or
+                hasattr(_lc_inner, 'ggml_backend_cuda_init') or
+                hasattr(_lc_inner, 'ggml_cuda_init') or
+                hasattr(_lc_inner, 'ggml_backend_metal_init') or
+                hasattr(_lc_inner, 'ggml_metal_init') or
+                hasattr(_lc_inner, 'ggml_backend_sycl_init') or
+                hasattr(_lc_inner, 'ggml_sycl_init')
             )
-            if torch and torch.cuda.is_available():
-                if _has_cuda_backend:
-                    self.llama_cpp_has_cuda = True
-                    print(f"✅ llama-cpp-python: CUDA backend detected (GPU inference ready)")
-                else:
-                    self.llama_cpp_has_cuda = False
-                    print(f"")
-                    print(f"{'='*70}")
-                    print(f"⚠️  WARNING: llama-cpp-python has NO CUDA backend!")
-                    print(f"   GPU is available ({torch.cuda.get_device_name(0)})")
-                    print(f"   but llama-cpp-python was built without CUDA support.")
-                    print(f"   ALL models will fall back to CPU inference.")
-                    print(f"")
-                    print(f"   FIX: Reinstall with CUDA support:")
-                    print(f"   CMAKE_ARGS=\"-DGGML_CUDA=on\" pip install llama-cpp-python --force-reinstall --no-cache-dir")
-                    print(f"{'='*70}")
+            self.llama_cpp_has_gpu = _has_gpu_backend
+            self.llama_cpp_has_cuda = _has_gpu_backend
+            if _has_gpu_backend:
+                print(f"✅ llama-cpp-python: GPU backend (Vulkan/CUDA/Metal/SYCL) detected — GPU acceleration active!")
+            else:
+                print(f"⚠️ llama-cpp-python build lacks GPU acceleration flags (Vulkan/CUDA). Falling back to CPU inference.")
         except ImportError:
+            self.llama_cpp_has_gpu = False
             self.llama_cpp_has_cuda = False
             print(f"⚠️ llama-cpp-python is not installed. GGUF models will not load.")
 
@@ -778,14 +779,34 @@ class AgentOrchestrator:
         return psutil.virtual_memory().available / (1024 ** 3)
 
     def _get_vram_free_gb(self, device_idx=0):
-        """Returns free VRAM in GB for a specific CUDA device, or None."""
-        if not (torch and torch.cuda.is_available()):
-            return None
+        """Returns free VRAM in GB for a specific GPU device, using torch, sysfs, or subprocess fallbacks."""
+        if torch and torch.cuda.is_available():
+            try:
+                free, _total = torch.cuda.mem_get_info(device_idx)
+                return free / (1024 ** 3)
+            except Exception:
+                pass
+        
+        # Subprocess fallback for NVIDIA when PyTorch CUDA is not loaded
         try:
-            free, _total = torch.cuda.mem_get_info(device_idx)
-            return free / (1024 ** 3)
+            import subprocess
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=2
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                lines = res.stdout.strip().splitlines()
+                if device_idx < len(lines):
+                    return float(lines[device_idx].strip()) / 1024.0
         except Exception:
-            return None
+            pass
+            
+        # Fallback to sysfs (Linux AMD/Intel)
+        sysfs_gpus = self._get_sysfs_gpu_vram()
+        if sysfs_gpus and device_idx < len(sysfs_gpus):
+            return sysfs_gpus[device_idx][0]
+
+        return None
 
     def _get_dynamic_context_ceiling(self, model_key):
         """Dynamically computes the safe context ceiling for a specific model.
@@ -1014,9 +1035,34 @@ class AgentOrchestrator:
                 not self._gpu_can_fit_all_models()
             )
 
+    def _safe_get_n_ctx(self, obj, default=2048):
+        """Safely retrieve context window size from any LLM object without throwing AttributeError."""
+        if obj is None:
+            return default
+        try:
+            n_ctx_attr = getattr(obj, "n_ctx", None)
+            if callable(n_ctx_attr):
+                val = n_ctx_attr()
+                return val if val is not None else default
+            elif isinstance(n_ctx_attr, int):
+                return n_ctx_attr
+        except Exception:
+            pass
+        return default
+
+    def _is_model_valid(self, model_obj):
+        """Check if a model object is loaded and valid (i.e. C++ backend pointer is not None)."""
+        if model_obj is None:
+            return False
+        if isinstance(model_obj, TransformerWrapper):
+            return getattr(model_obj, "model", None) is not None
+        if hasattr(model_obj, "_model"):
+            return getattr(model_obj, "_model", None) is not None
+        return True
+
         if should_offload:
             print(f"🧹 DMA-LRU: Offloading '{lru_key}' from VRAM to System RAM (CPU)...")
-            ctx_size = model_obj.n_ctx() if hasattr(model_obj, "n_ctx") else 2048
+            ctx_size = self._safe_get_n_ctx(model_obj, 2048)
             with self.inference_lock:
                 self._close_model(model_obj, lru_key)
                 del model_obj
@@ -1143,23 +1189,34 @@ class AgentOrchestrator:
             except Exception:
                 pass
 
+        # Neutralize __del__ destructor to prevent Python garbage collector from double-freeing deallocated C++ GGML pointers
+        try:
+            setattr(model_obj, '__del__', lambda *args, **kwargs: None)
+        except Exception:
+            pass
+
         if hasattr(model_obj, 'close'):
             try:
-                model_obj.close()
+                close_fn = getattr(model_obj, 'close', None)
+                if callable(close_fn):
+                    # Replace internal _stack with a dummy stack so __del__ does not double-free!
+                    class DummyStack:
+                        def close(self): pass
+                    if hasattr(model_obj, '_stack'):
+                        model_obj._stack = DummyStack()
+                        
+                    model_obj.close = lambda *args, **kwargs: None
+                    close_fn()
             except Exception as e:
                 print(f"Warning: close() failed for '{name or 'model'}': {e}")
 
-        # Explicitly set internal pointers to None to break reference cycles and release ctypes memory
-        if hasattr(model_obj, 'ctx'):
-            try:
-                model_obj.ctx = None
-            except Exception:
-                pass
-        if hasattr(model_obj, 'model'):
-            try:
-                model_obj.model = None
-            except Exception:
-                pass
+        # Break reference cycles on internal attributes safely
+        for attr in ['ctx', 'model', '_model', '_ctx', 'vocab']:
+            if hasattr(model_obj, attr):
+                try:
+                    setattr(model_obj, attr, None)
+                except Exception:
+                    pass
 
         # Trigger garbage collection and empty caches immediately
         gc.collect()
@@ -1181,6 +1238,7 @@ class AgentOrchestrator:
 
     def _get_model(self, model_key, required_ctx=None, force_cpu=False):
         """Load a model with Dynamic Memory Allocator protection and dynamic context sizing."""
+        model_key = resolve_model_key(model_key)
         if required_ctx is None:
             required_ctx = self.context_length if self.context_length > 0 else 8192
 
@@ -1189,24 +1247,31 @@ class AgentOrchestrator:
         with self.model_lock:
             if model_key in self.loaded_models:
                 model_obj = self.loaded_models[model_key]
-                on_gpu = self._is_gpu_resident(model_obj)
-                needs_swap = (not is_cpu and not on_gpu) or (is_cpu and on_gpu)
-
-                if not needs_swap:
-                    if not (hasattr(model_obj, "n_ctx") and required_ctx > model_obj.n_ctx()):
-                        self._touch_model(model_key)
-                        return model_obj
+                if not self._is_model_valid(model_obj):
+                    print(f"⚠️ DMA: Stale closed handle found for '{model_key}'. Clearing handle.")
+                    self.loaded_models.pop(model_key, None)
+                    if model_key in self.model_access_order:
+                        self.model_access_order.remove(model_key)
                 else:
-                    direction = "RAM → VRAM" if not is_cpu else "VRAM → RAM"
-                    print(f"🔄 DMA Swap ({direction}): Swapping '{model_key}'...")
-                    with self.inference_lock:
-                        self.loaded_models.pop(model_key, None)
-                        if model_key in self.model_access_order:
-                            self.model_access_order.remove(model_key)
-                        self._close_model(model_obj, model_key)
-                        del model_obj
-                    self._empty_gpu_caches()
-                    self._wait_for_gpu_deallocation(timeout=1.0)
+                    on_gpu = self._is_gpu_resident(model_obj)
+                    needs_swap = (not is_cpu and not on_gpu) or (is_cpu and on_gpu)
+
+                    if not needs_swap:
+                        current_ctx = self._safe_get_n_ctx(model_obj, 2048)
+                        if required_ctx <= current_ctx:
+                            self._touch_model(model_key)
+                            return model_obj
+                    else:
+                        direction = "RAM → VRAM" if not is_cpu else "VRAM → RAM"
+                        print(f"🔄 DMA Swap ({direction}): Swapping '{model_key}'...")
+                        with self.inference_lock:
+                            self.loaded_models.pop(model_key, None)
+                            if model_key in self.model_access_order:
+                                self.model_access_order.remove(model_key)
+                            self._close_model(model_obj, model_key)
+                            del model_obj
+                        self._empty_gpu_caches()
+                        self._wait_for_gpu_deallocation(timeout=1.0)
 
             if not is_cpu:
                 required_ctx = self._get_dynamic_context_ceiling(model_key)
@@ -1223,8 +1288,9 @@ class AgentOrchestrator:
         if model_key in self.loaded_models:
             model_obj = self.loaded_models[model_key]
             # Context expansion — safe reload on all platforms
-            if hasattr(model_obj, "n_ctx") and required_ctx > model_obj.n_ctx():
-                print(f"🔄 Reloading '{model_key}' to expand context: {model_obj.n_ctx()} -> {required_ctx}")
+            current_ctx = self._safe_get_n_ctx(model_obj, 2048)
+            if required_ctx > current_ctx:
+                print(f"🔄 Reloading '{model_key}' to expand context: {current_ctx} -> {required_ctx}")
                 with self.inference_lock:
                     self._close_model(model_obj, model_key)
                     del self.loaded_models[model_key]
@@ -1281,7 +1347,7 @@ class AgentOrchestrator:
                     model_obj = self.loaded_models.pop(mk, None)
                     if mk in self.model_access_order:
                         self.model_access_order.remove(mk)
-                    ctx_size = model_obj.n_ctx() if hasattr(model_obj, "n_ctx") else 2048
+                    ctx_size = self._safe_get_n_ctx(model_obj, 2048)
                     with self.inference_lock:
                         self._close_model(model_obj, mk)
                         del model_obj
@@ -1325,8 +1391,13 @@ class AgentOrchestrator:
             self._check_memory_pressure(required_vram_gb=est_model_gb, target_gpu_idx=target_gpu)
 
         if not is_model_downloaded(model_key):
-            raise Exception(f"Model '{model_key}' is not downloaded. "
-                            f"Place the weights in models/ and restart.")
+            from backend.downloader import get_any_available_model_key
+            fallback_key = get_any_available_model_key()
+            if fallback_key:
+                print(f"⚠️ [INFO] Requested model '{model_key}' not downloaded. Falling back to downloaded model '{fallback_key}'.")
+                model_key = fallback_key
+            else:
+                raise Exception(f"No downloaded models found on disk. Please open Model Hub to download a model.")
 
         model_path = get_model_path(model_key)
         
@@ -1371,24 +1442,17 @@ class AgentOrchestrator:
             else:
                 kwargs["flash_attn"] = True
 
-            # ── KV Cache GPU Offloading ──────────────────────────────────
-            # Pin the attention KV cache to VRAM when GPU layers are active.
-            # This avoids costly PCIe round-trips during token generation.
-            if not loading_on_cpu:
+            # ── KV Cache GPU Offloading & Quantization Safety ───────────
+            # Only enable offload_kqv and quantized KV cache if native CUDA GPU is active
+            if not loading_on_cpu and torch and torch.cuda.is_available() and getattr(self, 'llama_cpp_has_cuda', False):
                 kwargs["offload_kqv"] = True
-
-            # ── KV Cache Quantization (8-bit) ────────────────────────────
-            # Quantize the Key and Value caches to INT8 to reduce VRAM
-            # consumption by ~50% compared to FP16 KV. This allows
-            # significantly larger context windows to fit in GPU memory
-            # without measurable accuracy loss for Q6_K models.
-            try:
-                import llama_cpp
-                if hasattr(llama_cpp, 'GGML_TYPE_Q8_0'):
-                    kwargs["type_k"] = llama_cpp.GGML_TYPE_Q8_0
-                    kwargs["type_v"] = llama_cpp.GGML_TYPE_Q8_0
-            except Exception:
-                pass  # Older llama-cpp-python versions may not support KV quantization
+                try:
+                    import llama_cpp
+                    if hasattr(llama_cpp, 'GGML_TYPE_Q8_0'):
+                        kwargs["type_k"] = llama_cpp.GGML_TYPE_Q8_0
+                        kwargs["type_v"] = llama_cpp.GGML_TYPE_Q8_0
+                except Exception:
+                    pass
 
             if model_key == "qwen_vl":
                 model_dir = os.path.dirname(model_path)
@@ -1536,7 +1600,7 @@ class AgentOrchestrator:
     # =========================================================================
     def transcribe_image(self, image_input, status_callback=None):
         if status_callback:
-            status_callback("Qwen 2.5-VL parsing image...", "info", "qwen_vl", 5)
+            status_callback(f"{self._get_display_model_name('qwen_vl')} parsing image...", "info", "qwen_vl", 5)
         llm = self._get_model("qwen_vl")
         vision_prompt = "Describe this image and extract all text and logic from it."
         
@@ -1578,7 +1642,7 @@ class AgentOrchestrator:
             try:
                 res = llm.create_chat_completion(messages=messages, max_tokens=500)
                 if status_callback:
-                    status_callback("Qwen 2.5-VL transcription complete!", "success", "qwen_vl", 100)
+                    status_callback(f"{self._get_display_model_name('qwen_vl')} transcription complete!", "success", "qwen_vl", 100)
                 return res["choices"][0]["message"]["content"]
             except Exception as e:
                 print(f"⚠️ Vision chat completion failed: {e}. Falling back to standard completion...")
@@ -1607,61 +1671,36 @@ class AgentOrchestrator:
             cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
         return cleaned.strip()
     def _strip_thinking(self, text):
-        """Remove <think>...</think> blocks from DeepSeek R1 output."""
+        """Remove thinking/reasoning blocks (<think>, <thought>, [THINKING]) from model output."""
         if not text:
             return text
 
-        # --- Case 1: Properly closed think tag — strip the block entirely ---
-        if '<think>' in text and '</think>' in text:
-            cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
-            if cleaned:
-                return cleaned
-            # The entire answer was inside the tags — return contents without tags
-            return re.sub(r'</?think>', '', text).strip()
+        # Handle standard tag pairs: <think>, <thought>, [THINKING]
+        tag_patterns = [
+            (r'<think>.*?</think>', r'</?think>'),
+            (r'<thought>.*?</thought>', r'</?thought>'),
+            (r'\[THINKING\].*?\[/THINKING\]', r'\[/?THINKING\]'),
+        ]
 
-        # --- Case 2: Unclosed <think> tag (model ran out of context mid-think) ---
-        if '<think>' in text and '</think>' not in text:
-            before_think, inner = text.split('<think>', 1)
-            # If there's real content before the thinking block, return that
-            if before_think.strip():
-                return before_think.strip()
-
-            # The model wrote its ENTIRE output inside <think> without closing.
-            # We need to salvage the best final answer from the inner monologue.
-            # Strategy: find the LAST paragraph that looks like a structured answer
-            # (not a "Wait, let me check..." self-questioning line).
-            conversational_prefixes = (
-                'okay', 'wait', 'so ', 'but ', 'hmm', 'let me', 'let\'s',
-                'i think', 'i need', 'i should', 'i must', 'i realize',
-                'actually', 'alternatively', 'now,', 'thus,', 'therefore,',
-                'however,', 'also,', 'first,', 'second,', 'third,',
-                'step ', 'note ', 'note:', 'so,', 'anyway', 'in summary'
-            )
-            lines = inner.strip().split('\n')
-            # Walk backwards to find where the final structured answer begins
-            answer_start = len(lines)
-            for i in range(len(lines) - 1, -1, -1):
-                stripped = lines[i].strip().lower()
-                if not stripped:
-                    continue
-                # If line starts a structured section, mark it as the start
-                if (lines[i].strip().startswith(('##', '**', '1.', '2.', '3.', '-')) or
-                        (len(stripped) > 30 and not stripped.startswith(conversational_prefixes))):
-                    answer_start = i
+        cleaned = text
+        for block_pat, inline_pat in tag_patterns:
+            if re.search(block_pat, cleaned, flags=re.DOTALL):
+                res = re.sub(block_pat, '', cleaned, flags=re.DOTALL).strip()
+                if res:
+                    cleaned = res
                 else:
-                    # Stop searching once we hit a conversational line after a structured one
-                    if answer_start < len(lines):
-                        break
+                    cleaned = re.sub(inline_pat, '', cleaned).strip()
 
-            final_lines = lines[answer_start:]
-            final_content = '\n'.join(final_lines).strip()
-            if final_content and len(final_content) > 50:
-                return final_content
-            # Last resort: return entire inner content (at least user gets something)
-            return inner.strip()
+        # Handle unclosed tags
+        for open_tag in ['<think>', '<thought>', '[THINKING]']:
+            if open_tag in cleaned and open_tag.replace('<', '</').replace('[', '[/') not in cleaned:
+                before_think, _ = cleaned.split(open_tag, 1)
+                if before_think.strip():
+                    cleaned = before_think.strip()
+                else:
+                    cleaned = cleaned.replace(open_tag, '').strip()
 
-        # --- Case 3: No think tags at all — return as-is ---
-        return text.strip()
+        return cleaned
 
     # =========================================================================
     # ACCURACY BOOSTER — PAL + Self-Consistency (opt-in, benchmark-only)
@@ -2084,6 +2123,17 @@ class AgentOrchestrator:
         
         return '\n'.join(context_lines)
 
+    @staticmethod
+    def _clean_patch_line_prefixes(text):
+        """Strip line-number prefixes like ' >>>   42 | ' or '       42 | ' from diff blocks."""
+        if not text:
+            return text
+        clean_lines = []
+        for line in text.split('\n'):
+            cleaned = re.sub(r'^(?:\s*>>>)?\s*\d+\s*\|\s?', '', line)
+            clean_lines.append(cleaned)
+        return '\n'.join(clean_lines)
+
     def _apply_search_replace_patch(self, original_code, patch_text):
         """Parse Aider-style <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks and apply them."""
         if not patch_text or '<<<<<<< SEARCH' not in patch_text:
@@ -2096,30 +2146,36 @@ class AgentOrchestrator:
             parts = re.split(r'\n=======\s*\n', block, maxsplit=1)
             if len(parts) != 2:
                 continue
-            search_text = parts[0]
+            search_raw = parts[0]
             replace_and_rest = parts[1]
             # Extract replacement content (everything before >>>>>>> REPLACE)
             replace_parts = re.split(r'\n>>>>>>> REPLACE', replace_and_rest, maxsplit=1)
-            replace_text = replace_parts[0]
-            # Apply the patch — search_text must exist exactly once
+            replace_raw = replace_parts[0]
+
+            # Strip line number prefixes if the LLM copied them from the context view
+            search_text = self._clean_patch_line_prefixes(search_raw)
+            replace_text = self._clean_patch_line_prefixes(replace_raw)
+
+            # Apply the patch — search_text must exist in code
             if search_text in patched:
                 count = patched.count(search_text)
-                if count == 1:
+                if count >= 1:
                     patched = patched.replace(search_text, replace_text, 1)
                     applied += 1
-                else:
-                    # Multiple matches — skip to avoid ambiguity
-                    continue
             else:
-                # Try stripping trailing whitespace from each line for fuzzy matching
-                search_lines = [l.rstrip() for l in search_text.split('\n')]
-                code_lines = [l.rstrip() for l in patched.split('\n')]
-                search_stripped = '\n'.join(search_lines)
-                code_stripped = '\n'.join(code_lines)
-                if search_stripped in code_stripped:
-                    code_stripped = code_stripped.replace(search_stripped, replace_text.rstrip(), 1)
-                    patched = code_stripped
-                    applied += 1
+                # Try line-by-line fuzzy matching (ignoring trailing whitespace)
+                orig_lines = patched.split('\n')
+                orig_stripped = [l.rstrip() for l in orig_lines]
+                search_stripped = [l.rstrip() for l in search_text.split('\n')]
+                n_search = len(search_stripped)
+                if n_search > 0:
+                    for i in range(len(orig_stripped) - n_search + 1):
+                        if orig_stripped[i:i + n_search] == search_stripped:
+                            replace_lines = replace_text.split('\n')
+                            orig_lines[i:i + n_search] = replace_lines
+                            patched = '\n'.join(orig_lines)
+                            applied += 1
+                            break
         return patched if applied > 0 else None
 
     def _agent_ide_patch(self, code, error_output, linter_model, gen_tokens, lang="python", system_prompt=None):
@@ -2150,9 +2206,9 @@ class AgentOrchestrator:
             f"ERROR:\n{error_snippet}\n\n"
             f"CODE CONTEXT (around the crash):\n{context}\n\n"
             f"Output ONLY a search-and-replace block in this EXACT format:\n"
-            f"<<<<<<< SEARCH\n[exact lines to change, copied verbatim]\n=======\n[corrected lines]\n>>>>>>> REPLACE\n\n"
+            f"<<<<<<< SEARCH\n[exact lines to change, copied without line numbers]\n=======\n[corrected lines]\n>>>>>>> REPLACE\n\n"
             f"Rules:\n"
-            f"1. Copy the SEARCH lines EXACTLY as they appear (including whitespace)\n"
+            f"1. Copy the SEARCH lines from the context (omit line numbers like ' >>>   42 | ')\n"
             f"2. Keep the fix minimal — only change what is broken\n"
             f"3. You may output multiple blocks if needed\n"
             f"4. Do NOT output the entire file"
@@ -2166,7 +2222,7 @@ class AgentOrchestrator:
         """Compresses a massive prompt using semantic line boundaries and fast summarization."""
         # Ensure router is loaded first to use its tokenizer
         # Use small context for summarization — avoid wasteful VRAM allocation
-        if router_llm is None:
+        if not self._is_model_valid(router_llm):
             router_llm = self._get_model("router", required_ctx=2048)
 
         # Precise Token Estimation
@@ -2233,7 +2289,7 @@ class AgentOrchestrator:
         # Safety net: guarantee the summarization prompt fits inside the router_llm context window.
         # Use 300 token overhead buffer to account for chat template markers (BOS/EOS, role tags,
         # DeepSeek/Qwen special tokens like <｜User｜> etc.) that llama-cpp adds internally.
-        n_ctx = router_llm.n_ctx() if hasattr(router_llm, "n_ctx") else 8192
+        n_ctx = self._safe_get_n_ctx(router_llm, 8192)
         chat_template_overhead = 300
         max_middle_tokens = max(512, n_ctx - max_summary_tokens - chat_template_overhead)
         
@@ -2270,9 +2326,14 @@ class AgentOrchestrator:
 
     def safe_tokenize(self, llm, text_bytes):
         """Thread-safe wrapper for llama.cpp tokenization to prevent concurrent C-level segfaults."""
+        if not self._is_model_valid(llm):
+            return []
         if hasattr(llm, "tokenize"):
             with self.tokenize_lock:
-                return llm.tokenize(text_bytes)
+                try:
+                    return llm.tokenize(text_bytes)
+                except Exception:
+                    return []
         return []
 
     @staticmethod
@@ -2293,86 +2354,91 @@ class AgentOrchestrator:
     def _call_model(self, llm, prompt, max_tokens=512, temperature=0.7, system_prompt=None):
         self._check_cancelled()
 
+        if not self._is_model_valid(llm):
+            print("⚠️ DMA: Handle closed/invalid. Automatically reloading router model...")
+            llm = self._get_model("router")
+            if not self._is_model_valid(llm):
+                raise ValueError("Failed to recover model object.")
+
         if isinstance(llm, TransformerWrapper):
             with self.inference_lock:
                 return llm(prompt, max_tokens=max_tokens, temperature=temperature, system_prompt=system_prompt)
             
         # Context overflow protection for llama-cpp-python
-        if hasattr(llm, "n_ctx"):
-            ctx = llm.n_ctx()
-            # Precise Token Estimation
-            if hasattr(llm, "tokenize"):
-                est_prompt_tokens = len(self.safe_tokenize(llm, prompt.encode('utf-8'))) + 120
-                if system_prompt:
-                    est_prompt_tokens += len(self.safe_tokenize(llm, system_prompt.encode('utf-8')))
+        ctx = self._safe_get_n_ctx(llm, 2048)
+        # Precise Token Estimation
+        if hasattr(llm, "tokenize"):
+            est_prompt_tokens = len(self.safe_tokenize(llm, prompt.encode('utf-8'))) + 120
+            if system_prompt:
+                est_prompt_tokens += len(self.safe_tokenize(llm, system_prompt.encode('utf-8')))
+        else:
+            est_prompt_tokens = len(prompt) // 3 + 120
+            if system_prompt:
+                est_prompt_tokens += len(system_prompt) // 3
+        
+        # Smart token allocation with Model-Aware Minimums
+        is_reasoning = "deepseek" in getattr(llm, "model_path", "").lower()
+        absolute_min = 2048 if is_reasoning else 512
+        # CRITICAL FIX: On constrained GPUs where n_ctx can be as low as 2048,
+        # the absolute_min must never exceed the context window itself.
+        # Cap it at (ctx - 128) to guarantee at least 128 tokens of prompt space.
+        absolute_min = min(absolute_min, max(256, ctx - 128))
+        
+        if est_prompt_tokens + max_tokens > ctx:
+            available = ctx - est_prompt_tokens - 50
+            if available >= absolute_min:
+                max_tokens = min(max_tokens, available)
             else:
-                est_prompt_tokens = len(prompt) // 3 + 120
-                if system_prompt:
-                    est_prompt_tokens += len(system_prompt) // 3
+                max_tokens = min(max_tokens, absolute_min)
+        
+        # If even with minimum generation tokens the prompt doesn't fit, truncate the prompt semantically
+        max_prompt_tokens = ctx - max_tokens - 120
+        if max_prompt_tokens < 200:
+            max_prompt_tokens = 200
+        if est_prompt_tokens > max_prompt_tokens:
+            chars_allowed = max_prompt_tokens * 3
+            if chars_allowed < 900: chars_allowed = 900
             
-            # Smart token allocation with Model-Aware Minimums
-            is_reasoning = "deepseek" in getattr(llm, "model_path", "").lower()
-            absolute_min = 2048 if is_reasoning else 512
-            # CRITICAL FIX: On constrained GPUs where n_ctx can be as low as 2048,
-            # the absolute_min must never exceed the context window itself.
-            # Cap it at (ctx - 128) to guarantee at least 128 tokens of prompt space.
-            absolute_min = min(absolute_min, max(256, ctx - 128))
+            lines = prompt.split('\n')
+            top_chars = int(chars_allowed * 0.3)
+            bottom_chars = int(chars_allowed * 0.7)
             
-            if est_prompt_tokens + max_tokens > ctx:
-                available = ctx - est_prompt_tokens - 50
-                if available >= absolute_min:
-                    max_tokens = min(max_tokens, available)
-                else:
-                    max_tokens = min(max_tokens, absolute_min)
+            start_lines, end_lines = [], []
+            curr_t, curr_b = 0, 0
+            in_code_block = False
             
-            # If even with minimum generation tokens the prompt doesn't fit, truncate the prompt semantically
-            max_prompt_tokens = ctx - max_tokens - 120
-            if max_prompt_tokens < 200:
-                max_prompt_tokens = 200
-            if est_prompt_tokens > max_prompt_tokens:
-                chars_allowed = max_prompt_tokens * 3
-                if chars_allowed < 900: chars_allowed = 900
+            while lines and (curr_t < top_chars or in_code_block):
+                l = lines.pop(0)
+                if l.strip().startswith("```"):
+                    in_code_block = not in_code_block
+                start_lines.append(l)
+                curr_t += len(l) + 1
                 
-                lines = prompt.split('\n')
-                top_chars = int(chars_allowed * 0.3)
-                bottom_chars = int(chars_allowed * 0.7)
+            while lines and curr_b < bottom_chars:
+                l = lines.pop()
+                end_lines.insert(0, l)
+                curr_b += len(l) + 1
                 
-                start_lines, end_lines = [], []
-                curr_t, curr_b = 0, 0
-                in_code_block = False
-                
-                while lines and (curr_t < top_chars or in_code_block):
-                    l = lines.pop(0)
-                    if l.strip().startswith("```"):
-                        in_code_block = not in_code_block
-                    start_lines.append(l)
-                    curr_t += len(l) + 1
-                    
-                while lines and curr_b < bottom_chars:
+            # Code-block safety for the bottom chunk
+            code_blocks = sum(1 for l in end_lines if l.strip().startswith("```"))
+            if code_blocks % 2 != 0:
+                while lines:
                     l = lines.pop()
                     end_lines.insert(0, l)
-                    curr_b += len(l) + 1
-                    
-                # Code-block safety for the bottom chunk
-                code_blocks = sum(1 for l in end_lines if l.strip().startswith("```"))
-                if code_blocks % 2 != 0:
-                    while lines:
-                        l = lines.pop()
-                        end_lines.insert(0, l)
-                        if l.strip().startswith("```"):
-                            break
-                    
-                prompt = '\n'.join(start_lines) + "\n...[TRUNCATED FOR CONTEXT LIMIT]...\n" + '\n'.join(end_lines)
-                if hasattr(llm, "tokenize"):
-                    est_prompt_tokens = len(self.safe_tokenize(llm, prompt.encode('utf-8'))) + 120
-                else:
-                    est_prompt_tokens = len(prompt) // 3 + 120
-            
-            # ── HARD FINAL CLAMP — guarantees prompt + gen_tokens ≤ n_ctx ──
-            safe_max = ctx - est_prompt_tokens
-            if safe_max < 64:
-                safe_max = 64  # Desperate fallback — at least try to get something
-            max_tokens = min(max_tokens, safe_max)
+                    if l.strip().startswith("```"):
+                        break
+                
+            prompt = '\n'.join(start_lines) + "\n...[TRUNCATED FOR CONTEXT LIMIT]...\n" + '\n'.join(end_lines)
+            if hasattr(llm, "tokenize"):
+                est_prompt_tokens = len(self.safe_tokenize(llm, prompt.encode('utf-8'))) + 120
+            else:
+                est_prompt_tokens = len(prompt) // 3 + 120
+        
+        # ── HARD FINAL CLAMP — guarantees prompt + gen_tokens ≤ n_ctx ──
+        safe_max = ctx - est_prompt_tokens
+        if safe_max < 64:
+            safe_max = 64  # Desperate fallback — at least try to get something
+        max_tokens = min(max_tokens, safe_max)
 
         messages = []
         if system_prompt:
@@ -2692,6 +2758,8 @@ class AgentOrchestrator:
 
     def _is_playground_applicable(self, router_llm, prompt):
         """Check if reasoning can be verified via Python sandbox."""
+        if not self._is_model_valid(router_llm):
+            router_llm = self._get_model("router", required_ctx=1024)
         auto_keywords = [
             "solve_ivp", "scipy", "sympy", "z3-solver", "networkx", "astropy", "biopython", "rdkit",
             "verification script", "run playground", "sandbox verification"
@@ -2814,7 +2882,7 @@ class AgentOrchestrator:
             f"To verify:\n{hypothesis[:2000]}"
         )
         if status_callback:
-            status_callback("Ornith writing Python Verification Script...", "info", "ornith", 42)
+            status_callback(f"{self._get_display_model_name('ornith')} writing Python Verification Script...", "info", "ornith", 42)
         test_response = self._call_model(coder_model, playground_prompt, max_tokens=4096, temperature=0.1)
         test_code = Sandbox.extract_code(test_response)
         
@@ -3264,7 +3332,7 @@ class AgentOrchestrator:
         """Dedicated prediction pipeline with specialized ML prompts and data cleaning loops."""
         self._check_cancelled("prediction:draft_script")
         if status_callback:
-            status_callback("🔮 Prediction: Drafting ML regression script...", "info", "ornith", 20)
+            status_callback(f"🔮 Prediction: {self._get_display_model_name('ornith')} drafting ML regression script...", "info", "ornith", 20)
 
         coder_llm = self._get_model("ornith", required_ctx=oc_ctx)
         
@@ -3303,7 +3371,7 @@ class AgentOrchestrator:
         if not code or len(code.strip()) < 50:
             self._check_cancelled("prediction:escalation")
             if status_callback:
-                status_callback("🔮 Ornith draft empty — escalating to DeepSeek-R1...", "warning", "deepseek_r1", 30)
+                status_callback(f"🔮 {self._get_display_model_name('ornith')} draft empty — escalating to {self._get_display_model_name('deepseek_r1')}...", "warning", "deepseek_r1", 30)
             ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
             code = Sandbox.extract_code(self._strip_thinking(
                 self._call_model(ds_llm, ml_prompt, gen_tokens, gen_temp, system_prompt=ml_system_prompt)
@@ -3534,7 +3602,7 @@ class AgentOrchestrator:
 
         # Phase 1: DeepSeek R1 produces a STRUCTURED, ACCURACY-FIRST analysis report.
         if status_callback:
-            status_callback("🔬 DeepSeek R1: Analyzing documents & structuring data...", "info", "deepseek_r1", 20)
+            status_callback(f"🔬 {self._get_display_model_name('deepseek_r1')}: Analyzing documents & structuring data...", "info", "deepseek_r1", 20)
 
         ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
 
@@ -3722,6 +3790,14 @@ class AgentOrchestrator:
         self.memory.save(prompt, result[:3000])
         return result
 
+    def _get_display_model_name(self, role_or_key):
+        """Return human readable model display name dynamically from role assignments."""
+        if not role_or_key:
+            return "Local LLM"
+        key = resolve_model_key(role_or_key)
+        defn = MODEL_DEFINITIONS.get(key, {})
+        return defn.get("name", key.replace("_", " ").title())
+
     # =========================================================================
     # MAIN PIPELINE ENTRY POINT
     # =========================================================================
@@ -3792,7 +3868,7 @@ class AgentOrchestrator:
             return "Could not generate a 3D visualization. Please try rephrasing your request."
 
         if status_callback:
-            status_callback("Phi-3.5-Mini checking intent...", "info", "router", 5)
+            status_callback(f"🔀 {self._get_display_model_name('router')} checking intent...", "info", "router", 5)
 
         # ── Web Search Enrichment ────────────────────────────────────────
         # Auto-enable search if user query explicitly asks for web search
@@ -5008,13 +5084,13 @@ class AgentOrchestrator:
                 self._check_cancelled("code:draft_logic")
                 is_nuclear = (reset > 0)
                 model_key = "deepseek_r1" if is_nuclear else "vibethinker"
-                model_name = "DeepSeek-R1" if is_nuclear else "VibeThinker"
+                model_name = self._get_display_model_name(model_key)
                 
                 if status_callback:
                     lbl = (
                         f"Nuclear Reset #{reset} (Attempt {rnd+1}/{max_rounds}): {model_name} drafting logic..."
                         if reset else
-                        f"{model_name} drafting logic (Attempt {rnd+1}/{max_rounds})..."
+                        f"🧠 {model_name} drafting logic (Attempt {rnd+1}/{max_rounds})..."
                     )
                     status_callback(lbl, "info" if not reset else "warning", model_key, 20 + rnd*10)
 
@@ -5030,7 +5106,8 @@ class AgentOrchestrator:
 
                 # ── Phase 2: Reasoning Sandbox — Verify Logic ────────────────
                 self._check_cancelled("code:verify_logic")
-                use_logic_playground = self._is_playground_applicable(router_llm if router_llm else self._get_model("router", required_ctx=1024), prompt)
+                active_router = router_llm if self._is_model_valid(router_llm) else self._get_model("router", required_ctx=1024)
+                use_logic_playground = self._is_playground_applicable(active_router, prompt)
                 verified = True
                 pg_out = ""
                 if use_logic_playground:
@@ -5089,7 +5166,7 @@ class AgentOrchestrator:
                     # The soft-verification system in _run_playground now handles test-script crashes,
                     # and the corrected plan already incorporates web search context.
                     if status_callback:
-                        status_callback("DeepSeek-R1 corrected the logic plan with search context.", "success", "deepseek_r1", 40 + rnd*10)
+                        status_callback(f"{self._get_display_model_name('deepseek_r1')} corrected the logic plan with search context.", "success", "deepseek_r1", 40 + rnd*10)
                 else:
                     if status_callback:
                         status_callback("Logic plan VERIFIED!", "success", model_key, 40 + rnd*10)
@@ -5109,8 +5186,9 @@ class AgentOrchestrator:
 
                 # ── Phase 3: Ornith — Write Code ───────────────────────────
                 self._check_cancelled("code:write_code")
+                coder_display = self._get_display_model_name("ornith")
                 if status_callback:
-                    status_callback(f"Ornith writing code (Attempt {rnd+1}/{max_rounds})...", "info", "ornith", 50 + rnd*10)
+                    status_callback(f"💻 {coder_display} writing code (Attempt {rnd+1}/{max_rounds})...", "info", "ornith", 50 + rnd*10)
                 oc_llm = self._get_model("ornith", required_ctx=oc_ctx)
                 # Truncate compiled_plan to fit context
                 max_code_prompt_chars = (oc_ctx - gen_tokens - 200) * 3
@@ -5315,7 +5393,7 @@ class AgentOrchestrator:
 
                     # ── Step B: Patch failed → Fall back to full rewrite linter ──
                     if status_callback:
-                        status_callback(f"Ornith full rewrite for {lang_name} error...", "warning", "ornith", 65 + rnd*10)
+                        status_callback(f"{self._get_display_model_name('ornith')} full rewrite for {lang_name} error...", "warning", "ornith", 65 + rnd*10)
                     lint_p = (
                         f"You are a fast {lang_name} Syntax Linter.\n"
                         f"The code failed with this error:\n{output[:600]}\n\n"
@@ -5341,7 +5419,7 @@ class AgentOrchestrator:
                             output = linter_output
                             ok = True
                             if status_callback:
-                                status_callback("Ornith successfully patched the code!", "success", "ornith", 70 + rnd*10)
+                                status_callback(f"{self._get_display_model_name('ornith')} successfully patched the code!", "success", "ornith", 70 + rnd*10)
                             self.memory.save(prompt, code)
                             if rnd > 0 or reset > 0:
                                 self.memory.save_mistake(prompt, initial_failed_code, initial_failed_error, code)
@@ -5387,7 +5465,7 @@ class AgentOrchestrator:
 
                     # Ornith corrects the code first (already loaded from Phase 3 — no swap needed)
                     if status_callback:
-                        status_callback(f"Ornith correcting code (Attempt {rnd+1}/{max_rounds})...", "warning", "ornith", 73 + rnd*10)
+                        status_callback(f"{self._get_display_model_name('ornith')} correcting code (Attempt {rnd+1}/{max_rounds})...", "warning", "ornith", 73 + rnd*10)
                     failed_code = code
                     failed_error = output
                     safe_code = code[:2000] if len(code) > 2000 else code
@@ -5435,7 +5513,7 @@ class AgentOrchestrator:
                     ok, output = self.sandbox.execute(code, language=req_lang)
                     if ok:
                         if status_callback:
-                            status_callback("Ornith's correction VERIFIED!", "success", "ornith", 78 + rnd*10)
+                            status_callback(f"{self._get_display_model_name('ornith')}'s correction VERIFIED!", "success", "ornith", 78 + rnd*10)
                         self.memory.save(prompt, code)
                         self.memory.save_mistake(prompt, failed_code, failed_error, code)
                         router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
@@ -5443,13 +5521,13 @@ class AgentOrchestrator:
 
                     # Escalate to DeepSeek-R1 only if Ornith's correction also failed
                     if status_callback:
-                        status_callback(f"DeepSeek-R1 correcting code (Attempt {rnd+1}/{max_rounds})...", "warning", "deepseek_r1", 80 + rnd*10)
+                        status_callback(f"{self._get_display_model_name('deepseek_r1')} correcting code (Attempt {rnd+1}/{max_rounds})...", "warning", "deepseek_r1", 80 + rnd*10)
                     ds_llm = self._get_model("deepseek_r1", required_ctx=ds_ctx)
                     code = Sandbox.extract_code(self._strip_thinking(self._call_model(ds_llm, fix_p, gen_tokens, gen_temp, system_prompt=debug_sys)))
                     ok, output = self.sandbox.execute(code, language=req_lang)
                     if ok:
                         if status_callback:
-                            status_callback("DeepSeek-R1's correction VERIFIED!", "success", "deepseek_r1", 85 + rnd*10)
+                            status_callback(f"{self._get_display_model_name('deepseek_r1')}'s correction VERIFIED!", "success", "deepseek_r1", 85 + rnd*10)
                         self.memory.save(prompt, code)
                         self.memory.save_mistake(prompt, failed_code, failed_error, code)
                         router_llm = None; ds_llm = None; oc_llm = None; coder_llm = None; critic_llm = None; model = None; gc.collect()
@@ -5641,7 +5719,7 @@ class AgentOrchestrator:
                     self._check_cancelled("reasoning:draft_answer")
                     is_nuclear = (reset > 0)
                     model_key = "deepseek_r1"
-                    model_name = "DeepSeek-R1"
+                    model_name = self._get_display_model_name(model_key)
                     
                     ds_llm = self._get_model(model_key, required_ctx=ds_ctx)
                     if status_callback:
@@ -5724,7 +5802,7 @@ class AgentOrchestrator:
                     err_lower = pg_out.lower() if pg_out else ""
                     is_code_error = any(x in err_lower for x in ["syntaxerror", "indentationerror", "nameerror", "modulenotfounderror", "attributeerror", "typeerror", "zerodivisionerror"])
                     corr_model_key = "vibethinker" if (is_code_error and not is_nuclear) else "deepseek_r1"
-                    corr_model_name = "VibeThinker" if corr_model_key == "vibethinker" else "DeepSeek-R1"
+                    corr_model_name = self._get_display_model_name(corr_model_key)
 
                     if status_callback:
                         status_callback(f"{corr_model_name} correcting reasoning (Attempt {rnd+1}/{max_rounds})...", "warning", corr_model_key, 45 + rnd*12)
@@ -5844,7 +5922,7 @@ class AgentOrchestrator:
             # ── Standard LLM Debate (non-testable reasoning) ─────────────
             self._check_cancelled("reasoning:debate_draft")
             if status_callback:
-                status_callback("DeepSeek-R1 drafting analysis...", "info", "deepseek_r1", 50)
+                status_callback(f"{self._get_display_model_name('deepseek_r1')} drafting analysis...", "info", "deepseek_r1", 50)
             ds_draft = self._strip_thinking(self._call_model(ds_llm, f"Provide a detailed answer:\n{ds_safe}", gen_tokens, gen_temp, system_prompt=reasoning_sys))
 
             compiled = ds_draft
@@ -5855,9 +5933,9 @@ class AgentOrchestrator:
             return f"## Successfully Generated Answer\n{compiled}{viz}"
 
     def _synthesize_reasoning_explanation(self, prompt, verified_solution, pg_out, ds_ctx, gen_tokens, gen_temp, status_callback, reasoning_sys):
-        """Use DeepSeek-R1 to synthesize a detailed, academic-grade explanation/derivation based on the verified solution."""
+        """Use reasoning model to synthesize a detailed, academic-grade explanation/derivation based on the verified solution."""
         if status_callback:
-            status_callback("DeepSeek-R1 synthesizing detailed explanation...", "info", "deepseek_r1", 85)
+            status_callback(f"{self._get_display_model_name('deepseek_r1')} synthesizing detailed explanation...", "info", "deepseek_r1", 85)
         ds_r1 = self._get_model("deepseek_r1", required_ctx=ds_ctx)
         synthesis_prompt = (
             f"USER REQUEST:\n{prompt}\n\n"

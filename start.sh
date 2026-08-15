@@ -7,21 +7,8 @@ echo "============================================="
 echo "   Starting DeepThink AIOS...   "
 echo "============================================="
 
-# Intel Iris Xe iGPU environment variables
-export SYCL_DEVICE_FILTER=level_zero
-export IPEX_OPTIMIZE_TRANSFORMERS=1
-
-# Source Intel oneAPI compiler if available
-if [ -f "/opt/intel/oneapi/compiler/latest/env/vars.sh" ]; then
-    echo "Sourcing Intel oneAPI Compiler environment variables..."
-    source /opt/intel/oneapi/compiler/latest/env/vars.sh >/dev/null 2>&1
-elif [ -f "/opt/intel/oneapi/compiler/2026.0/env/vars.sh" ]; then
-    source /opt/intel/oneapi/compiler/2026.0/env/vars.sh >/dev/null 2>&1
-fi
-if [ -f "/opt/intel/oneapi/mkl/2026.0/env/vars.sh" ]; then
-    echo "Sourcing Intel MKL environment variables..."
-    source /opt/intel/oneapi/mkl/2026.0/env/vars.sh >/dev/null 2>&1
-fi
+# ── Universal Execution Environment ─────────────────────────
+export GGML_VK_VISIBLE_DEVICES=0
 
 # ── Step 1: Kill any stale processes by name ─────────────────────────────────
 echo "Stopping any previous instances..."

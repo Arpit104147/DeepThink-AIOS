@@ -19,6 +19,8 @@ const Sidebar = ({
   isEvmActive,
   isPreloading,
   setSettingsOpen,
+  setModelHubOpen,
+  setBenchmarkOpen,
 }) => {
   return (
     <div className={`sidebar ${!sidebarOpen ? "closed" : ""}`}>
@@ -38,6 +40,12 @@ const Sidebar = ({
       <div className="sidebar-nav">
         <button className="nav-item" onClick={handleOffload}>
           <span className="nav-icon">🧹</span> Offload Memory
+        </button>
+        <button className="nav-item" onClick={() => setModelHubOpen(true)}>
+          <span className="nav-icon">📦</span> Model Hub (LM Studio)
+        </button>
+        <button className="nav-item" onClick={() => setBenchmarkOpen(true)}>
+          <span className="nav-icon">📊</span> Benchmark Studio
         </button>
         <button
           className="nav-item"

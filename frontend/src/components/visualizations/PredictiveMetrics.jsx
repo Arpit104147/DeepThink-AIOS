@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useMemo } from "react";
 
 /**
  * @component PredictiveMetricsCard
@@ -6,15 +6,12 @@ import React, { useState, useEffect } from "react";
  * including metric scores and tabular future predictions.
  */
 const PredictiveMetricsCard = ({ jsonStr }) => {
-  const [data, setData] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
-
-  useEffect(() => {
+  const { data, errorMsg } = useMemo(() => {
     try {
-      setData(JSON.parse(jsonStr));
+      return { data: JSON.parse(jsonStr), errorMsg: null };
     } catch (err) {
       console.error("Error parsing predictive metrics JSON:", err);
-      setErrorMsg("Failed to parse predictive metrics.");
+      return { data: null, errorMsg: "Failed to parse predictive metrics." };
     }
   }, [jsonStr]);
 

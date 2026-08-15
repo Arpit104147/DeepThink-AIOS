@@ -1,14 +1,14 @@
-fastapi==0.110.0
-uvicorn==0.27.1
+fastapi>=0.110.0
+uvicorn>=0.27.1
 pydantic>=2.9.0
-python-multipart==0.0.9
-requests==2.31.0
-psutil==5.9.8
-huggingface-hub==0.21.4
-transformers==4.38.2
-accelerate==0.27.2
-chromadb==0.4.24
-numpy==1.26.4
+python-multipart>=0.0.9
+requests>=2.31.0
+psutil>=5.9.8
+huggingface-hub>=0.21.4
+transformers>=4.38.2
+accelerate>=0.27.2
+chromadb>=0.4.24
+numpy>=1.26.4
 pandas>=2.0.0
 beautifulsoup4==4.12.3
 ddgs>=6.0.0
@@ -19,7 +19,7 @@ z3-solver>=4.12.0
 networkx>=3.2
 astropy>=6.0
 biopython>=1.83
-rdkit-pypi>=2023.9.5; sys_platform != "win32"
+rdkit; sys_platform != "win32"
 plotly>=5.20.0
 rocketpy<=1.1.4; sys_platform != "win32"
 qiskit>=2.4.2; sys_platform != "win32"

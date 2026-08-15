@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 
 /**
  * @component ArtifactSandbox
@@ -8,7 +8,6 @@ import React, { useState, useEffect, useRef } from "react";
  */
 const ArtifactSandbox = ({ htmlCode }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [hasError, setHasError] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState([]);
   const [showConsole, setShowConsole] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -124,14 +123,12 @@ const ArtifactSandbox = ({ htmlCode }) => {
 
       // Use srcdoc to properly sequence external CDN script loading
       iframeRef.current.srcdoc = doc;
-      setHasError(false);
     } catch (err) {
       console.error("Artifact write error:", err);
-      setHasError(true);
     }
   }, [htmlCode, reloadKey]);
 
-  if (hasError || !htmlCode) {
+  if (!htmlCode) {
     return (
       <div className="artifact-error">
         <span>⚠️</span> Failed to render sandbox

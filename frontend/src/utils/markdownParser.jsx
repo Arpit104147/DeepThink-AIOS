@@ -107,7 +107,7 @@ export const parseAndRenderSegment = (segment) => {
             return <h1 key={j} className="md-h1">{renderInlineElements(line.slice(2))}</h1>;
           }
 
-          const listMatch = trimmed.match(/^([\-\*]|\d+\.)\s+(.*)/);
+          const listMatch = trimmed.match(/^([-*]|\d+\.)\s+(.*)/);
           if (listMatch) {
             const indent = line.length - line.trimStart().length;
             const marker = listMatch[1];

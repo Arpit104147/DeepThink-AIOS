@@ -22,8 +22,8 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 
 ---
 
-## ✨ Key Features
-
+- **Universal Vulkan GPU Backend** — Universal acceleration on NVIDIA, AMD, and Intel GPUs via Vulkan compute
+- **LM Studio-Style Model Hub** — Dynamic HuggingFace GGUF model downloader, card library, and custom model assignment
 - **7-Way Intelligent Routing** — Intent-aware pipeline selection across coding, reasoning, prediction, search, 3D viz, and chip design
 - **Self-Scaffolding Code Generation** — Ornith 9B autonomously plans and writes code in a single unified trajectory
 - **AST-Aware Self-Healing** — Surgical patching via Python AST extraction instead of fixed-line windows

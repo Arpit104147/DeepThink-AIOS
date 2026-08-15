@@ -1,20 +1,9 @@
 import os
 import sys
-# Force Level Zero backend and apply the Immediate Command Lists workaround 
-# This bypasses "Error 45 (UR_RESULT_ERROR_INVALID_ARGUMENT)" on Intel Iris Xe
-# Set on both Linux and Windows when Intel oneAPI/SYCL runtime is available
-def _has_intel_oneapi():
-    """Detect if Intel oneAPI SYCL runtime is available on this system."""
-    if sys.platform != 'win32':
-        return True  # On Linux, always set (oneAPI sourced via start.sh)
-    # On Windows, check for Intel oneAPI installation
-    oneapi_root = os.environ.get("ONEAPI_ROOT", r"C:\Program Files (x86)\Intel\oneAPI")
-    return os.path.isdir(oneapi_root)
+import re
 
-if _has_intel_oneapi():
-    os.environ.setdefault("SYCL_DEVICE_FILTER", "level_zero")
-    os.environ.setdefault("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", "1")
-    os.environ.setdefault("IPEX_OPTIMIZE_TRANSFORMERS", "1")
+# Standard backend setup
+os.environ.setdefault("GGML_VK_VISIBLE_DEVICES", "0")
 
 # Add root folder to sys.path to resolve backend package imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -84,9 +73,15 @@ from pydantic import BaseModel
 from typing import Optional, List
 from fastapi.responses import HTMLResponse
 from backend.memory import Memory
-from backend.downloader import check_models_status, download_model, MODEL_DEFINITIONS
+from backend.downloader import (
+    check_models_status, download_model, MODEL_DEFINITIONS,
+    add_custom_model, remove_custom_model, ROLE_ASSIGNMENTS, save_role_assignments, cancel_model_download
+)
 from backend.orchestrator import AgentOrchestrator
 from backend.benchmark_runner import BENCHMARK_STATE, run_benchmark_suite, STATE_LOCK
+from backend.vulkan_engine import (
+    check_vulkan_engine_status, start_vulkan_update_background, get_vulkan_gpu_diagnostics
+)
 
 # Phase 3: Security & Air-Gap
 try:
@@ -246,6 +241,180 @@ def trigger_download(model_key: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(bg_download_task, model_key)
     return {"status": "started"}
 
+class AddCustomModelRequest(BaseModel):
+    key: str
+    name: str
+    repo_id: str
+    filename: str
+    type: str = "text"
+    mmproj_filename: Optional[str] = None
+
+@app.post("/api/models/custom/add")
+def api_add_custom_model(req: AddCustomModelRequest):
+    """Add or update a custom GGUF model entry in the Model Hub."""
+    if not req.key or not req.repo_id or not req.filename:
+        raise HTTPException(status_code=400, detail="key, repo_id, and filename are required")
+    key_clean = req.key.lower().replace(" ", "_")
+    defn = add_custom_model(
+        model_key=key_clean,
+        name=req.name,
+        repo_id=req.repo_id,
+        filename=req.filename,
+        model_type=req.type,
+        mmproj_filename=req.mmproj_filename
+    )
+    return {"status": "success", "key": key_clean, "definition": defn}
+
+@app.delete("/api/models/custom/{model_key}")
+def api_remove_custom_model(model_key: str):
+    """Remove a custom model entry from the Model Hub."""
+    success = remove_custom_model(model_key)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot remove default system model or key not found")
+    return {"status": "success", "removed": model_key}
+
+@app.get("/api/models/hf_scan")
+def scan_hf_repo(repo_id: str):
+    """Scan a HuggingFace repository for .gguf files."""
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
+        files = api.list_repo_files(repo_id=repo_id)
+        gguf_files = [f for f in files if f.endswith(".gguf")]
+        return {"repo_id": repo_id, "gguf_files": gguf_files}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to scan repo: {str(e)}")
+
+@app.get("/api/models/search")
+def search_hf_models(q: str = "", limit: int = 20):
+    """Search HuggingFace Hub for GGUF models (LM Studio style)."""
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
+        query = q.strip() if q else "gguf"
+        models_iter = api.list_models(search=query, filter="gguf", limit=limit, sort="downloads")
+        results = []
+        for m in models_iter:
+            author = getattr(m, 'author', None) or (m.id.split('/')[0] if '/' in m.id else 'community')
+            model_name = m.id.split('/')[-1] if '/' in m.id else m.id
+            downloads = getattr(m, 'downloads', 0) or 0
+            likes = getattr(m, 'likes', 0) or 0
+            last_mod = getattr(m, 'last_modified', None)
+            mod_str = "recently"
+            if last_mod:
+                try:
+                    mod_str = str(last_mod).split('T')[0]
+                except Exception:
+                    pass
+            results.append({
+                "id": m.id,
+                "model_name": model_name,
+                "author": author,
+                "downloads": downloads,
+                "likes": likes,
+                "last_modified": mod_str
+            })
+        return {"query": query, "models": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"HuggingFace search error: {str(e)}")
+
+@app.get("/api/models/repo_details")
+@app.get("/api/models/repo_files")
+def get_hf_repo_details(repo_id: str):
+    """Get GGUF quantization files with size in GB and README for a HF repo."""
+    try:
+        from huggingface_hub import HfApi, hf_hub_download
+        api = HfApi()
+        info = api.model_info(repo_id=repo_id, files_metadata=True)
+        files = []
+        for sibling in info.siblings:
+            if sibling.rfilename.endswith(".gguf"):
+                size_gb = round(sibling.size / (1024 ** 3), 2) if sibling.size else 0
+                quant = sibling.rfilename.split('/')[-1].replace('.gguf', '')
+                files.append({
+                    "filename": sibling.rfilename,
+                    "size_gb": size_gb,
+                    "quant": quant
+                })
+        
+        # Sort files by size ascending
+        files.sort(key=lambda x: x["size_gb"])
+        
+        # Try fetching README.md
+        readme_text = "No README available for this model."
+        try:
+            readme_path = hf_hub_download(repo_id=repo_id, filename="README.md")
+            with open(readme_path, 'r', encoding='utf-8', errors='ignore') as f:
+                readme_text = f.read(5000) # first 5KB
+        except Exception:
+            pass
+
+        return {
+            "repo_id": repo_id,
+            "downloads": getattr(info, 'downloads', 0) or 0,
+            "likes": getattr(info, 'likes', 0) or 0,
+            "files": files,
+            "readme": readme_text
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch repo details: {str(e)}")
+
+@app.post("/api/models/cancel_download/{model_key}")
+def api_cancel_model_download(model_key: str):
+    """Cancel an in-progress model download."""
+    cancelled = cancel_model_download(model_key)
+    return {"status": "cancelled" if cancelled else "not_found", "key": model_key}
+
+@app.post("/api/models/download_hf")
+def download_hf_quant_model(payload: dict = Body(...)):
+    """Add GGUF model dynamically from HF search and trigger background download."""
+    repo_id = payload.get("repo_id")
+    filename = payload.get("filename")
+    name = payload.get("name") or repo_id.split('/')[-1]
+    if not repo_id or not filename:
+        raise HTTPException(status_code=400, detail="repo_id and filename are required")
+
+    key_clean = re.sub(r'[^a-zA-Z0-9_]', '_', filename.replace('.gguf', '')).lower()
+    defn = add_custom_model(
+        model_key=key_clean,
+        name=name,
+        repo_id=repo_id,
+        filename=filename,
+        model_type="text"
+    )
+    # Trigger background download
+    t = threading.Thread(target=download_model, args=(key_clean,))
+    t.daemon = True
+    t.start()
+    return {"status": "started", "key": key_clean, "name": name, "filename": filename}
+
+@app.get("/api/vulkan/status")
+def get_vulkan_status():
+    """Get pre-compiled Vulkan engine status and version info."""
+    return check_vulkan_engine_status()
+
+@app.get("/api/vulkan/diagnostics")
+def vulkan_diagnostics():
+    """Perform GPU hardware diagnostics and confirm Vulkan GPU offloading status."""
+    return get_vulkan_gpu_diagnostics()
+
+@app.post("/api/vulkan/update")
+def update_vulkan():
+    """Trigger background download and update of pre-compiled Vulkan llama-server engine."""
+    started = start_vulkan_update_background()
+    return {"status": "started" if started else "already_running"}
+
+@app.get("/api/models/roles")
+def get_model_roles():
+    """Retrieve current system role assignments."""
+    return {"roles": ROLE_ASSIGNMENTS}
+
+@app.post("/api/models/roles")
+def update_model_roles(mapping: dict = Body(...)):
+    """Update role assignments (LM Studio style role mapping)."""
+    updated = save_role_assignments(mapping)
+    return {"status": "success", "roles": updated}
+
 @app.post("/api/settings")
 def update_settings(settings: SettingsRequest):
     """Update settings on the orchestrator."""
@@ -356,22 +525,13 @@ async def chat(request: ChatRequest):
         search_mode=request.search_mode
     )
     
-    # 2. Check if required models are downloaded
+    # 2. Check if any models are downloaded
     models_status = check_models_status()
-    needed_models = []
-    
-    if request.image:
-        needed_models += ["qwen_vl"]
-        
-    needed_models += ["router", "deepseek_r1", "vibethinker", "ornith"]
-        
-    missing_models = [MODEL_DEFINITIONS[m]["name"] for m in needed_models if not models_status.get(m, {}).get("downloaded", False)]
-    
-    if missing_models:
-        missing_list = ", ".join(missing_models)
+    any_downloaded = any(info.get("downloaded", False) for info in models_status.values())
+    if not any_downloaded:
         raise HTTPException(
             status_code=400, 
-            detail=f"Please download the following required models first: {missing_list}"
+            detail="No models are downloaded on your system. Please open Model Hub & Discovery to download a GGUF model."
         )
 
     # 3. Stream generator
@@ -496,8 +656,8 @@ def unload_models():
 # ── Benchmark Endpoints for TPU v5e-8 ─────────────────────────────────────
 
 class BenchmarkStartRequest(BaseModel):
-    category: str
-    sample_size: int
+    category: str = "HumanEval"
+    sample_size: Optional[int] = None
 
 @app.get("/benchmark", response_class=HTMLResponse)
 def get_benchmark_dashboard():
@@ -516,6 +676,7 @@ def get_benchmark_status():
         return dict(BENCHMARK_STATE)
 
 @app.post("/api/benchmark/start")
+@app.post("/api/benchmark/run")
 def start_benchmark_suite(req: BenchmarkStartRequest, background_tasks: BackgroundTasks):
     """Start the parallel benchmark evaluation in the background."""
     with STATE_LOCK:
@@ -528,7 +689,7 @@ def start_benchmark_suite(req: BenchmarkStartRequest, background_tasks: Backgrou
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(run_benchmark_suite(req.category, req.sample_size, orchestrator))
+            loop.run_until_complete(run_benchmark_suite(req.category, orchestrator=orchestrator))
             loop.close()
         except Exception as e:
             import traceback
@@ -541,11 +702,10 @@ def start_benchmark_suite(req: BenchmarkStartRequest, background_tasks: Backgrou
     return {"status": "started"}
 
 @app.post("/api/benchmark/stop")
+@app.post("/api/benchmark/cancel")
 def stop_benchmark_suite():
     """Stop the active benchmark evaluation and release the workers."""
-    with STATE_LOCK:
-        BENCHMARK_STATE["active"] = False
-    return {"status": "stopped"}
+    return stop_benchmark(orchestrator)
 
 # ── Phase 3: Authentication endpoint ─────────────────────────────────────
 
@@ -601,4 +761,4 @@ def workspace_commit(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

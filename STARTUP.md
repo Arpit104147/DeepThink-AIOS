@@ -17,9 +17,8 @@ This is the most reliable way to run DeepThink AIOS on any operating system. Ope
 cd "/path/to/Team_Trenches"
 source venv/bin/activate
 
-# Intel Iris Xe / Arc iGPU only — skip on NVIDIA or Mac
-export SYCL_DEVICE_FILTER=level_zero
-export IPEX_OPTIMIZE_TRANSFORMERS=1
+# Universal Vulkan GPU Acceleration
+export GGML_VK_VISIBLE_DEVICES=0
 
 # Optional: Enable enterprise security features
 # export AIOS_AUTH_ENABLED=1
@@ -33,7 +32,7 @@ Wait until you see this before moving to Terminal 2:
 🔓 Authentication: DISABLED — Open access (local development mode).
 Sandbox: ✅ Native kernel isolation available (unshare/chroot/seccomp)
 🧠 DMA: Detected XX GB RAM → Safety threshold = X.X GB
-INFO:     Uvicorn running on http://127.0.0.1:8000
+INFO:     Uvicorn running on http://127.0.0.1:8080
 ```
 
 **Terminal 2 — Start the Frontend (Web UI):**
@@ -61,7 +60,7 @@ source venv/bin/activate
 python backend/app.py
 ```
 
-Wait for: `Uvicorn running on http://127.0.0.1:8000`
+Wait for: `Uvicorn running on http://127.0.0.1:8080`
 
 **Terminal 2 — Frontend:**
 ```bash
@@ -178,7 +177,7 @@ taskkill /PID <PID> /F
 ### ❌ `Cannot reach backend` / `NetworkError`
 
 The frontend cannot reach the backend. Check:
-1. Is Terminal 1 showing `Uvicorn running on http://127.0.0.1:8000`?
+1. Is Terminal 1 showing `Uvicorn running on http://127.0.0.1:8080`?
 2. Did the backend crash? Look for error messages in Terminal 1.
 3. Is it your **first prompt**? The backend may still be loading models (2–4 min). Wait and try again.
 4. In the UI, click **Settings** and confirm the API URL is `http://127.0.0.1:8000`.
@@ -192,6 +191,18 @@ Virtual environment not activated or dependencies missing:
 source venv/bin/activate    # Linux / Mac
 pip install -r requirements.txt
 ```
+
+---
+
+---
+
+### ⚡ How to Enable Vulkan GPU Acceleration (Zero Compilation Required)
+
+DeepThink AIOS includes a **1-Click Pre-Compiled Vulkan GPU Engine**:
+1. Open **Settings (⚙️)** in the sidebar.
+2. Click the **⚡ Vulkan GPU Status** tab.
+3. Click **`⚡ Download Vulkan Engine`**.
+4. The system automatically downloads the official pre-compiled C++ Vulkan binary from GitHub Releases (`ggml-org/llama.cpp`) into `bin/vulkan/` and activates **100% GPU acceleration** on Intel iGPU / Intel Arc, NVIDIA, and AMD GPUs instantly!
 
 ---
 

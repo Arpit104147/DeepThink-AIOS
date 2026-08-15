@@ -25,6 +25,8 @@ frontend/.next/
 outputs/
 scratch/
 backend/outputs/
+bin/gh_bin/
+bin/gh_cli
 
 # Local configuration secrets (API Keys, etc.)
 .env

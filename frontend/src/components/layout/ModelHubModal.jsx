@@ -1,0 +1,547 @@
+import React, { useState, useEffect } from "react";
+
+const ModelHubModal = ({ open, setOpen, serverUrl }) => {
+  const [activeTab, setActiveTab] = useState("explorer");
+  const [modelsStatus, setModelsStatus] = useState({});
+  const [roles, setRoles] = useState({
+    router: "router",
+    coding: "ornith",
+    reasoning: "deepseek_r1",
+    linter: "vibethinker",
+    vision: "qwen_vl"
+  });
+
+  // LM Studio Explorer States
+  const [searchQuery, setSearchQuery] = useState("glm 4.7 flash");
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedRepo, setSelectedRepo] = useState(null);
+  const [repoDetails, setRepoDetails] = useState(null);
+  const [selectedFileIdx, setSelectedFileIdx] = useState(0);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [activeDownloadKey, setActiveDownloadKey] = useState(null);
+  const [downloadBannerMsg, setDownloadBannerMsg] = useState("");
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch(`${serverUrl}/api/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setModelsStatus(data.models || {});
+      }
+    } catch (err) {
+      console.error("Failed to fetch model status:", err);
+    }
+  };
+
+  const fetchRoles = async () => {
+    try {
+      const res = await fetch(`${serverUrl}/api/models/roles`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.roles) setRoles(data.roles);
+      }
+    } catch (err) {
+      console.error("Failed to fetch model roles:", err);
+    }
+  };
+
+  const handleSearch = async (queryToSearch) => {
+    const q = queryToSearch !== undefined ? queryToSearch : searchQuery;
+    setLoadingSearch(true);
+    setActionMessage("");
+    try {
+      const res = await fetch(`${serverUrl}/api/models/search?q=${encodeURIComponent(q)}&limit=20`);
+      if (res.ok) {
+        const data = await res.json();
+        const models = data.models || [];
+        setSearchResults(models);
+        if (models.length > 0) {
+          handleSelectRepo(models[0]);
+        } else {
+          setSelectedRepo(null);
+          setRepoDetails(null);
+        }
+      }
+    } catch (e) {
+      setActionMessage(`Search failed: ${e.message}`);
+    } finally {
+      setLoadingSearch(false);
+    }
+  };
+
+  const handleSelectRepo = async (repo) => {
+    if (!repo) return;
+    const targetRepoId = repo.id || repo.model_id || repo.repo_id;
+    if (!targetRepoId) return;
+
+    setSelectedRepo(repo);
+    setLoadingDetails(true);
+    setSelectedFileIdx(0);
+    setActionMessage("");
+    try {
+      const res = await fetch(`${serverUrl}/api/models/repo_details?repo_id=${encodeURIComponent(targetRepoId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRepoDetails(data);
+      }
+    } catch (e) {
+      setActionMessage(`Failed to fetch repo details: ${e.message}`);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      fetchStatus();
+      fetchRoles();
+      if (searchResults.length === 0) {
+        handleSearch("glm 4.7 flash");
+      }
+      const interval = setInterval(fetchStatus, 1500);
+      return () => clearInterval(interval);
+    }
+  }, [open, serverUrl]);
+
+  // Auto-clear download banner after 4 seconds
+  useEffect(() => {
+    if (downloadBannerMsg) {
+      const timer = setTimeout(() => setDownloadBannerMsg(""), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [downloadBannerMsg]);
+
+  if (!open) return null;
+
+  const handleRoleChange = (roleKey, modelKey) => {
+    setRoles((prev) => ({ ...prev, [roleKey]: modelKey }));
+  };
+
+  const handleSaveRoles = async () => {
+    try {
+      const res = await fetch(`${serverUrl}/api/models/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(roles)
+      });
+      if (res.ok) {
+        setActionMessage("✅ Swarm role mappings saved successfully!");
+        fetchStatus();
+      }
+    } catch (e) {
+      setActionMessage(`Role save error: ${e.message}`);
+    }
+  };
+
+  const filesList = repoDetails?.files || repoDetails?.gguf_files || [];
+  const currentFile = filesList[selectedFileIdx];
+  const currentKeyClean = currentFile ? currentFile.filename.replace(".gguf", "").replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase() : null;
+  const currentModelStatus = currentKeyClean ? modelsStatus[currentKeyClean] : null;
+
+  const handleDownloadSelectedQuant = async () => {
+    if (!currentFile || !selectedRepo) return;
+    const targetRepoId = selectedRepo.id || selectedRepo.model_id || selectedRepo.repo_id;
+
+    setActionMessage(`🚀 Starting download for ${currentFile.filename}...`);
+    setDownloadBannerMsg(`🚀 Started downloading ${currentFile.filename} (${currentFile.size_gb} GB)...`);
+
+    try {
+      const res = await fetch(`${serverUrl}/api/models/download_hf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repo_id: targetRepoId,
+          filename: currentFile.filename,
+          name: selectedRepo.model_name || targetRepoId.split("/").pop()
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveDownloadKey(data.key);
+        fetchStatus();
+      } else {
+        const errData = await res.json();
+        setActionMessage(`Download failed: ${errData.detail || "Server error"}`);
+      }
+    } catch (e) {
+      setActionMessage(`Download request error: ${e.message}`);
+    }
+  };
+
+  const handleCancelDownload = async (modelKey) => {
+    try {
+      const res = await fetch(`${serverUrl}/api/models/cancel_download/${modelKey}`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        setActionMessage(`⏹️ Cancelled download for ${modelKey}`);
+        setDownloadBannerMsg("");
+        fetchStatus();
+      }
+    } catch (e) {
+      setActionMessage(`Cancel error: ${e.message}`);
+    }
+  };
+
+  const currentRepoId = selectedRepo ? (selectedRepo.id || selectedRepo.model_id || selectedRepo.repo_id) : "";
+
+  return (
+    <div className="modal-overlay" onClick={() => setOpen(false)}>
+      <div className="modal hub-modal-wrapper" onClick={(e) => e.stopPropagation()}>
+        {/* Modal Header */}
+        <div className="hub-header">
+          <div className="hub-title-group">
+            <span className="hub-title-icon">🤖</span>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <h2 className="hub-title">Model Hub & Discovery</h2>
+                <span className="hub-subtitle-badge">LM Studio Engine</span>
+              </div>
+              <p className="hub-description">Search HuggingFace GGUF repository cards, choose quantization variants, and monitor live download progress.</p>
+            </div>
+          </div>
+          <button className="modal-close-btn" onClick={() => setOpen(false)}>✕</button>
+        </div>
+
+        {/* Global Download Banner Notification */}
+        {downloadBannerMsg && (
+          <div style={{ background: "rgba(99, 102, 241, 0.2)", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px", fontSize: "0.8rem", color: "#a5b4fc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>{downloadBannerMsg}</span>
+            <button onClick={() => setDownloadBannerMsg("")} style={{ background: "none", border: "none", color: "#a5b4fc", cursor: "pointer" }}>✕</button>
+          </div>
+        )}
+
+        {/* Navigation Tab Bar */}
+        <div className="hub-nav-tabs">
+          <button className={`hub-tab-btn ${activeTab === "explorer" ? "active" : ""}`} onClick={() => setActiveTab("explorer")}>
+            🔍 HuggingFace Model Explorer
+          </button>
+          <button className={`hub-tab-btn ${activeTab === "swarm" ? "active" : ""}`} onClick={() => setActiveTab("swarm")}>
+            🎯 Swarm Role Assignment
+          </button>
+          <button className={`hub-tab-btn ${activeTab === "models" ? "active" : ""}`} onClick={() => setActiveTab("models")}>
+            🍱 Installed Library
+          </button>
+        </div>
+
+        {/* Tab Content Container */}
+        <div className="hub-tab-content" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          {/* TAB 1: HuggingFace Explorer */}
+          {activeTab === "explorer" && (
+            <div className="lmstudio-explorer">
+              {/* Sidebar Search List */}
+              <div className="lmstudio-sidebar">
+                <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="lmstudio-search-bar">
+                  <span className="search-icon">🔍</span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search HuggingFace models (e.g. glm 4.7 flash, qwen)..."
+                    className="lmstudio-search-input"
+                  />
+                  {searchQuery && (
+                    <button type="button" onClick={() => { setSearchQuery(""); handleSearch(""); }} className="clear-search-btn">✕</button>
+                  )}
+                </form>
+
+                <div className="lmstudio-repo-list">
+                  {loadingSearch ? (
+                    <div style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
+                      Searching HuggingFace Hub...
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    <div style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
+                      No GGUF model repositories found.
+                    </div>
+                  ) : (
+                    searchResults.map((m) => {
+                      const itemRepoId = m.id || m.model_id || m.repo_id;
+                      const isSelected = currentRepoId && itemRepoId && currentRepoId === itemRepoId;
+                      return (
+                        <div
+                          key={itemRepoId}
+                          className={`lmstudio-repo-card ${isSelected ? "active" : ""}`}
+                          onClick={() => handleSelectRepo(m)}
+                        >
+                          <div className="card-title">
+                            <span>🤗</span> <span>{m.model_name || itemRepoId.split("/").pop()}</span>
+                          </div>
+                          <div style={{ fontSize: "0.75rem", opacity: 0.75, marginTop: "2px" }}>{m.author}</div>
+                          <div className="card-meta">
+                            <span>❤️ {m.likes}</span>
+                            <span>⬇️ {m.downloads?.toLocaleString() || 0}</span>
+                            <span>recently</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Main Model Inspector View */}
+              <div className="lmstudio-main-panel">
+                {selectedRepo ? (
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "12px" }}>
+                    {/* Header Details */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <h3 style={{ fontSize: "1.1rem", fontWeight: "700", color: "#f8fafc" }}>{currentRepoId}</h3>
+                        <div style={{ display: "flex", gap: "12px", fontSize: "0.78rem", color: "#94a3b8", marginTop: "4px" }}>
+                          <span>⬇️ {selectedRepo.downloads?.toLocaleString() || repoDetails?.downloads?.toLocaleString() || 0} downloads</span>
+                          <span>⭐ {selectedRepo.likes || repoDetails?.likes || 0} likes</span>
+                          <span style={{ color: "#a855f7" }}>FORMAT: GGUF</span>
+                        </div>
+                      </div>
+                      <a
+                        href={`https://huggingface.co/${currentRepoId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hub-save-btn"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem", background: "rgba(255,255,255,0.06)", textDecoration: "none" }}
+                      >
+                        🤗 Model Card ↗
+                      </a>
+                    </div>
+
+                    {/* Quantization Selector & Download CTA */}
+                    <div style={{ background: "rgba(0,0,0,0.3)", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div style={{ fontWeight: "600", fontSize: "0.88rem", color: "#cbd5e1", marginBottom: "8px" }}>
+                        Download Options
+                      </div>
+
+                      {loadingDetails ? (
+                        <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Loading available GGUF quantizations...</div>
+                      ) : filesList.length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                          <select
+                            value={selectedFileIdx}
+                            onChange={(e) => setSelectedFileIdx(Number(e.target.value))}
+                            style={{
+                              background: "rgba(0,0,0,0.5)",
+                              border: "1px solid rgba(255,255,255,0.12)",
+                              color: "#f8fafc",
+                              padding: "10px",
+                              borderRadius: "8px",
+                              fontSize: "0.85rem"
+                            }}
+                          >
+                            {filesList.map((f, idx) => (
+                              <option key={f.filename} value={idx}>
+                                GGUF {selectedRepo.model_name || currentRepoId.split("/").pop()} ({f.quant}) — {f.size_gb} GB
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Live Download Progress Bar or Download CTA Button */}
+                          {!currentModelStatus?.downloaded && currentModelStatus?.progress && currentModelStatus.progress.status === "downloading" ? (
+                            <div style={{ background: "rgba(0,0,0,0.4)", padding: "14px", borderRadius: "12px", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "#818cf8" }}>
+                                  🚀 Downloading {currentFile?.quant}... {currentModelStatus.progress.percent}%
+                                </div>
+                                <button
+                                  onClick={() => handleCancelDownload(currentKeyClean)}
+                                  style={{
+                                    padding: "4px 10px",
+                                    borderRadius: "6px",
+                                    background: "rgba(239, 68, 68, 0.2)",
+                                    border: "1px solid rgba(239, 68, 68, 0.4)",
+                                    color: "#ef4444",
+                                    cursor: "pointer",
+                                    fontSize: "0.78rem",
+                                    fontWeight: "600"
+                                  }}
+                                >
+                                  ⏹️ Cancel Download
+                                </button>
+                              </div>
+
+                              <div style={{ width: "100%", height: "8px", background: "rgba(255,255,255,0.1)", borderRadius: "4px", overflow: "hidden", marginBottom: "6px" }}>
+                                <div
+                                  style={{
+                                    height: "100%",
+                                    width: `${currentModelStatus.progress.percent}%`,
+                                    background: "linear-gradient(90deg, #6366f1, #a855f7)",
+                                    transition: "width 0.3s ease"
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem", color: "#94a3b8" }}>
+                                <span>Downloaded: {currentModelStatus.progress.downloaded_gb} GB</span>
+                                <span>Total: {currentFile?.size_gb || currentModelStatus.progress.total_gb || "?"} GB</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span className="lmstudio-fit-badge">
+                                ✓ Likely Fit (VRAM Safe)
+                              </span>
+
+                              {currentModelStatus?.downloaded ? (
+                                <div style={{ background: "rgba(52, 211, 153, 0.15)", border: "1px solid #34d399", color: "#34d399", padding: "8px 18px", borderRadius: "8px", fontWeight: "600", fontSize: "0.88rem" }}>
+                                  ✅ Downloaded & Ready in Library ({currentFile?.size_gb || currentModelStatus.size} GB)
+                                </div>
+                              ) : (
+                                <button
+                                  className="hub-save-btn"
+                                  onClick={handleDownloadSelectedQuant}
+                                  style={{ background: "linear-gradient(135deg, #4f46e5, #6366f1)", padding: "10px 24px", fontSize: "0.92rem" }}
+                                >
+                                  📥 Download {currentFile ? `${currentFile.size_gb} GB` : ""}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ color: "#fbbf24", fontSize: "0.85rem" }}>
+                          No .gguf files found in this repository.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* README Preview */}
+                    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                      <div style={{ fontWeight: "600", fontSize: "0.88rem", color: "#cbd5e1", marginBottom: "8px" }}>
+                        README / Model Documentation
+                      </div>
+                      <div style={{ flex: 1, background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", padding: "12px", overflowY: "auto", fontFamily: "monospace", fontSize: "0.78rem", color: "#94a3b8" }}>
+                        {repoDetails?.readme || "No README available for this model."}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
+                    Select a model from the search list to inspect quants and download.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: Swarm Intelligence Role Mapping */}
+          {activeTab === "swarm" && (
+            <div className="tab-panel">
+              <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "14px" }}>
+                Assign which local LLM handles each swarm intelligence capability role:
+              </p>
+
+              <div style={{ display: "grid", gap: "12px", maxHeight: "380px", overflowY: "auto" }}>
+                {[
+                  { key: "router", label: "Smart Router LLM", icon: "⚡", desc: "Intent classification & role dispatcher" },
+                  { key: "coding", label: "Primary Coding LLM", icon: "💻", desc: "Full code generation & refactoring" },
+                  { key: "reasoning", label: "Reasoning Engine LLM", icon: "🧠", desc: "Deep chain-of-thought logic & math synthesis" },
+                  { key: "linter", label: "Syntax Linter / Patch LLM", icon: "🧬", desc: "Fast AST-aware code search/replace patcher" },
+                  { key: "vision", label: "Vision / OCR Parsing Model", icon: "👁️", desc: "Transcribes uploaded image content & code screenshots" },
+                ].map((role) => (
+                  <div key={role.key} style={{ padding: "14px", background: "rgba(255,255,255,0.03)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>{role.icon}</span>
+                        <div>
+                          <div style={{ fontWeight: "600", fontSize: "0.9rem", color: "#f8fafc" }}>{role.label}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>{role.desc}</div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "4px", background: modelsStatus[roles[role.key]]?.downloaded ? "rgba(52, 211, 153, 0.2)" : "rgba(251, 191, 36, 0.2)", color: modelsStatus[roles[role.key]]?.downloaded ? "#34d399" : "#fbbf24" }}>
+                        {modelsStatus[roles[role.key]]?.downloaded ? "● Ready" : "● Not Downloaded"}
+                      </span>
+                    </div>
+
+                    <select
+                      value={roles[role.key] || ""}
+                      onChange={(e) => handleRoleChange(role.key, e.target.value)}
+                      style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px", color: "#f8fafc", fontSize: "0.82rem" }}
+                    >
+                      {Object.entries(modelsStatus).map(([mKey, mInfo]) => (
+                        <option key={mKey} value={mKey}>
+                          {mInfo.name} — {mInfo.downloaded ? "✅ (Downloaded)" : "⌛ (Not Downloaded)"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
+                <button className="hub-save-btn" onClick={handleSaveRoles}>
+                  💾 Save Swarm Role Mapping
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: Installed Local Models */}
+          {activeTab === "models" && (
+            <div className="tab-panel">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <span style={{ fontSize: "0.82rem", color: "#94a3b8" }}>Installed GGUF model library on local system.</span>
+                <button onClick={fetchStatus} style={{ padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}>🔄 Refresh</button>
+              </div>
+
+              <div style={{ display: "grid", gap: "10px", maxHeight: "380px", overflowY: "auto" }}>
+                {Object.entries(modelsStatus).map(([key, info]) => (
+                  <div key={key} style={{ padding: "14px", background: "rgba(255, 255, 255, 0.025)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.07)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontWeight: "600", fontSize: "0.95rem", color: "#f8fafc" }}>{info.name || key}</div>
+                        <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "3px" }}>
+                          Repo: <code style={{ background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: "4px" }}>{info.repo_id}</code> | File: <code style={{ background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: "4px" }}>{info.filename}</code>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: "0.78rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                        {info.downloaded ? (
+                          <span style={{ color: "#34d399", fontWeight: "600" }}>✅ Downloaded ({info.size})</span>
+                        ) : info.progress && info.progress.status === "downloading" ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: "#818cf8", fontWeight: "600" }}>🚀 Downloading {info.progress.percent}%</span>
+                            <button
+                              onClick={() => handleCancelDownload(key)}
+                              style={{ padding: "3px 8px", borderRadius: "4px", background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", color: "#ef4444", cursor: "pointer", fontSize: "0.72rem" }}
+                            >
+                              ⏹️ Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#fbbf24", fontWeight: "600" }}>⏳ Not Downloaded</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress Bar in Local Models list (ONLY when downloading) */}
+                    {!info.downloaded && info.progress && info.progress.status === "downloading" && (
+                      <div style={{ width: "100%", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#818cf8", marginBottom: "4px" }}>
+                          <span>Downloading: {info.progress.downloaded_gb} GB</span>
+                          <span>{info.progress.percent}%</span>
+                        </div>
+                        <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "3px", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${info.progress.percent}%`, background: "linear-gradient(90deg, #6366f1, #a855f7)", transition: "width 0.3s ease" }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer Actions */}
+        <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+          <button onClick={() => setOpen(false)} style={{ padding: "8px 22px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "none", cursor: "pointer", fontWeight: "600" }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ModelHubModal;

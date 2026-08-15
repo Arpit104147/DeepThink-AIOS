@@ -4,16 +4,79 @@ import shutil
 import requests
 import time
 import re
+import threading
 # Enable fast multi-threaded Rust transfer engine for HuggingFace Hub downloads
 os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
 from huggingface_hub import hf_hub_download
 
+import json
+
 # Default local models directory
 MODELS_DIR = os.environ.get("MODELS_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models")))
+CUSTOM_MODELS_FILE = os.path.join(MODELS_DIR, "custom_models.json")
+ROLE_ASSIGNMENTS_FILE = os.path.join(MODELS_DIR, "role_assignments.json")
 
-# Definitions of our local 2B-8B LLMs and multimodal vision/OCR assistants.
-# Categorized into 'text' and 'image_to_text' subfolders.
-MODEL_DEFINITIONS = {
+DEFAULT_ROLE_ASSIGNMENTS = {
+    'router': 'router',
+    'coding': 'ornith',
+    'reasoning': 'deepseek_r1',
+    'linter': 'vibethinker',
+    'vision': 'qwen_vl'
+}
+
+ROLE_ASSIGNMENTS = dict(DEFAULT_ROLE_ASSIGNMENTS)
+
+def load_role_assignments():
+    """Load role assignments from role_assignments.json."""
+    global ROLE_ASSIGNMENTS
+    ROLE_ASSIGNMENTS = dict(DEFAULT_ROLE_ASSIGNMENTS)
+    if os.path.exists(ROLE_ASSIGNMENTS_FILE):
+        try:
+            with open(ROLE_ASSIGNMENTS_FILE, 'r') as f:
+                saved = json.load(f)
+                for r, m in saved.items():
+                    ROLE_ASSIGNMENTS[r] = m
+        except Exception as e:
+            print(f"⚠️ Error loading role_assignments.json: {e}")
+
+def save_role_assignments(new_mapping):
+    """Save user-configured role assignments."""
+    global ROLE_ASSIGNMENTS
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    for r, m in new_mapping.items():
+        if r in DEFAULT_ROLE_ASSIGNMENTS:
+            ROLE_ASSIGNMENTS[r] = m
+    with open(ROLE_ASSIGNMENTS_FILE, 'w') as f:
+        json.dump(ROLE_ASSIGNMENTS, f, indent=2)
+    return ROLE_ASSIGNMENTS
+
+def resolve_model_key(key_or_role):
+    """Resolve a system role (or raw key) to the mapped target model key, falling back to any downloaded model if not present."""
+    role_aliases = {
+        'router': 'router',
+        'coding': 'coding',
+        'ornith': 'coding',
+        'reasoning': 'reasoning',
+        'deepseek_r1': 'reasoning',
+        'linter': 'linter',
+        'vibethinker': 'linter',
+        'vision': 'vision',
+        'qwen_vl': 'vision'
+    }
+    target_role = role_aliases.get(key_or_role)
+    resolved_key = ROLE_ASSIGNMENTS.get(target_role, key_or_role) if target_role else key_or_role
+    
+    if is_model_downloaded(resolved_key):
+        return resolved_key
+        
+    fallback = get_any_available_model_key()
+    if fallback:
+        return fallback
+        
+    return resolved_key
+
+# Default definitions of local LLMs
+DEFAULT_MODEL_DEFINITIONS = {
     'qwen_vl': {
         'repo_id': 'unsloth/Qwen2.5-VL-7B-Instruct-GGUF',
         'filename': 'Qwen2.5-VL-7B-Instruct-UD-Q6_K_XL.gguf',
@@ -46,6 +109,54 @@ MODEL_DEFINITIONS = {
         'type': 'text',
     }
 }
+
+MODEL_DEFINITIONS = dict(DEFAULT_MODEL_DEFINITIONS)
+
+def load_custom_models():
+    """Load custom user models from custom_models.json and merge into MODEL_DEFINITIONS."""
+    global MODEL_DEFINITIONS
+    MODEL_DEFINITIONS = dict(DEFAULT_MODEL_DEFINITIONS)
+    if os.path.exists(CUSTOM_MODELS_FILE):
+        try:
+            with open(CUSTOM_MODELS_FILE, 'r') as f:
+                custom_data = json.load(f)
+                for key, defn in custom_data.items():
+                    MODEL_DEFINITIONS[key] = defn
+        except Exception as e:
+            print(f"⚠️ Error loading custom_models.json: {e}")
+
+def save_custom_models():
+    """Save user-added custom models to custom_models.json."""
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    custom_data = {k: v for k, v in MODEL_DEFINITIONS.items() if k not in DEFAULT_MODEL_DEFINITIONS}
+    with open(CUSTOM_MODELS_FILE, 'w') as f:
+        json.dump(custom_data, f, indent=2)
+
+def add_custom_model(model_key, name, repo_id, filename, model_type="text", mmproj_filename=None):
+    """Add or update a custom model dynamically."""
+    defn = {
+        'repo_id': repo_id,
+        'filename': filename,
+        'name': name,
+        'type': model_type
+    }
+    if mmproj_filename:
+        defn['mmproj_filename'] = mmproj_filename
+    MODEL_DEFINITIONS[model_key] = defn
+    save_custom_models()
+    return defn
+
+def remove_custom_model(model_key):
+    """Remove a custom model entry."""
+    if model_key in MODEL_DEFINITIONS and model_key not in DEFAULT_MODEL_DEFINITIONS:
+        del MODEL_DEFINITIONS[model_key]
+        save_custom_models()
+        return True
+    return False
+
+# Initialize custom models and role assignments on load
+load_custom_models()
+load_role_assignments()
 
 def get_model_filenames(definition):
     filenames = []
@@ -84,6 +195,14 @@ def is_model_downloaded(model_key):
     flat_exists = all(os.path.exists(os.path.join(MODELS_DIR, fname)) for fname in filenames)
     return flat_exists
 
+def get_any_available_model_key():
+    """Find and return any model key that is currently downloaded on disk."""
+    status = check_models_status()
+    for key, info in status.items():
+        if info.get("downloaded", False):
+            return key
+    return None
+
 def get_model_path(model_key):
     """Get the local path for a model key, downloading it if not present (returns the path to the first shard/file)."""
     if model_key not in MODEL_DEFINITIONS:
@@ -109,6 +228,17 @@ def get_model_path(model_key):
     local_path = os.path.join(target_dir, definition["filename"])
     return local_path
 
+DOWNLOAD_PROGRESS = {}
+CANCEL_DOWNLOAD_EVENTS = {}
+
+def cancel_model_download(model_key):
+    """Cancel an active model download by setting its cancellation event."""
+    if model_key in CANCEL_DOWNLOAD_EVENTS:
+        CANCEL_DOWNLOAD_EVENTS[model_key].set()
+        DOWNLOAD_PROGRESS[model_key] = {"status": "cancelled", "percent": 0}
+        return True
+    return False
+
 def check_models_status():
     """Check which models are downloaded and ready."""
     status = {}
@@ -129,14 +259,32 @@ def check_models_status():
                 all_downloaded = False
             else:
                 total_size += os.path.getsize(path)
-                
+
+        if all_downloaded:
+            prog_info = None
+            if key in DOWNLOAD_PROGRESS:
+                del DOWNLOAD_PROGRESS[key]
+        else:
+            prog_info = DOWNLOAD_PROGRESS.get(key, None)
+            if not prog_info:
+                inc_path = os.path.join(target_dir, filenames[0] + ".incomplete")
+                if os.path.exists(inc_path):
+                    inc_size = os.path.getsize(inc_path)
+                    prog_info = {
+                        "status": "downloading",
+                        "downloaded_gb": round(inc_size / (1024**3), 2),
+                        "total_gb": 0,
+                        "percent": 0
+                    }
+
         status[key] = {
             "name": definition["name"],
             "filename": definition["filename"],
             "repo_id": definition["repo_id"],
             "downloaded": all_downloaded,
             "path": first_path if all_downloaded else None,
-            "size": f"{total_size / (1024**3):.2f} GB" if all_downloaded else "N/A"
+            "size": f"{total_size / (1024**3):.2f} GB" if all_downloaded else "N/A",
+            "progress": prog_info
         }
     return status
 
@@ -152,7 +300,8 @@ def download_model(model_key, progress_callback=None):
     if "/" in subfolder:
         subfolder = subfolder.split("/")[-1]
     target_dir = os.path.join(MODELS_DIR, subfolder, model_key)
-    os.makedirs(target_dir, exist_ok=True)
+    cancel_evt = threading.Event()
+    CANCEL_DOWNLOAD_EVENTS[model_key] = cancel_evt
     
     for idx, fname in enumerate(filenames):
         local_path = os.path.join(target_dir, fname)
@@ -165,100 +314,97 @@ def download_model(model_key, progress_callback=None):
             
         print(f"[{idx+1}/{len(filenames)}] Downloading {fname} (Repo: {definition['repo_id']})...")
         
-        # Method 1: High-speed resumable download via official huggingface_hub API
-        download_success = False
-        try:
-            from huggingface_hub import hf_hub_download
-            print("🚀 Using high-speed HuggingFace transfer engine...")
-            downloaded_file = hf_hub_download(
-                repo_id=definition['repo_id'],
-                filename=fname,
-                local_dir=target_dir,
-                local_dir_use_symlinks=False,
-                resume_download=True
-            )
-            if os.path.exists(downloaded_file):
-                print(f"✅ Successfully downloaded {fname} via HuggingFace Hub engine.")
-                download_success = True
-        except Exception as hf_err:
-            print(f"⚠️ HuggingFace Hub engine notice: {hf_err}. Falling back to chunked stream...")
-
-        # Method 2: Resumable chunked stream fallback if hf_hub_download failed
-        if not download_success:
-            temp_path = local_path + ".incomplete"
-            url = f"https://huggingface.co/{definition['repo_id']}/resolve/main/{fname}"
-            max_retries = 15
-            for attempt in range(max_retries):
+        # Resumable chunked stream download with live progress tracking
+        temp_path = local_path + ".incomplete"
+        url = f"https://huggingface.co/{definition['repo_id']}/resolve/main/{fname}"
+        max_retries = 15
+        for attempt in range(max_retries):
+            try:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
                 try:
-                    headers = {
+                    import huggingface_hub
+                    token = huggingface_hub.get_token()
+                    if token:
+                        headers["Authorization"] = f"Bearer {token}"
+                except Exception:
+                    pass
+                
+                initial_pos = 0
+                if os.path.exists(temp_path):
+                    initial_pos = os.path.getsize(temp_path)
+                    headers["Range"] = f"bytes={initial_pos}-"
+                    print(f"\nResuming download from {initial_pos / (1024**2):.2f} MB...")
+                    
+                response = requests.get(url, stream=True, headers=headers, timeout=(15, 60))
+                
+                if response.status_code == 416:
+                    print("\nRange error, starting download from scratch...")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    initial_pos = 0
+                    headers_scratch = {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                     }
-                    try:
-                        import huggingface_hub
-                        token = huggingface_hub.get_token()
-                        if token:
-                            headers["Authorization"] = f"Bearer {token}"
-                    except Exception:
-                        pass
+                    if "Authorization" in headers:
+                        headers_scratch["Authorization"] = headers["Authorization"]
+                    response = requests.get(url, stream=True, headers=headers_scratch, timeout=(15, 60))
                     
+                response.raise_for_status()
+                
+                mode = "ab" if (response.status_code == 206 and initial_pos > 0) else "wb"
+                if mode == "wb":
                     initial_pos = 0
-                    if os.path.exists(temp_path):
-                        initial_pos = os.path.getsize(temp_path)
-                        headers["Range"] = f"bytes={initial_pos}-"
-                        print(f"\nResuming download from {initial_pos / (1024**2):.2f} MB...")
-                        
-                    response = requests.get(url, stream=True, headers=headers, timeout=(15, 60))
                     
-                    if response.status_code == 416:
-                        print("\nRange error, starting download from scratch...")
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                        initial_pos = 0
-                        headers_scratch = {
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        }
-                        if "Authorization" in headers:
-                            headers_scratch["Authorization"] = headers["Authorization"]
-                        response = requests.get(url, stream=True, headers=headers_scratch, timeout=(15, 60))
+                total_size = int(response.headers.get('content-length', 0)) + initial_pos
+                print(f"Total Size: {total_size / (1024**2):.2f} MB")
+                
+                downloaded = initial_pos
+                chunk_size = 4 * 1024 * 1024  # 4MB chunks for faster throughput
+                
+                with open(temp_path, mode) as f:
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        if cancel_evt.is_set():
+                            print(f"🛑 Download of '{model_key}' cancelled by user.")
+                            DOWNLOAD_PROGRESS[model_key] = {"status": "cancelled", "percent": 0}
+                            return None
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            percent = round((downloaded / total_size) * 100, 1) if total_size > 0 else 0
+                            DOWNLOAD_PROGRESS[model_key] = {
+                                "status": "downloading",
+                                "downloaded_gb": round(downloaded / (1024**3), 2),
+                                "total_gb": round(total_size / (1024**3), 2),
+                                "percent": percent
+                            }
+                            sys.stdout.write(f"\rProgress: {percent:.1f}% ({downloaded / (1024**2):.1f}/{total_size / (1024**2):.1f} MB)")
+                            sys.stdout.flush()
+                            if progress_callback:
+                                progress_callback(downloaded, total_size)
+                sys.stdout.write("\n")
+                break
+            except Exception as e:
+                print(f"\nDownload attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    sleep_time = 3 * (attempt + 1)
+                    print(f"Retrying in {sleep_time} seconds...")
+                    time.sleep(sleep_time)
+                else:
+                    raise e
                         
-                    response.raise_for_status()
-                    
-                    mode = "ab" if (response.status_code == 206 and initial_pos > 0) else "wb"
-                    if mode == "wb":
-                        initial_pos = 0
-                        
-                    total_size = int(response.headers.get('content-length', 0)) + initial_pos
-                    print(f"Total Size: {total_size / (1024**2):.2f} MB")
-                    
-                    downloaded = initial_pos
-                    chunk_size = 4 * 1024 * 1024  # 4MB chunks for faster throughput
-                    
-                    with open(temp_path, mode) as f:
-                        for chunk in response.iter_content(chunk_size=chunk_size):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                percent = (downloaded / total_size) * 100 if total_size > 0 else 0
-                                sys.stdout.write(f"\rProgress: {percent:.1f}% ({downloaded / (1024**2):.1f}/{total_size / (1024**2):.1f} MB)")
-                                sys.stdout.flush()
-                                if progress_callback:
-                                    progress_callback(downloaded, total_size)
-                    sys.stdout.write("\n")
-                    break
-                except Exception as e:
-                    print(f"\nDownload attempt {attempt + 1} failed: {str(e)}")
-                    if attempt < max_retries - 1:
-                        sleep_time = 3 * (attempt + 1)
-                        print(f"Retrying in {sleep_time} seconds...")
-                        time.sleep(sleep_time)
-                    else:
-                        raise e
-                        
-            if os.path.exists(temp_path):
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-                os.rename(temp_path, local_path)
-                print(f"Successfully downloaded {fname} to {local_path}")
+        if os.path.exists(temp_path):
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            os.rename(temp_path, local_path)
+            DOWNLOAD_PROGRESS[model_key] = {
+                "status": "completed",
+                "downloaded_gb": round(os.path.getsize(local_path) / (1024**3), 2),
+                "total_gb": round(os.path.getsize(local_path) / (1024**3), 2),
+                "percent": 100
+            }
+            print(f"Successfully downloaded {fname} to {local_path}")
         
     return os.path.join(target_dir, filenames[0])
 

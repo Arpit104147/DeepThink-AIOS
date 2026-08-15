@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 /**
  * @component PlotlyChart
@@ -7,21 +7,21 @@ import React, { useState, useEffect, useRef } from "react";
  */
 const PlotlyChart = ({ jsonStr }) => {
   const chartRef = useRef(null);
-  const [errorMsg, setErrorMsg] = useState(null);
+  const [drawError, setDrawError] = useState(null);
+
+  const { fig, parseError } = useMemo(() => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return { fig: parsed, parseError: null };
+    } catch (err) {
+      return { fig: null, parseError: err.message || String(err) };
+    }
+  }, [jsonStr]);
 
   useEffect(() => {
-    if (!chartRef.current) return;
-    setErrorMsg(null);
+    if (!chartRef.current || !fig || !window.Plotly) return;
 
     try {
-      const fig = JSON.parse(jsonStr);
-
-      // Clear fixed dimensions from backend; let CSS handle sizing
-      if (fig.layout) {
-        delete fig.layout.width;
-        delete fig.layout.height;
-      }
-
       const layout = {
         autosize: true,
         template: "plotly_dark",
@@ -31,25 +31,27 @@ const PlotlyChart = ({ jsonStr }) => {
         margin: { l: 50, r: 20, t: 40, b: 40 },
         ...fig.layout,
       };
+      delete layout.width;
+      delete layout.height;
 
       const data = Array.isArray(fig.data) ? fig.data : [fig.data];
-
-      if (!window.Plotly) {
-        throw new Error("Plotly.js library failed to load from CDN.");
-      }
 
       window.Plotly.react(chartRef.current, data, layout, {
         responsive: true,
         displayModeBar: true,
         displaylogo: false,
+      }).then(() => {
+        setDrawError(null);
       }).catch((err) => {
-        setErrorMsg(`Plotly drawing error: ${err.message}`);
+        setDrawError(`Plotly drawing error: ${err.message}`);
       });
     } catch (err) {
       console.error("Plotly render error:", err);
-      setErrorMsg(err.message || String(err));
     }
-  }, [jsonStr]);
+  }, [fig]);
+
+  const plotlyMissing = fig && !window.Plotly ? "Plotly.js library failed to load from CDN." : null;
+  const errorMsg = parseError || plotlyMissing || drawError;
 
   if (errorMsg) {
     return (

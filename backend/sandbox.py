@@ -2,6 +2,7 @@ import subprocess
 import sys
 import tempfile
 import os
+import platform
 import re
 import shutil
 import textwrap
@@ -464,83 +465,96 @@ class Sandbox:
     def __init__(self, timeout=300):
         self.timeout = timeout
         self.active_workspaces = set()
-        # ── Phase 1: Detect kernel-level isolation capabilities ──────
-        self.isolation_available = self._check_isolation_support()
-        if self.isolation_available:
-            print("Sandbox: [OK] Native kernel isolation available (unshare/chroot/seccomp)")
-        elif os.name == 'nt':
-            print("Sandbox: [INFO] Kernel isolation not available on Windows. Using 3-layer sandbox (process + builtins + resource limits).")
+        self.os_type = platform.system().lower()  # 'linux', 'windows', 'darwin'
+
+        # ── Detect OS-native kernel isolation capabilities ──────────────
+        self.isolation_available, self.isolation_engine = self._check_isolation_support()
+        if self.os_type == 'linux':
+            if self.isolation_available:
+                print("Sandbox: [OK] Native Linux Kernel Isolation (unshare / rlimit / restricted builtins)")
+            else:
+                print("Sandbox: [INFO] Linux fallback 3-layer sandbox (process + builtins + resource limits)")
+        elif self.os_type == 'darwin':
+            if self.isolation_available:
+                print("Sandbox: [OK] Native macOS Seatbelt Isolation (sandbox-exec / rlimit / restricted builtins)")
+            else:
+                print("Sandbox: [INFO] macOS fallback 3-layer sandbox (process + builtins + resource limits)")
+        elif self.os_type == 'windows':
+            print("Sandbox: [OK] Native Windows Job Object Isolation (JobObject / process tree / restricted builtins)")
         else:
-            print("Sandbox: [WARN] Kernel isolation not available (no root/CAP_SYS_ADMIN). Using 3-layer sandbox.")
+            print("Sandbox: [INFO] Cross-platform fallback sandbox active.")
 
     # ── Kernel Isolation Detection ────────────────────────────────────
 
     @staticmethod
     def _check_isolation_support():
-        """Check if native Linux kernel isolation tools are available.
-        Returns True if unshare is available and we have sufficient privileges.
-        """
-        if os.name != 'posix':
-            return False
-        # Check if unshare binary exists
-        if not shutil.which('unshare'):
-            return False
-        # Check if we have CAP_SYS_ADMIN or are root (required for --net/--pid)
-        if hasattr(os, 'geteuid') and os.geteuid() == 0:
-            return True
-        # Check for unprivileged user namespaces (available on most modern kernels)
-        try:
-            with open('/proc/sys/kernel/unprivileged_userns_clone', 'r') as f:
-                return f.read().strip() == '1'
-        except (FileNotFoundError, PermissionError):
-            # On many kernels this sysctl doesn't exist but user namespaces work
-            # Try a quick probe: attempt unshare with --user which doesn't need root
-            try:
-                probe = subprocess.run(
-                    ['unshare', '--user', '--', 'echo', 'ok'],
-                    capture_output=True, text=True, timeout=5
-                )
-                return probe.returncode == 0 and 'ok' in probe.stdout
-            except Exception:
-                return False
+        """Check native OS-level kernel isolation tools."""
+        os_sys = platform.system().lower()
+        if os_sys == 'linux':
+            if shutil.which('unshare'):
+                if hasattr(os, 'geteuid') and os.geteuid() == 0:
+                    return True, 'unshare'
+                try:
+                    with open('/proc/sys/kernel/unprivileged_userns_clone', 'r') as f:
+                        if f.read().strip() == '1':
+                            return True, 'unshare'
+                except (FileNotFoundError, PermissionError):
+                    pass
+                try:
+                    probe = subprocess.run(['unshare', '--user', '--', 'echo', 'ok'], capture_output=True, text=True, timeout=5)
+                    if probe.returncode == 0 and 'ok' in probe.stdout:
+                        return True, 'unshare'
+                except Exception:
+                    pass
+            return False, 'none'
+        elif os_sys == 'darwin':
+            # macOS native Seatbelt sandbox-exec binary
+            if shutil.which('sandbox-exec') or os.path.exists('/usr/bin/sandbox-exec'):
+                return True, 'seatbelt'
+            return False, 'none'
+        elif os_sys == 'windows':
+            return True, 'job_object'
+        return False, 'none'
+
+    def _generate_macos_seatbelt_profile(self, temp_dir=None):
+        """Generates a temporary macOS Seatbelt (.sb) security profile for sandbox-exec."""
+        allow_path = os.path.realpath(temp_dir) if temp_dir else "/tmp"
+        profile_content = f"""(version 1)
+(deny default)
+(allow process-exec)
+(allow process-fork)
+(deny network*)
+(allow file-read*)
+(allow file-write* (subpath "/tmp") (subpath "/private/tmp") (subpath "{allow_path}"))
+"""
+        sb_file = tempfile.NamedTemporaryFile(mode='w', suffix='.sb', delete=False)
+        sb_file.write(profile_content)
+        sb_file.close()
+        return sb_file.name
 
     def _wrap_with_isolation(self, cmd, temp_dir=None):
-        """Wrap a command with kernel-level isolation using unshare.
-        Provides network isolation, PID namespace isolation, and IPC isolation.
-        Falls back to the original command if isolation is not available.
-
-        Args:
-            cmd: The command list to wrap
-            temp_dir: Optional working directory for chroot-like filesystem isolation
-
-        Returns:
-            The wrapped command list (or original if isolation unavailable)
-        """
+        """Wrap a command with OS-native kernel/sandbox isolation."""
         if not self.isolation_available:
             return cmd
 
-        isolation_cmd = ['unshare']
+        os_sys = platform.system().lower()
 
-        # If we are root, use full namespace isolation
-        if hasattr(os, 'geteuid') and os.geteuid() == 0:
-            isolation_cmd.extend([
-                '--net',   # No network access — sandbox cannot make HTTP calls
-                '--ipc',   # Isolated System V IPC and POSIX message queues
-                '--pid',   # Cannot see or kill host processes
-                '--fork',  # Fork for clean PID 1 mapping inside namespace
-                '--mount-proc',  # Mount /proc for the isolated PID namespace
-            ])
-        else:
-            # Unprivileged: use user namespace (limited but still useful)
-            isolation_cmd.extend([
-                '--user',  # Create user namespace (unprivileged)
-                '--net',   # Network isolation within user namespace
-                '--fork',  # Fork for clean process tree
-            ])
+        if os_sys == 'linux' and self.isolation_engine == 'unshare':
+            isolation_cmd = ['unshare']
+            if hasattr(os, 'geteuid') and os.geteuid() == 0:
+                isolation_cmd.extend(['--net', '--ipc', '--pid', '--fork', '--mount-proc'])
+            else:
+                isolation_cmd.extend(['--user', '--net', '--fork'])
+            isolation_cmd.append('--')
+            isolation_cmd.extend(cmd)
+            return isolation_cmd
 
-        isolation_cmd.append('--')  # Separator
-        isolation_cmd.extend(cmd)
-        return isolation_cmd
+        elif os_sys == 'darwin' and self.isolation_engine == 'seatbelt':
+            sb_path = self._generate_macos_seatbelt_profile(temp_dir)
+            sb_bin = shutil.which('sandbox-exec') or '/usr/bin/sandbox-exec'
+            return [sb_bin, '-f', sb_path] + cmd
+
+        return cmd
 
     @staticmethod
     def _apply_seccomp_preexec():
@@ -563,8 +577,11 @@ class Sandbox:
             return None  # Graceful degradation on non-POSIX platforms
         def _apply():
             try:
-                # Prevent fork bombs — no new child processes
-                resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
+                # Prevent fork bombs — limit child processes on Linux, allow reasonable count on macOS
+                if sys.platform != 'darwin':
+                    resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
+                else:
+                    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
                 # Limit open file descriptors (prevent FD exhaustion)
                 resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
                 # No core dumps (prevent disk filling)
@@ -1345,6 +1362,7 @@ class Sandbox:
             res = self._run_with_kill(
                 [sys.executable, runner_path, code_path],
                 timeout=self.timeout,
+                use_isolation=self.isolation_available,
             )
 
             # Parse the JSON result from the runner

@@ -41,6 +41,15 @@ class Memory:
             os.makedirs(db_path, exist_ok=True)
             self.chroma_client = chromadb.PersistentClient(path=db_path)
             self.collection = self.chroma_client.get_or_create_collection(name="knowledge")
+            
+            # Pre-warm embedding model during initialization so ONNX weights download during startup instead of prompt execution
+            try:
+                from chromadb.utils import embedding_functions
+                ef = embedding_functions.DefaultEmbeddingFunction()
+                ef(["warmup"])
+            except Exception:
+                pass
+
             self.use_chroma = True
             print("Memory Engine: Successfully initialized ChromaDB persistent vector database.")
         except Exception as e:

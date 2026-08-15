@@ -86,33 +86,27 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-#### 3. Compile and Install Llama.cpp with CUDA & Flash Attention Support
-To enable GPU acceleration and full support for hardware-accelerated Flash Attention:
-```bash
-# On Linux:
-export CMAKE_ARGS="-DGGML_CUDA=on"
-# On Windows (cmd):
-set CMAKE_ARGS="-DGGML_CUDA=on"
-# On Windows (PowerShell):
-$env:CMAKE_ARGS="-DGGML_CUDA=on"
+### ⚙️ Hardware GPU Acceleration (Zero-Compilation Pre-Compiled Vulkan Engine)
 
-# Force compile and install from source
-pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir
+DeepThink AIOS includes a **1-Click Pre-Compiled Vulkan GPU Engine**. You do **NOT** need to install C++ compilers, `libvulkan-dev`, `glslc`, or `spirv-headers`.
+
+#### 1-Click Setup via Web UI (Recommended):
+1. Start the system: `python backend/app.py` and `npm run dev` in frontend.
+2. Open **Settings (⚙️)** in the sidebar and click the **⚡ Vulkan GPU Status** tab.
+3. Click **`⚡ Download Vulkan Engine`**.
+4. The system automatically downloads the official pre-compiled C++ Vulkan binary from GitHub Releases (`ggml-org/llama.cpp`) into `bin/vulkan/` and activates **100% GPU acceleration** on Intel iGPU / Intel Arc, NVIDIA, and AMD GPUs instantly!
+
+---
+
+#### Alternative Manual CLI Download (Optional):
+If you prefer downloading pre-compiled binaries via CLI:
+```bash
+# On Linux / macOS:
+python -c "from backend.vulkan_engine import _download_and_extract_vulkan; _download_and_extract_vulkan()"
 ```
 
 > [!NOTE]
-> **Flash Attention Automatic Activation:** The orchestrator dynamically queries your GPU computing capabilities. If running on modern NVIDIA architectures (Ampere or newer, such as L4, L40S, A100, RTX 3000/4000+), the system automatically initializes models with `flash_attn=True` and optimized batch size thresholds.
-
-### 🐧 Linux (Intel Iris Xe / Arc GPUs)
-*This is the default configuration used during the Hackathon development phase.*
-
-```bash
-# 1. Install Intel-optimized PyTorch (IPEX)
-pip install torch==2.8.0+xpu intel-extension-for-pytorch==2.8.10+xpu --extra-index-url https://download.pytorch.org/whl/xpu
-
-# 2. Install Llama.cpp
-pip install llama-cpp-python
-```
+> **Universal Hardware Acceleration:** By using Vulkan (`-DGGML_VULKAN=on`), `llama-cpp-python` offloads compute layers directly to any Vulkan 1.2+ compliant GPU (Intel UHD/Iris Xe/Arc, AMD, or NVIDIA) without requiring proprietary vendor drivers.
 
 ---
 
