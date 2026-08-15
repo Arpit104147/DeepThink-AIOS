@@ -186,15 +186,25 @@ def get_system_status():
     ram = psutil.virtual_memory()
     cpu_percent = psutil.cpu_percent()
     
-    # Check GPU VRAM if Vulkan is available or active
+    # Check GPU VRAM if Vulkan / PyTorch is available or active
     gpu_info = "N/A"
+    vram_total_gb = 0.0
+    vram_free_gb = 0.0
+    gpu_name = "N/A"
     try:
-        # Check from llama_cpp if any model is loaded
-        loaded_keys = list(orchestrator.loaded_models.keys())
-        if loaded_keys:
-            gpu_info = f"Active ({len(loaded_keys)} models cached)"
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            free_b, total_b = torch.cuda.mem_get_info(0)
+            vram_total_gb = round(total_b / (1024 ** 3), 2)
+            vram_free_gb = round(free_b / (1024 ** 3), 2)
+            gpu_info = f"{gpu_name} ({vram_free_gb}/{vram_total_gb} GB VRAM Free)"
         else:
-            gpu_info = "Standby (Vulkan device ready)"
+            loaded_keys = list(orchestrator.loaded_models.keys())
+            if loaded_keys:
+                gpu_info = f"Active ({len(loaded_keys)} models cached)"
+            else:
+                gpu_info = "Standby (Vulkan device ready)"
     except Exception:
         pass
         
@@ -204,8 +214,13 @@ def get_system_status():
             "cpu": f"{cpu_percent}%",
             "ram_used": f"{ram.used / (1024**3):.1f} GB",
             "ram_total": f"{ram.total / (1024**3):.1f} GB",
+            "ram_total_gb": round(ram.total / (1024**3), 2),
+            "ram_available_gb": round(ram.available / (1024**3), 2),
             "ram_percent": f"{ram.percent}%",
             "gpu": gpu_info,
+            "gpu_name": gpu_name,
+            "vram_total_gb": vram_total_gb,
+            "vram_free_gb": vram_free_gb,
             "evm_active": getattr(orchestrator, 'kaggle_hotswap_mode', False)
         },
         "settings": {

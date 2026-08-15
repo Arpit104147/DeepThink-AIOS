@@ -22,6 +22,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
   const [actionMessage, setActionMessage] = useState("");
   const [activeDownloadKey, setActiveDownloadKey] = useState(null);
   const [downloadBannerMsg, setDownloadBannerMsg] = useState("");
+  const [systemInfo, setSystemInfo] = useState(null);
 
   const fetchStatus = async () => {
     try {
@@ -29,10 +30,89 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
       if (res.ok) {
         const data = await res.json();
         setModelsStatus(data.models || {});
+        if (data.system) {
+          setSystemInfo(data.system);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch model status:", err);
     }
+  };
+
+  const calculateVramFit = (fileSizeGb) => {
+    if (!fileSizeGb || isNaN(fileSizeGb)) {
+      return {
+        status: "unknown",
+        badgeText: "Size Unknown",
+        badgeStyle: { background: "rgba(148, 163, 184, 0.15)", border: "1px solid rgba(148, 163, 184, 0.4)", color: "#94a3b8", padding: "6px 14px", borderRadius: "6px", fontWeight: "600", fontSize: "0.82rem" },
+        description: "Model size data unavailable."
+      };
+    }
+
+    const size = parseFloat(fileSizeGb);
+    const overhead = 1.5; // Context & KV cache overhead
+    const totalRequired = size + overhead;
+
+    const vramTotal = systemInfo?.vram_total_gb ? parseFloat(systemInfo.vram_total_gb) : 0;
+    const ramTotal = systemInfo?.ram_total_gb ? parseFloat(systemInfo.ram_total_gb) : (systemInfo?.ram_total ? parseFloat(systemInfo.ram_total) : 16);
+
+    if (vramTotal > 0 && totalRequired <= vramTotal) {
+      return {
+        status: "vram_safe",
+        badgeText: "🟢 Likely Fit (VRAM Safe)",
+        badgeStyle: {
+          background: "rgba(52, 211, 153, 0.15)",
+          border: "1px solid rgba(52, 211, 153, 0.5)",
+          color: "#34d399",
+          padding: "6px 14px",
+          borderRadius: "6px",
+          fontWeight: "600",
+          fontSize: "0.82rem",
+          display: "inline-flex",
+          alignItems: "center"
+        },
+        description: `Fits entirely in GPU VRAM (${vramTotal.toFixed(1)} GB available). Full GPU acceleration.`
+      };
+    }
+
+    const totalMem = vramTotal + ramTotal;
+    if (totalRequired <= totalMem) {
+      return {
+        status: "ram_fit",
+        badgeText: "🟡 Partial Offload (System RAM Fit)",
+        badgeStyle: {
+          background: "rgba(251, 191, 36, 0.15)",
+          border: "1px solid rgba(251, 191, 36, 0.5)",
+          color: "#fbbf24",
+          padding: "6px 14px",
+          borderRadius: "6px",
+          fontWeight: "600",
+          fontSize: "0.82rem",
+          display: "inline-flex",
+          alignItems: "center"
+        },
+        description: vramTotal > 0 
+          ? `Exceeds VRAM (${vramTotal.toFixed(1)} GB), but fits in System RAM (${ramTotal.toFixed(1)} GB). CPU offloading active.`
+          : `Fits in System RAM (${ramTotal.toFixed(1)} GB). CPU inference.`
+      };
+    }
+
+    return {
+      status: "oom_risk",
+      badgeText: "🔴 Exceeds Memory (OOM Risk)",
+      badgeStyle: {
+        background: "rgba(248, 113, 113, 0.15)",
+        border: "1px solid rgba(248, 113, 113, 0.5)",
+        color: "#f87171",
+        padding: "6px 14px",
+        borderRadius: "6px",
+        fontWeight: "600",
+        fontSize: "0.82rem",
+        display: "inline-flex",
+        alignItems: "center"
+      },
+      description: `Requires ~${totalRequired.toFixed(1)} GB (model + context overhead), exceeding system capacity (${totalMem.toFixed(1)} GB). Risk of OOM.`
+    };
   };
 
   const fetchRoles = async () => {
@@ -329,14 +409,19 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                               fontSize: "0.85rem"
                             }}
                           >
-                            {filesList.map((f, idx) => (
-                              <option key={f.filename} value={idx}>
-                                GGUF {selectedRepo.model_name || currentRepoId.split("/").pop()} ({f.quant}) — {f.size_gb} GB
-                              </option>
-                            ))}
+                            {filesList.map((f, idx) => {
+                              const fFit = calculateVramFit(f.size_gb);
+                              const icon = fFit.status === "vram_safe" ? "🟢" : fFit.status === "ram_fit" ? "🟡" : "🔴";
+                              const label = fFit.status === "vram_safe" ? "VRAM Safe" : fFit.status === "ram_fit" ? "RAM Fit" : "OOM Risk";
+                              return (
+                                <option key={f.filename} value={idx}>
+                                  {icon} GGUF {selectedRepo.model_name || currentRepoId.split("/").pop()} ({f.quant}) — {f.size_gb} GB ({label})
+                                </option>
+                              );
+                            })}
                           </select>
 
-                          {/* Live Download Progress Bar or Download CTA Button */}
+                          {/* Live Download Progress Bar or Dynamic Fit Evaluation CTA */}
                           {!currentModelStatus?.downloaded && currentModelStatus?.progress && currentModelStatus.progress.status === "downloading" ? (
                             <div style={{ background: "rgba(0,0,0,0.4)", padding: "14px", borderRadius: "12px", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
@@ -376,27 +461,39 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                                 <span>Total: {currentFile?.size_gb || currentModelStatus.progress.total_gb || "?"} GB</span>
                               </div>
                             </div>
-                          ) : (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span className="lmstudio-fit-badge">
-                                ✓ Likely Fit (VRAM Safe)
-                              </span>
-
-                              {currentModelStatus?.downloaded ? (
-                                <div style={{ background: "rgba(52, 211, 153, 0.15)", border: "1px solid #34d399", color: "#34d399", padding: "8px 18px", borderRadius: "8px", fontWeight: "600", fontSize: "0.88rem" }}>
-                                  ✅ Downloaded & Ready in Library ({currentFile?.size_gb || currentModelStatus.size} GB)
+                          ) : (() => {
+                            const currentFit = calculateVramFit(currentFile?.size_gb);
+                            return (
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                  <span style={currentFit.badgeStyle}>
+                                    {currentFit.badgeText}
+                                  </span>
+                                  <span style={{ fontSize: "0.74rem", color: "#94a3b8", maxWidth: "340px" }}>
+                                    {currentFit.description}
+                                  </span>
                                 </div>
-                              ) : (
-                                <button
-                                  className="hub-save-btn"
-                                  onClick={handleDownloadSelectedQuant}
-                                  style={{ background: "linear-gradient(135deg, #4f46e5, #6366f1)", padding: "10px 24px", fontSize: "0.92rem" }}
-                                >
-                                  📥 Download {currentFile ? `${currentFile.size_gb} GB` : ""}
-                                </button>
-                              )}
-                            </div>
-                          )}
+
+                                {currentModelStatus?.downloaded ? (
+                                  <div style={{ background: "rgba(52, 211, 153, 0.15)", border: "1px solid #34d399", color: "#34d399", padding: "8px 18px", borderRadius: "8px", fontWeight: "600", fontSize: "0.88rem" }}>
+                                    ✅ Downloaded & Ready in Library ({currentFile?.size_gb || currentModelStatus.size} GB)
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="hub-save-btn"
+                                    onClick={handleDownloadSelectedQuant}
+                                    style={{
+                                      background: currentFit.status === "oom_risk" ? "linear-gradient(135deg, #b91c1c, #dc2626)" : "linear-gradient(135deg, #4f46e5, #6366f1)",
+                                      padding: "10px 24px",
+                                      fontSize: "0.92rem"
+                                    }}
+                                  >
+                                    {currentFit.status === "oom_risk" ? "⚠️ Download Anyway" : "📥 Download"} {currentFile ? `${currentFile.size_gb} GB` : ""}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <div style={{ color: "#fbbf24", fontSize: "0.85rem" }}>
