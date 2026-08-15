@@ -5,6 +5,7 @@ import json
 import time
 import shutil
 import uuid
+import subprocess
 try:
     import psutil
 except ImportError:
