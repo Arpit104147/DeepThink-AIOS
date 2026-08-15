@@ -13,6 +13,10 @@ from typing import Dict, List, Any, Optional
 from backend.benchmarks.datasets import MOCK_PROBLEMS, COMPARISON_BASELINES, fetch_real_dataset
 from backend.benchmarks.evaluators import evaluate_problem_solution
 
+import json
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 def get_default_worker_count() -> int:
     try:
         import torch
@@ -52,6 +56,43 @@ BENCHMARK_STATE = {
 }
 
 STATE_LOCK = threading.Lock()
+
+def _save_benchmark_history_to_disk():
+    """Saves current benchmark history and logs to outputs/benchmark_results.json."""
+    try:
+        output_dir = os.path.join(PROJECT_ROOT, "outputs")
+        os.makedirs(output_dir, exist_ok=True)
+        file_path = os.path.join(output_dir, "benchmark_results.json")
+        
+        with STATE_LOCK:
+            data_to_save = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "history": dict(BENCHMARK_STATE.get("history", {})),
+                "logs": list(BENCHMARK_STATE.get("logs", []))[-200:]
+            }
+            
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data_to_save, f, indent=2)
+            
+    except Exception as e:
+        print(f"⚠️ Failed to save benchmark results to disk: {e}")
+
+def _load_benchmark_history_from_disk():
+    """Loads previous benchmark history from outputs/benchmark_results.json on startup."""
+    try:
+        file_path = os.path.join(PROJECT_ROOT, "outputs", "benchmark_results.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and "history" in data:
+                    with STATE_LOCK:
+                        BENCHMARK_STATE["history"] = data["history"]
+                    print(f"💾 Loaded {len(data['history'])} benchmark suite results from disk ({file_path})")
+    except Exception as e:
+        print(f"⚠️ Failed to load benchmark history from disk: {e}")
+
+# Load previous history on startup
+_load_benchmark_history_from_disk()
 
 def update_state(key: str, value: Any):
     """Thread-safe state update helper."""
@@ -200,6 +241,7 @@ async def run_all_benchmark_suites(orchestrator: Any = None):
     with STATE_LOCK:
         BENCHMARK_STATE["active"] = False
         add_log("🎉 ALL Benchmark Suites Completed! All category results stored in history.")
+    _save_benchmark_history_to_disk()
 
 async def _run_single_suite(category: str, orchestrator: Any = None):
     """Internal helper to execute a single benchmark suite."""
@@ -276,6 +318,8 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
         add_log(f"🎉 Benchmark suite {category} completed in {total_time}s! Final Accuracy: {final_acc}%")
     else:
         add_log(f"⏹️ Benchmark suite {category} stopped by user at {total_time}s. Accuracy: {final_acc}%")
+
+    _save_benchmark_history_to_disk()
 
 async def run_benchmark_suite(category: str, orchestrator: Any = None):
     """Executes the benchmark evaluation loop for single or all suites."""
