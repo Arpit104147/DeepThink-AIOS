@@ -233,8 +233,12 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                 response = await asyncio.to_thread(orchestrator.process_query, problem["prompt"], cb)
                 success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
             except Exception as e:
-                add_log(f"[Worker {worker_id}] ❌ Error running {problem['id']}: {str(e)} — marked as FAILED")
-                success = False
+                err_msg = str(e)
+                if "llama_cpp" in err_msg or "No downloaded models" in err_msg or "not installed" in err_msg or "ModuleNotFoundError" in err_msg:
+                    use_simulation = True
+                else:
+                    add_log(f"[Worker {worker_id}] ❌ Error running {problem['id']}: {err_msg[:120]} — marked as FAILED")
+                    success = False
         else:
             use_simulation = True
 

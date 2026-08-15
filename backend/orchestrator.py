@@ -1403,7 +1403,10 @@ class AgentOrchestrator:
         
         # ── GGUF Models (llama_cpp) ──────────────────────────────────────
         if model_path.endswith('.gguf'):
-            from llama_cpp import Llama
+            try:
+                from llama_cpp import Llama
+            except ImportError:
+                raise RuntimeError("`llama-cpp-python` is not installed in the python environment. Please run `pip install llama-cpp-python`.")
             
             loading_on_cpu = (self.device_mode == "cpu" or force_cpu)
             
