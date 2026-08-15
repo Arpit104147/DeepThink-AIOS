@@ -2597,8 +2597,8 @@ class AgentOrchestrator:
         
         # ── HARD FINAL CLAMP — guarantees prompt + gen_tokens ≤ n_ctx ──
         safe_max = ctx - est_prompt_tokens
-        if safe_max < 64:
-            safe_max = 64  # Desperate fallback — at least try to get something
+        if safe_max < 512:
+            safe_max = 512  # Headroom fallback — ensure enough tokens for code completion
         max_tokens = min(max_tokens, safe_max)
 
         messages = []
