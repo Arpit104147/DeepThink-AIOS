@@ -1,0 +1,73 @@
+import re
+
+class TaskRouter:
+    """Helper module for intent classification, prompt routing heuristics,
+    and prediction guards."""
+
+    @staticmethod
+    def classify_task(orchestrator, router_llm, prompt):
+        """Classify user query into task types using Phi-3.5 or prompt heuristics."""
+        prompt_lower = prompt.lower()
+        
+        # Explicit prediction check
+        is_explicit_prediction = any(kw in prompt_lower for kw in [
+            "predict ", "predict\n", "prediction", "forecast", "regression model",
+            "run prediction", "predictive model", "build prediction"
+        ]) and not ("transcribed image" in prompt_lower or "pdf document" in prompt_lower)
+
+        if is_explicit_prediction:
+            return "PREDICTION"
+
+        p = (
+            "Classify this user request into ONE of the following 6 categories:\n"
+            "1. CODING: Request for writing, modifying, debugging, or optimizing code (Python, C, C++, Verilog, Web, etc.).\n"
+            "2. REASONING: Step-by-step logic, math proofs, physics derivations, or complex multi-step reasoning.\n"
+            "3. PREDICTION: Data science forecasting, machine learning regression, or predictive statistical models.\n"
+            "4. EXTREME_WEBSEARCH: Requests explicitly asking for deep internet research, recent news, or live web data.\n"
+            "5. CHIP_DESIGN: Verilog HDL module design, SPICE circuit simulation, or semiconductor chip layouts.\n"
+            "6. SIMPLE: General questions, direct answers, summaries, image/document explanations, or conversation.\n\n"
+            "Reply ONLY with ONE category word (CODING, REASONING, PREDICTION, EXTREME_WEBSEARCH, CHIP_DESIGN, or SIMPLE).\n\n"
+            f"User Request: {prompt[:500]}"
+        )
+        try:
+            res = orchestrator._call_model(router_llm, p, max_tokens=15, temperature=0.1).strip().upper()
+            res = orchestrator._strip_thinking(res)
+            for cat in ["CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN", "SIMPLE"]:
+                if cat in res:
+                    return cat
+        except Exception:
+            pass
+
+        return "SIMPLE"
+
+    @staticmethod
+    def is_playground_applicable(orchestrator, router_llm, prompt):
+        """Check if reasoning can be verified via Python sandbox."""
+        if not orchestrator._is_model_valid(router_llm):
+            router_llm = orchestrator._get_model("router", required_ctx=1024)
+        auto_keywords = [
+            "solve_ivp", "scipy", "sympy", "z3-solver", "networkx", "astropy", "biopython", "rdkit",
+            "verification script", "run playground", "sandbox verification"
+        ]
+        prompt_lower = prompt.lower()
+        if any(kw in prompt_lower for kw in auto_keywords):
+            return True
+
+        p = (
+            "Determine if this request can be numerically verified or proven using a short Python validation script.\n"
+            "Return YES if: It involves computing a specific value, simulating a differential equation (like ODEs/trajectory with numbers), "
+            "solving constraints (SAT/Z3), verifying encryption/decryption roundtrips, or testing a specific algorithm's logic.\n"
+            "Return NO if: It is a request for general explanations, derivations (like Euler-Lagrange, mathematical proofs), "
+            "conceptual descriptions, or open-ended theoretical physics/math questions without concrete inputs/assertions.\n\n"
+            "Reply ONLY 'YES' or 'NO'.\n\n"
+            f"Query: {prompt[:500]}"
+        )
+        result = orchestrator._call_model(router_llm, p, max_tokens=10, temperature=0.1)
+        return "YES" in str(result).upper()
+
+    @staticmethod
+    def looks_numeric_problem(prompt):
+        """Heuristic to decide if prompt is a math/arithmetic problem."""
+        prompt_lower = prompt.lower()
+        math_keywords = ["solve", "calculate", "find the", "compute", "integral", "derivative", "probability", "equation"]
+        return any(kw in prompt_lower for kw in math_keywords)
