@@ -280,7 +280,7 @@ def cancel_model_download(model_key):
     return False
 
 def check_models_status():
-    """Check which models are downloaded and ready."""
+    """Check which models are downloaded and ready, including vision projector (mmproj) state."""
     auto_discover_local_gguf_models()
     status = {}
     for key, definition in MODEL_DEFINITIONS.items():
@@ -293,6 +293,10 @@ def check_models_status():
             except Exception:
                 total_size = 0
 
+        is_vision = (key == "qwen_vl" or "mmproj_filename" in definition or definition.get("type") == "image_to_text")
+        mmproj_file = definition.get("mmproj_filename") or ("mmproj-BF16.gguf" if is_vision else None)
+        has_mmproj = _DISCOVERY_CACHE.get("has_mmproj", False) if is_vision else False
+
         prog_info = None
         if not all_downloaded:
             prog_info = DOWNLOAD_PROGRESS.get(key, None)
@@ -304,7 +308,10 @@ def check_models_status():
             "downloaded": all_downloaded,
             "path": first_path if all_downloaded else None,
             "size": f"{total_size / (1024**3):.2f} GB" if all_downloaded else "N/A",
-            "progress": prog_info
+            "progress": prog_info,
+            "is_vision": is_vision,
+            "mmproj_filename": mmproj_file,
+            "has_mmproj": has_mmproj
         }
     return status
 

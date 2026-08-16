@@ -392,6 +392,12 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                           <span>⭐ {selectedRepo.likes || repoDetails?.likes || 0} likes</span>
                           <span style={{ color: "#a855f7" }}>FORMAT: GGUF</span>
                         </div>
+                        {currentKeyClean === "qwen_vl" && (
+                          <div style={{ marginTop: "6px", fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "rgba(168, 85, 247, 0.15)", border: "1px solid rgba(168, 85, 247, 0.35)", color: "#c084fc", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <span>👁️ Multimodal Vision Model</span>
+                            <span style={{ color: "#e9d5ff" }}>— Automatically downloads 2 files (Main GGUF + mmproj-BF16.gguf Projector)</span>
+                          </div>
+                        )}
                       </div>
                       <a
                         href={`https://huggingface.co/${currentRepoId}`}
@@ -443,7 +449,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                             <div style={{ background: "rgba(0,0,0,0.4)", padding: "14px", borderRadius: "12px", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                 <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "#818cf8" }}>
-                                  🚀 Downloading {currentFile?.quant}... {currentModelStatus.progress.percent}%
+                                  🚀 Downloading {currentKeyClean === "qwen_vl" ? "Qwen 2.5-VL + mmproj Vision Projector" : currentFile?.quant}... {currentModelStatus.progress.percent}%
                                 </div>
                                 <button
                                   onClick={() => handleCancelDownload(currentKeyClean)}
@@ -651,6 +657,14 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                           )}
                         </div>
                       </div>
+
+                      {/* Vision Projector mmproj Status Banner */}
+                      {info.is_vision && (
+                        <div style={{ fontSize: "0.75rem", padding: "6px 10px", borderRadius: "6px", background: info.has_mmproj ? "rgba(52, 211, 153, 0.08)" : "rgba(251, 191, 36, 0.1)", border: info.has_mmproj ? "1px solid rgba(52, 211, 153, 0.25)" : "1px solid rgba(251, 191, 36, 0.3)", color: info.has_mmproj ? "#34d399" : "#fbbf24", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span>👁️ Vision Projector (mmproj): <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 5px", borderRadius: "4px" }}>{info.mmproj_filename || "mmproj-BF16.gguf"}</code></span>
+                          <span>{info.has_mmproj ? "✅ Projector Ready" : "⚠️ Projector Missing (Vision requires mmproj)"}</span>
+                        </div>
+                      )}
 
                       {/* Progress Bar in Local Models list (ONLY when downloading) */}
                       {!info.downloaded && info.progress && info.progress.status === "downloading" && (
