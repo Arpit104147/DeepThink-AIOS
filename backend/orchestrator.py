@@ -1827,6 +1827,23 @@ class AgentOrchestrator:
         if not data_url or not raw_bytes:
             return "Error: Could not process file data."
 
+        # ── Step 1A: PIL Image Normalization (Convert RGBA/PNG/WEBP to Clean RGB JPEG, Max 1024x1024) ──
+        if raw_bytes and not is_pdf and not raw_bytes.startswith(b"%PDF"):
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(raw_bytes))
+                img = img.convert("RGB")
+                img.thumbnail((1024, 1024), getattr(Image, 'Resampling', Image).LANCZOS)
+                
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=95)
+                norm_bytes = buf.getvalue()
+                norm_b64 = base64.b64encode(norm_bytes).decode("utf-8")
+                data_url = f"data:image/jpeg;base64,{norm_b64}"
+                raw_bytes = norm_bytes
+            except Exception as e_pil:
+                print(f"⚠️ PIL image normalization failed: {e_pil}")
+
         # ── Step 1B: PDF Parsing Engine ──
         if is_pdf or (raw_bytes and raw_bytes.startswith(b"%PDF")):
             if status_callback:
