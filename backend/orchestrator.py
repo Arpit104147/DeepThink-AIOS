@@ -1645,9 +1645,10 @@ class AgentOrchestrator:
 
                     if chat_handler_instance:
                         kwargs["chat_handler"] = chat_handler_instance
-                        print(f"👁️ Loaded vision chat handler ({chat_handler_instance.__class__.__name__}) with mmproj: {mmproj_path}")
+                        kwargs["clip_model_path"] = mmproj_path
+                        print(f"👁️ Loaded vision chat handler ({chat_handler_instance.__class__.__name__}) + C++ CLIP projector with mmproj: {mmproj_path}")
                 else:
-                    print(f"⚠️ No mmproj GGUF projector file found in {search_dirs}. Qwen2.5-VL requires mmproj file for vision.")
+                    print(f"⚠️ No mmproj GGUF projector file found in {search_dirs}. Qwen2.5-VL/Qwen3-VL requires mmproj file for vision.")
 
             # Dual-GPU
             if self.dual_gpu_pipeline and not loading_on_cpu:
@@ -4578,16 +4579,20 @@ class AgentOrchestrator:
             "train test split", "mean squared error", "r-squared", "r2 score"
         ])
         
-        if isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
+        has_image_or_doc = "[Transcribed Image Content" in prompt or "[Uploaded PDF Document Content" in prompt
+
+        if has_image_or_doc and (not isinstance(mode, str) or mode.lower() == "auto"):
+            task_type = "SIMPLE"
+        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
             task_type = mode.upper()
         else:
-            if is_predictive:
+            if is_predictive and not has_image_or_doc:
                 task_type = "PREDICTION"
             else:
                 task_type = self._classify_task(router_llm, prompt)
             
         # ── Search Mode Overrides ─────────────────────────────────────────
-        if active_web_search and (not isinstance(mode, str) or mode.lower() == "auto"):
+        if active_web_search and (not isinstance(mode, str) or mode.lower() == "auto") and not has_image_or_doc:
             if self.search_mode == "prediction" or is_predictive:
                 task_type = "PREDICTION"
                 # Prediction tasks with web search produce massive enriched prompts.
