@@ -1789,37 +1789,101 @@ class AgentOrchestrator:
         data_url = None
         raw_bytes = None
         
-        # ── Step 1: Decode & Normalize image data ──
+        # ── Step 1: Decode & Normalize input data (Image or PDF) ──
         if isinstance(image_input, str):
             if image_input.startswith("data:"):
                 data_url = image_input
+                if "application/pdf" in image_input:
+                    is_pdf = True
                 try:
                     header, b64data = image_input.split(",", 1)
                     raw_bytes = base64.b64decode(b64data)
                 except Exception:
                     pass
             elif os.path.isfile(image_input):
+                if image_input.lower().endswith(".pdf"):
+                    is_pdf = True
                 try:
                     with open(image_input, "rb") as f:
                         raw_bytes = f.read()
                         img_b64 = base64.b64encode(raw_bytes).decode("utf-8")
-                    ext = os.path.splitext(image_input)[1].lower().replace(".", "")
-                    mime = "image/jpeg"
-                    if ext in ["png", "webp", "gif"]:
-                        mime = f"image/{ext}"
+                    mime = "application/pdf" if is_pdf else "image/jpeg"
                     data_url = f"data:{mime};base64,{img_b64}"
                 except Exception as e:
-                    return f"Error reading image file: {e}"
+                    return f"Error reading file: {e}"
             else:
                 # Raw base64 string without data: prefix
                 try:
                     raw_bytes = base64.b64decode(image_input)
-                    data_url = f"data:image/jpeg;base64,{image_input}"
+                    if raw_bytes.startswith(b"%PDF"):
+                        is_pdf = True
+                        data_url = f"data:application/pdf;base64,{image_input}"
+                    else:
+                        data_url = f"data:image/jpeg;base64,{image_input}"
                 except Exception:
-                    return "Error: Invalid image data."
+                    return "Error: Invalid file or image data."
 
-        if not data_url:
-            return "Error: Could not process image data."
+        if not data_url or not raw_bytes:
+            return "Error: Could not process file data."
+
+        # ── Step 1B: PDF Parsing Engine ──
+        if is_pdf or (raw_bytes and raw_bytes.startswith(b"%PDF")):
+            if status_callback:
+                status_callback("📄 Extracting text and pages from PDF document...", "info", "pdf_parser", 10)
+            
+            pdf_text_content = ""
+            
+            # Method 1: pypdf / PyPDF2 / fitz (PyMuPDF)
+            try:
+                import pypdf
+                reader = pypdf.PdfReader(io.BytesIO(raw_bytes))
+                pages_text = []
+                for i, page in enumerate(reader.pages):
+                    txt = page.extract_text()
+                    if txt and txt.strip():
+                        pages_text.append(f"--- Page {i+1} ---\n{txt.strip()}")
+                if pages_text:
+                    pdf_text_content = "\n\n".join(pages_text)
+            except Exception:
+                try:
+                    import PyPDF2
+                    reader = PyPDF2.PdfReader(io.BytesIO(raw_bytes))
+                    pages_text = []
+                    for i, page in enumerate(reader.pages):
+                        txt = page.extract_text()
+                        if txt and txt.strip():
+                            pages_text.append(f"--- Page {i+1} ---\n{txt.strip()}")
+                    if pages_text:
+                        pdf_text_content = "\n\n".join(pages_text)
+                except Exception:
+                    try:
+                        import fitz  # PyMuPDF
+                        doc = fitz.open(stream=raw_bytes, filetype="pdf")
+                        pages_text = []
+                        for i, page in enumerate(doc):
+                            txt = page.get_text()
+                            if txt and txt.strip():
+                                pages_text.append(f"--- Page {i+1} ---\n{txt.strip()}")
+                        if pages_text:
+                            pdf_text_content = "\n\n".join(pages_text)
+                    except Exception:
+                        pass
+
+            # Method 2: Native Python PDF Stream / Regex Text Extractor (Fallback if no PDF packages installed)
+            if not pdf_text_content:
+                try:
+                    text_blocks = re.findall(r'\((.*?)\)', raw_bytes.decode('latin-1', errors='ignore'))
+                    cleaned_texts = [b.strip() for b in text_blocks if len(b.strip()) > 3 and not b.startswith('/') and not b.startswith('Font')]
+                    if cleaned_texts:
+                        pdf_text_content = "Extracted PDF Text Stream:\n" + "\n".join(cleaned_texts[:120])
+                except Exception:
+                    pass
+
+            if pdf_text_content:
+                print(f"📄 Successfully extracted {len(pdf_text_content)} chars from PDF document.")
+                return f"📄 Extracted PDF Document Content:\n\n{pdf_text_content}"
+            else:
+                return "⚠️ PDF document attached, but no readable text stream could be extracted. The PDF may consist of scanned image pages."
 
         # ── Step 2: Attempt Python OCR (Tesseract / EasyOCR / PIL) first if available ──
         ocr_extracted_text = ""

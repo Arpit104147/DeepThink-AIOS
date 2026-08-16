@@ -62,7 +62,7 @@ const InputArea = ({
       {/* Hidden file input permanently mounted in DOM so onChange never gets lost */}
       <input
         type="file"
-        accept="image/*"
+        accept="image/*,.pdf,application/pdf"
         ref={fileInputRef}
         style={{ display: "none" }}
         onChange={handleFileUpload}
@@ -71,12 +71,18 @@ const InputArea = ({
       <div className="input-wrapper">
         {attachedImage && (
           <span className="image-badge">
-            <img src={attachedImage} alt="Attached" className="image-badge-preview" />
-            <span className="image-badge-text">Image attached</span>
+            {attachedImage.includes("application/pdf") ? (
+              <span style={{ fontSize: "1.1rem" }}>📄</span>
+            ) : (
+              <img src={attachedImage} alt="Attached" className="image-badge-preview" />
+            )}
+            <span className="image-badge-text">
+              {attachedImage.includes("application/pdf") ? "PDF Document attached" : "Image attached"}
+            </span>
             <button
               onClick={() => setAttachedImage(null)}
               className="image-badge-remove"
-              title="Remove image"
+              title="Remove attachment"
             >
               ✕
             </button>

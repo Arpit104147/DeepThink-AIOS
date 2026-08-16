@@ -608,13 +608,20 @@ async def chat(request: ChatRequest):
                                 q.put(None)
                                 return
 
-                            final_prompt = (
-                                f"[Transcribed Image Content via Qwen 2.5-VL 7B]:\n"
-                                f"{ocr_text}\n\n"
-                                f"User Prompt: {request.prompt}"
-                            )
+                            if isinstance(ocr_text, str) and ocr_text.startswith("📄 Extracted PDF"):
+                                final_prompt = (
+                                    f"[Uploaded PDF Document Content]:\n"
+                                    f"{ocr_text}\n\n"
+                                    f"User Question:\n{request.prompt}"
+                                )
+                            else:
+                                final_prompt = (
+                                    f"[Transcribed Image Content via Qwen 2.5-VL 7B]:\n"
+                                    f"{ocr_text}\n\n"
+                                    f"User Prompt: {request.prompt}"
+                                )
                         except Exception as ex:
-                            thread_cb(f"Vision transcription failed: {str(ex)}. Proceeding with prompt only.", "warning")
+                            thread_cb(f"File transcription failed: {str(ex)}. Proceeding with prompt only.", "warning")
                     
                     if generation_cancel.is_set():
                         q.put({"type": "error", "message": "Generation cancelled."})
