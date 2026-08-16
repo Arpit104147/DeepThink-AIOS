@@ -1177,41 +1177,54 @@ html, body {
   line-height: 1.7;
 }
 
+.md-content h1,
+.md-content h2,
+.md-content h3,
+.md-content h4,
 .md-h1,
 .md-h2,
 .md-h3,
 .md-h4,
 .md-h5 {
   color: #ffffff;
-  font-weight: 600;
-  margin: 18px 0 10px;
+  font-weight: 700;
+  margin: 22px 0 12px;
   letter-spacing: -0.01em;
 }
 
+.md-content h1,
 .md-h1 {
-  font-size: 1.5rem;
+  font-size: 1.65rem;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
+  padding-bottom: 8px;
+  color: #60a5fa;
 }
 
+.md-content h2,
 .md-h2 {
-  font-size: 1.3rem;
+  font-size: 1.45rem;
+  color: #93c5fd;
 }
 
+.md-content h3,
 .md-h3 {
-  font-size: 1.125rem;
+  font-size: 1.3rem;
+  color: #f3f4f6;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 4px;
 }
 
+.md-content h4,
 .md-h4 {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 600;
-  color: #e0e0e0;
+  color: #e5e7eb;
 }
 
 .md-h5 {
-  font-size: 0.925rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: #c0c0c0;
+  color: #d1d5db;
 }
 
 .md-p {

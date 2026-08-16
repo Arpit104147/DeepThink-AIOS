@@ -127,15 +127,15 @@ class ChipDesignPipeline:
             viz_html = f"<!--ARTIFACT_HTML-->\n{html_extract}\n<!--/ARTIFACT_HTML-->"
 
         output_parts = [
-            f"🏗️ Stage 1: Architecture Decomposition\n\n{arch_plan}\n\n",
-            f"⚡ Stage 2: HDL Design\n\n```verilog\n{hdl_clean}\n```\n\n"
+            f"### 🏗️ Stage 1: Architecture Decomposition\n\n{arch_plan}\n\n",
+            f"### ⚡ Stage 2: HDL Design\n\n```verilog\n{hdl_clean}\n```\n\n"
         ]
 
         if viz_html:
-            output_parts.append(f"🔬 Stage 3: 3D Chip Architecture Visualization\n\n{viz_html}")
+            output_parts.append(f"### 🔬 Stage 3: 3D Chip Architecture Visualization\n\n{viz_html}")
 
         if not eda_tools['iverilog']:
-            output_parts.append("\n\n📦 Missing EDA Tools\n```bash\nsudo apt-get install -y iverilog yosys ngspice\n```")
+            output_parts.append("\n\n### 📦 Missing EDA Tools\n```bash\nsudo apt-get install -y iverilog yosys ngspice\n```")
 
         if status_callback:
             status_callback("✅ Chip Design Pipeline complete!", "success", "system", 100)

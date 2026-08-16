@@ -21,7 +21,7 @@ class ReasoningPipeline:
             )
             raw = orchestrator._call_model(ds_llm, theory_p, gen_tokens, gen_temp)
             cleaned = orchestrator._strip_thinking(raw)
-            return f"Verified Answer\n\n{cleaned}"
+            return f"### ⚡ Theoretical Derivation & Proof\n\n{cleaned}"
 
         # PAL Playground verification mode
         if status_callback:
@@ -42,4 +42,4 @@ class ReasoningPipeline:
         )
         final_answer = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, synth_p, gen_tokens, gen_temp))
 
-        return f"Verified Answer\n\n{final_answer}"
+        return f"### 🧠 Verified Mathematical Solution (PAL)\n\n{final_answer}"

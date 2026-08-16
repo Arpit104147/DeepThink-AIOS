@@ -358,7 +358,7 @@ class AgentOrchestrator:
                     output = new_output
             except Exception:
                 pass
-        return f"💡 Logic & Architectural Plan\n\n{compiled_plan}\n\n⚙️ Sandbox Execution Output\n```\n{output[:3000]}\n```\n\n💻 Verified Working Code\n\n```{req_lang}\n{code}\n```"
+        return f"### 💡 Logic & Architectural Plan\n\n{compiled_plan}\n\n### ⚙️ Sandbox Execution Output\n```\n{output[:3000]}\n```\n\n### 💻 Verified Working Code\n\n```{req_lang}\n{code}\n```"
 
     def _generate_3d_visualization(self, prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback=None):
         viz_prompt = (
@@ -414,7 +414,7 @@ class AgentOrchestrator:
             f"5. Do NOT state 'knowledge cutoff is January 2025' as you have live web context."
         )
         res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=2048, temperature=0.3))
-        return f"🔬 Extreme Web Search & Technical Survey\n\n{res}"
+        return f"### 🔬 Extreme Web Search & Technical Survey\n\n{res}"
 
     # ── Multimodal Vision Engine Entrypoint ────────────────────────────────
     def transcribe_image(self, image_input, user_prompt=None, status_callback=None):
