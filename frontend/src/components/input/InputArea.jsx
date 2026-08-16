@@ -156,7 +156,7 @@ const InputArea = ({
           value={prompt}
           onChange={handleTextareaInput}
           onPaste={handlePaste}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(e); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
           disabled={isGenerating}
         />
 

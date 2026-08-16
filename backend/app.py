@@ -791,7 +791,7 @@ def free_port(port: int):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
     free_port(port)
     print(f"🚀 Starting FastAPI backend on http://0.0.0.0:{port}...")
     uvicorn.run(app, host="0.0.0.0", port=port)

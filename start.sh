@@ -12,18 +12,18 @@ export GGML_VK_VISIBLE_DEVICES=0
 
 # ── Step 1: Kill any stale processes by name & port ─────────────────────────
 echo "Stopping any previous instances..."
-fuser -k 8000/tcp 2>/dev/null
+fuser -k 8080/tcp 2>/dev/null
 fuser -k 5173/tcp 2>/dev/null
 pkill -9 -f "backend/app.py" 2>/dev/null
 pkill -9 -f "uvicorn" 2>/dev/null
 pkill -9 -f "vite" 2>/dev/null
 
 # ── Step 2: Wait until ports are actually free (up to 15s) ───────────────────
-echo "Waiting for ports 8000 and 5173 to be released..."
+echo "Waiting for ports 8080 and 5173 to be released..."
 for i in {1..15}; do
-    PORT_8000=$(ss -tlnp 2>/dev/null | grep ':8000' | wc -l)
+    PORT_8080=$(ss -tlnp 2>/dev/null | grep ':8080' | wc -l)
     PORT_5173=$(ss -tlnp 2>/dev/null | grep ':5173' | wc -l)
-    if [ "$PORT_8000" -eq 0 ] && [ "$PORT_5173" -eq 0 ]; then
+    if [ "$PORT_8080" -eq 0 ] && [ "$PORT_5173" -eq 0 ]; then
         echo "✅ Ports are free."
         break
     fi
@@ -36,13 +36,13 @@ echo "Launching FastAPI Backend..."
 venv/bin/python backend/app.py &
 BACKEND_PID=$!
 
-# ── Step 4: Wait until backend is actually listening on port 8000 ────────────
+# ── Step 4: Wait until backend is actually listening on port 8080 ────────────
 echo "Waiting for backend to initialize (model warm-up)..."
 BACKEND_OK=0
 for i in {1..60}; do
-    if ss -tlnp 2>/dev/null | grep -q ':8000'; then
+    if ss -tlnp 2>/dev/null | grep -q ':8080'; then
         BACKEND_OK=1
-        echo "✅ Backend is up on http://127.0.0.1:8000"
+        echo "✅ Backend is up on http://127.0.0.1:8080"
         break
     fi
     # Check if the process died
@@ -71,7 +71,7 @@ sleep 3
 echo "============================================="
 echo "🟢 Both servers are running!"
 echo "👉 Web UI URL:     http://localhost:5173"
-echo "👉 Backend API:    http://127.0.0.1:8000"
+echo "👉 Backend API:    http://127.0.0.1:8080"
 echo "Press Ctrl+C to stop both servers."
 echo "============================================="
 

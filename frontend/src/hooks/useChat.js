@@ -192,8 +192,10 @@ export function useChat({
       setCurrentStream("");
       setHistory((prev) => {
         const copy = [...prev];
-        const lastAi = [...copy].reverse().find((m) => m.type === "ai");
-        if (lastAi && (!lastAi.logs || lastAi.logs.length === 0)) lastAi.logs = currentLogsRef.current;
+        const idx = copy.findLastIndex((m) => m.type === "ai");
+        if (idx !== -1 && (!copy[idx].logs || copy[idx].logs.length === 0)) {
+          copy[idx] = { ...copy[idx], logs: currentLogsRef.current };
+        }
         return copy;
       });
       setCurrentLogs([]);
