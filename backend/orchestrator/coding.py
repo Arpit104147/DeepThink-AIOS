@@ -114,12 +114,20 @@ class CodingPipeline:
                     code_p = f"Implement a complete web application for this plan:\n{compiled_plan}\n\nWrap each file in <file path=\"...\">...</file> blocks."
                     sys_prompt = "You are an expert full-stack web developer."
                 else:
+                    c_header_rule = ""
+                    if req_lang == "c" or req_lang == "cpp":
+                        c_header_rule = (
+                            "STRICT C/C++ HEADER RULES:\n"
+                            "1. Use standard C11 <stdatomic.h> or GCC builtins (__atomic_compare_exchange_n) for atomic operations.\n"
+                            "2. NEVER include <atomic.h> because <atomic.h> DOES NOT EXIST in standard C/C++. Always use <stdatomic.h> and <pthread.h>.\n\n"
+                        )
                     code_p = (
                         f"Write a complete, fully working, self-contained {lang_name} program for this request:\n{prompt}\n\n"
+                        f"{c_header_rule}"
                         f"Plan:\n{compiled_plan}\n\n"
                         f"Write ONLY valid {lang_name} code inside ```{req_lang}``` blocks. Include main() with unit tests."
                     )
-                    sys_prompt = f"You are an expert {lang_name} systems engineer. Output ONLY code in ```{req_lang}``` blocks."
+                    sys_prompt = f"You are an expert {lang_name} systems engineer. Output ONLY code in ```{req_lang}``` blocks. {c_header_rule}"
 
                 raw_model_output = orchestrator._strip_thinking(orchestrator._call_model(oc_llm, code_p, gen_tokens, gen_temp, system_prompt=sys_prompt))
                 

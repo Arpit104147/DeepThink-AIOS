@@ -348,20 +348,56 @@ class AgentOrchestrator:
 
     def _generate_3d_visualization(self, prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback=None):
         viz_prompt = (
-            "Write a COMPLETE HTML page rendering an interactive 3D visualization using Three.js.\n\n"
+            "Write a COMPLETE HTML page rendering an interactive 3D visualization using Three.js or Plotly.js.\n\n"
             "RULES:\n"
             "1. Three.js r128 CDN: https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js\n"
             "2. OrbitControls CDN: https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js\n"
-            "3. Dark background #0d0d0d.\n"
-            "4. No ES6 imports. Use global THREE and THREE.OrbitControls.\n"
+            "3. Plotly CDN: https://cdn.plot.ly/plotly-2.24.1.min.js\n"
+            "4. Dark background #0d0d0d.\n"
+            "5. NO ES6 imports. Use global THREE or Plotly.\n"
+            "6. STRICT JS RULES: NEVER reference non-existent JavaScript classes (like PolynomialRidgeRegression, scikit-learn). Implement mathematical formulas in pure JavaScript loops or plot 3D surfaces/scatters with Plotly.newPlot.\n\n"
             f"Topic: {prompt}\n\n"
             "Output ONLY complete HTML in ```html``` blocks."
         )
         viz_resp = self._call_model(coder_llm, viz_prompt, max_tokens=2048, temperature=0.2)
         html_extract = Sandbox.extract_code(self._strip_thinking(viz_resp))
-        if html_extract and "THREE" in html_extract:
+        if html_extract and ("THREE" in html_extract or "Plotly" in html_extract or "<script" in html_extract):
             return f"<!--ARTIFACT_HTML-->\n{html_extract}\n<!--/ARTIFACT_HTML-->"
         return ""
+
+    def _extreme_websearch_pipeline(self, prompt, status_callback=None):
+        if status_callback:
+            status_callback("🔬 Extreme WebSearch: Scraping live web sources...", "info", "system", 20)
+        
+        search_res = self.web_search.search(prompt)
+        web_context = ""
+        if isinstance(search_res, list) and search_res:
+            formatted_sources = []
+            for idx, item in enumerate(search_res[:5]):
+                title = item.get("title", f"Source {idx+1}")
+                url = item.get("url", "")
+                snippet = item.get("snippet", "")
+                formatted_sources.append(f"[{idx+1}] {title}\nURL: {url}\nSummary: {snippet}")
+            web_context = "\n\n".join(formatted_sources)
+        elif isinstance(search_res, str):
+            web_context = search_res
+
+        if status_callback:
+            status_callback("🔬 Synthesizing research paper with DeepSeek-R1...", "info", "deepseek_r1", 60)
+
+        ds_llm = self._get_model("deepseek_r1", required_ctx=8192)
+        research_prompt = (
+            f"You are an expert principal AI research scientist.\n"
+            f"Synthesize a comprehensive, highly technical survey paper based on the following query and live web research context.\n\n"
+            f"USER QUERY: {prompt}\n\n"
+            f"LIVE WEB RESEARCH CONTEXT:\n{web_context}\n\n"
+            f"REQUIREMENTS:\n"
+            f"1. Include step-by-step technical analysis and comparative breakdown.\n"
+            f"2. Cite specific findings and metrics from the live search context.\n"
+            f"3. Do NOT say 'my knowledge cutoff is January 2025' because you are provided with live search context above."
+        )
+        res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=2048, temperature=0.3))
+        return f"🔬 Extreme Web Search & Technical Survey\n\n{res}"
 
     # ── Multimodal Vision Engine Entrypoint ────────────────────────────────
     def transcribe_image(self, image_input, user_prompt=None, status_callback=None):
@@ -398,6 +434,10 @@ class AgentOrchestrator:
 
         elif task_type == "CHIP_DESIGN":
             res = ChipDesignPipeline.execute(self, prompt, mode, selected_models, status_callback)
+            return self._clean_cutoff_notes(res)
+
+        elif task_type == "EXTREME_WEBSEARCH":
+            res = self._extreme_websearch_pipeline(prompt, status_callback)
             return self._clean_cutoff_notes(res)
 
         else:

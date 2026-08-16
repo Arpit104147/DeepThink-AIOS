@@ -54,16 +54,20 @@ class ChipDesignPipeline:
             )
         else:
             hdl_prompt = (
-                f"Write complete, production-grade Verilog-2001 code for this specification:\n{arch_plan[:2000]}\n\n"
+                f"Write complete, production-grade IEEE 1364-2001 Verilog code for this request:\n{prompt}\n\n"
+                f"Specification:\n{arch_plan[:1500]}\n\n"
                 f"REQUIREMENTS:\n"
-                f"1. Output TWO separate code blocks:\n"
+                f"1. Write standard IEEE 1364-2001 Verilog syntax: `module ModuleName(input clock, input reset, input load, input [3:0] bcd_in, output reg [3:0] bcd_out, output reg carry_out); always @(posedge clock or posedge reset) begin ... end endmodule`.\n"
+                f"2. NEVER output pseudo-code or non-Verilog keywords like 'initializes', 'uses', 'end if', 'end for'. Use standard Verilog `begin ... end`, `if ... else`, `case ... endcase`.\n"
+                f"3. Output TWO separate code blocks:\n"
                 f"   - Block 1: Design module in ```verilog```\n"
-                f"   - Block 2: Complete self-contained testbench with $dumpfile/$dumpvars in ```verilog```\n"
-                f"2. Use valid Verilog syntax (`always @(posedge clock) begin ... end`). Do NOT use C-style syntax."
+                f"   - Block 2: Complete self-contained testbench with $dumpfile/$dumpvars in ```verilog```"
             )
 
         hdl_resp = orchestrator._strip_thinking(orchestrator._call_model(coder_llm, hdl_prompt, gen_tokens, gen_temp))
         hdl_clean = Sandbox.extract_code(hdl_resp)
+        if not hdl_clean:
+            hdl_clean = hdl_resp
 
         # Stage 3: 3D Semiconductor Layout Rendering
         if status_callback:
@@ -87,15 +91,17 @@ class ChipDesignPipeline:
             "7. Ambient + directional lighting\n"
             "8. No ES6 imports. Use global THREE and THREE.OrbitControls.\n"
             "9. VARIABLE SCOPE SAFETY: Use 'let' or 'var' for geometry/material variables inside loops. NEVER redeclare 'const geometry' or 'const material' inside loops.\n\n"
-            f"Design Context:\n{arch_plan[:1000]}\n\n"
+            f"Design Context:\n{prompt}\n\n"
             "Output ONLY complete HTML in ```html``` blocks."
         )
 
         viz_resp = orchestrator._call_model(coder_llm, viz_prompt, max_tokens=2048, temperature=0.2)
         html_extract = Sandbox.extract_code(orchestrator._strip_thinking(viz_resp))
+        if not html_extract and ("<!DOCTYPE" in viz_resp or "<html" in viz_resp):
+            html_extract = viz_resp
 
         viz_html = ""
-        if html_extract and "THREE" in html_extract:
+        if html_extract:
             viz_html = f"<!--ARTIFACT_HTML-->\n{html_extract}\n<!--/ARTIFACT_HTML-->"
 
         output_parts = [
