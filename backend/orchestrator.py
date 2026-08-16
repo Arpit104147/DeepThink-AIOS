@@ -2606,8 +2606,11 @@ class AgentOrchestrator:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
+        # Check for cancellation before waiting for the lock
+        self._check_cancelled("llm:waiting_for_lock")
+        
         # Prevent concurrent C++ deadlocks in llama.cpp with non-blocking timeout safety
-        acquired = self.inference_lock.acquire(timeout=240.0)
+        acquired = self.inference_lock.acquire(timeout=185.0)
         if not acquired:
             raise RuntimeError("GPU Engine is blocked by another request. Aborting concurrent execution to prevent C++ deadlock.")
         try:

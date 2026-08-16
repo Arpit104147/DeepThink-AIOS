@@ -215,10 +215,25 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                             
                 try:
                     benchmark_mode = "CODING" if category in ["HumanEval", "MBPP", "SWE-bench"] else "REASONING" if category in ["GSM8K", "MATH"] else "auto"
-                    response = await asyncio.wait_for(
-                        asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
-                        timeout=180.0
-                    )
+                    
+                    # Create a per-problem cancel token so we can abort orphaned threads on timeout.
+                    # asyncio.wait_for CANNOT kill Python threads — when it times out, the thread
+                    # running process_query keeps going (holding the inference lock). By setting
+                    # this event, _check_cancelled() inside the thread will raise RuntimeError,
+                    # releasing the lock and letting the next problem proceed.
+                    import threading as _threading
+                    problem_cancel = _threading.Event()
+                    old_cancel = orchestrator.cancel_event
+                    orchestrator.cancel_event = problem_cancel
+                    
+                    try:
+                        response = await asyncio.wait_for(
+                            asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
+                            timeout=180.0
+                        )
+                    finally:
+                        orchestrator.cancel_event = old_cancel
+                    
                     with STATE_LOCK:
                         BENCHMARK_STATE["workers"][worker_id]["status"] = f"Evaluating {problem['id']}..."
                         BENCHMARK_STATE["workers"][worker_id]["progress"] = 98
@@ -227,9 +242,13 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                         BENCHMARK_STATE["workers"][worker_id]["status"] = f"Completed {problem['id']}"
                         BENCHMARK_STATE["workers"][worker_id]["progress"] = 100
                 except asyncio.TimeoutError:
+                    # Signal the orphaned background thread to abort immediately
+                    problem_cancel.set()
                     add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after 180s — moving to next problem")
                     success = False
                     generated_tokens = 50
+                    # Give the orphaned thread a moment to notice the cancel and release the lock
+                    await asyncio.sleep(2.0)
             except Exception as e:
                 err_msg = str(e)
                 if "llama_cpp" in err_msg or "No downloaded models" in err_msg or "not installed" in err_msg or "ModuleNotFoundError" in err_msg:
