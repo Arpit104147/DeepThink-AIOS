@@ -176,55 +176,69 @@ def get_model_filenames(definition):
         filenames.append(definition["mmproj_filename"])
     return filenames
 
-def auto_discover_local_gguf_models():
-    """Scans MODELS_DIR recursively for any .gguf files on disk and registers them into MODEL_DEFINITIONS."""
+_DISCOVERY_CACHE = {
+    "timestamp": 0,
+    "files_map": {},  # {filename_lower: full_filepath}
+    "has_mmproj": False
+}
+
+def auto_discover_local_gguf_models(force=False):
+    """Scans MODELS_DIR recursively in a single O(N) pass and caches file locations."""
+    now = time.time()
+    # Use cached disk map if scanned in the last 10 seconds (unless forced)
+    if not force and (now - _DISCOVERY_CACHE["timestamp"]) < 10.0 and _DISCOVERY_CACHE["files_map"]:
+        return
+
     if not os.path.exists(MODELS_DIR):
         return
 
+    files_map = {}
+    has_mmproj = False
+
     for root, dirs, files in os.walk(MODELS_DIR):
         for file in files:
-            if file.endswith(".gguf") and not file.endswith(".incomplete") and not file.startswith("mmproj"):
-                # Match existing definition
-                found = False
-                for k, d in MODEL_DEFINITIONS.items():
-                    if d.get("filename") == file:
-                        found = True
-                        break
-                if not found:
-                    folder_name = os.path.basename(root)
-                    key_name = re.sub(r'[^a-zA-Z0-9_]', '_', file.replace(".gguf", "")).lower()[:32]
-                    MODEL_DEFINITIONS[key_name] = {
-                        "repo_id": f"local/{folder_name}",
-                        "filename": file,
-                        "name": file.replace(".gguf", "").replace("-", " ").title(),
-                        "type": "text"
-                    }
+            file_lower = file.lower()
+            if file_lower.endswith(".gguf") and not file_lower.endswith(".incomplete"):
+                files_map[file_lower] = os.path.join(root, file)
+                if "mmproj" in file_lower:
+                    has_mmproj = True
+                
+                # Match existing definition or add new custom model definition
+                if not file_lower.startswith("mmproj"):
+                    found = False
+                    for k, d in MODEL_DEFINITIONS.items():
+                        if d.get("filename", "").lower() == file_lower:
+                            found = True
+                            break
+                    if not found:
+                        folder_name = os.path.basename(root)
+                        key_name = re.sub(r'[^a-zA-Z0-9_]', '_', file.replace(".gguf", "")).lower()[:32]
+                        MODEL_DEFINITIONS[key_name] = {
+                            "repo_id": f"local/{folder_name}",
+                            "filename": file,
+                            "name": file.replace(".gguf", "").replace("-", " ").title(),
+                            "type": "text",
+                            "is_custom": True
+                        }
+
+    _DISCOVERY_CACHE["timestamp"] = now
+    _DISCOVERY_CACHE["files_map"] = files_map
+    _DISCOVERY_CACHE["has_mmproj"] = has_mmproj
 
 def is_model_downloaded(model_key):
-    """Check if all files for a model key exist on disk (checking standard, flat, or recursive paths)."""
+    """Check if all required files for a model key exist on disk (instant O(1) cache lookup)."""
     auto_discover_local_gguf_models()
     if model_key not in MODEL_DEFINITIONS:
         return False
     definition = MODEL_DEFINITIONS[model_key]
-    
-    # Check if main model file exists anywhere in MODELS_DIR
-    main_found = False
-    for root, dirs, files in os.walk(MODELS_DIR):
-        if definition["filename"] in files:
-            main_found = True
-            break
-            
-    if not main_found:
+    target_file = definition.get("filename", "").lower()
+
+    if target_file not in _DISCOVERY_CACHE["files_map"]:
         return False
 
-    # For qwen_vl vision model, verify that at least one mmproj projector file exists
+    # For qwen_vl vision model, verify mmproj projector is also present
     if model_key == "qwen_vl":
-        mmproj_found = False
-        for root, dirs, files in os.walk(MODELS_DIR):
-            if any("mmproj" in f.lower() and f.endswith(".gguf") and not f.endswith(".incomplete") for f in files):
-                mmproj_found = True
-                break
-        return mmproj_found
+        return _DISCOVERY_CACHE["has_mmproj"]
 
     return True
 
@@ -238,38 +252,21 @@ def get_any_available_model_key():
     return None
 
 def get_model_path(model_key):
-    """Get the local path for a model key, finding it recursively if present."""
+    """Get the local path for a model key (instant O(1) cache lookup)."""
     auto_discover_local_gguf_models()
     if model_key not in MODEL_DEFINITIONS:
         raise ValueError(f"Unknown model key: {model_key}")
         
     definition = MODEL_DEFINITIONS[model_key]
+    target_file = definition.get("filename", "").lower()
+    
+    if target_file in _DISCOVERY_CACHE["files_map"]:
+        return _DISCOVERY_CACHE["files_map"][target_file]
+        
     subfolder = definition.get("type", "text")
     if "/" in subfolder:
         subfolder = subfolder.split("/")[-1]
-        
-    # Standard path
-    target_dir = os.path.join(MODELS_DIR, subfolder, model_key)
-    standard_path = os.path.join(target_dir, definition["filename"])
-    if os.path.exists(standard_path):
-        return standard_path
-
-    # Check if it exists in a flat structure (Kaggle datasets)
-    flat_path = os.path.join(MODELS_DIR, definition["filename"])
-    if os.path.exists(flat_path):
-        return flat_path
-
-    # Recursive disk search
-    for root, dirs, files in os.walk(MODELS_DIR):
-        if definition["filename"] in files:
-            return os.path.join(root, definition["filename"])
-
-    try:
-        os.makedirs(target_dir, exist_ok=True)
-    except OSError:
-        pass
-    
-    return standard_path
+    return os.path.join(MODELS_DIR, subfolder, model_key, definition["filename"])
 
 DOWNLOAD_PROGRESS = {}
 CANCEL_DOWNLOAD_EVENTS = {}

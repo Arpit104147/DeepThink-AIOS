@@ -180,7 +180,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
       if (searchResults.length === 0) {
         handleSearch("glm 4.7 flash");
       }
-      const interval = setInterval(fetchStatus, 1500);
+      const interval = setInterval(fetchStatus, 3000);
       return () => clearInterval(interval);
     }
   }, [open, serverUrl]);
