@@ -219,7 +219,13 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                         asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
                         timeout=180.0
                     )
+                    with STATE_LOCK:
+                        BENCHMARK_STATE["workers"][worker_id]["status"] = f"Evaluating {problem['id']}..."
+                        BENCHMARK_STATE["workers"][worker_id]["progress"] = 98
                     success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
+                    with STATE_LOCK:
+                        BENCHMARK_STATE["workers"][worker_id]["status"] = f"Completed {problem['id']}"
+                        BENCHMARK_STATE["workers"][worker_id]["progress"] = 100
                 except asyncio.TimeoutError:
                     add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after 180s — moving to next problem")
                     success = False
