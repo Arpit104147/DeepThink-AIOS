@@ -1608,25 +1608,30 @@ class AgentOrchestrator:
 
             if model_key == "qwen_vl":
                 model_dir = os.path.dirname(model_path)
-                mmproj_path = os.path.join(model_dir, "mmproj-BF16.gguf")
-                if os.path.exists(mmproj_path):
+                mmproj_path = None
+                from backend.downloader import MODELS_DIR
+                search_dirs = [model_dir, os.path.dirname(model_dir), MODELS_DIR]
+                for sdir in search_dirs:
+                    if os.path.exists(sdir):
+                        for root, dirs, files in os.walk(sdir):
+                            for fname in files:
+                                if "mmproj" in fname.lower() and fname.endswith(".gguf") and not fname.endswith(".incomplete"):
+                                    mmproj_path = os.path.join(root, fname)
+                                    break
+                            if mmproj_path:
+                                break
+                    if mmproj_path:
+                        break
+
+                if mmproj_path and os.path.exists(mmproj_path):
                     try:
                         from llama_cpp.llama_chat_format import Qwen25VLChatHandler
                         kwargs["chat_handler"] = Qwen25VLChatHandler(clip_model_path=mmproj_path)
                         print(f"👁️ Loaded Qwen2.5-VL chat handler with mmproj: {mmproj_path}")
                     except Exception as e:
-                        print(f"⚠️ Failed to load Qwen25VLChatHandler: {e}")
+                        print(f"⚠️ Failed to load Qwen25VLChatHandler with mmproj '{mmproj_path}': {e}")
                 else:
-                    mmproj_flat = os.path.join(os.path.dirname(model_dir), "mmproj-BF16.gguf")
-                    if os.path.exists(mmproj_flat):
-                        try:
-                            from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-                            kwargs["chat_handler"] = Qwen25VLChatHandler(clip_model_path=mmproj_flat)
-                            print(f"👁️ Loaded Qwen2.5-VL chat handler with mmproj: {mmproj_flat}")
-                        except Exception as e:
-                            print(f"⚠️ Failed to load Qwen25VLChatHandler: {e}")
-                    else:
-                        print(f"⚠️ mmproj file not found at {mmproj_path} or {mmproj_flat}. Vision features may fail.")
+                    print(f"⚠️ No mmproj GGUF projector file found in {search_dirs}. Qwen2.5-VL requires mmproj file for vision.")
 
             # Dual-GPU
             if self.dual_gpu_pipeline and not loading_on_cpu:

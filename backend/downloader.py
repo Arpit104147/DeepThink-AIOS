@@ -206,26 +206,27 @@ def is_model_downloaded(model_key):
     if model_key not in MODEL_DEFINITIONS:
         return False
     definition = MODEL_DEFINITIONS[model_key]
-    filenames = get_model_filenames(definition)
-    subfolder = definition.get("type", "text")
-    if "/" in subfolder:
-        subfolder = subfolder.split("/")[-1]
-    target_dir = os.path.join(MODELS_DIR, subfolder, model_key)
     
-    # Standard nested structure
-    if all(os.path.exists(os.path.join(target_dir, fname)) for fname in filenames):
-        return True
-        
-    # Flat structure
-    if all(os.path.exists(os.path.join(MODELS_DIR, fname)) for fname in filenames):
-        return True
-
-    # Recursive search anywhere in MODELS_DIR
+    # Check if main model file exists anywhere in MODELS_DIR
+    main_found = False
     for root, dirs, files in os.walk(MODELS_DIR):
-        if all(fname in files for fname in filenames):
-            return True
+        if definition["filename"] in files:
+            main_found = True
+            break
+            
+    if not main_found:
+        return False
 
-    return False
+    # For qwen_vl vision model, verify that at least one mmproj projector file exists
+    if model_key == "qwen_vl":
+        mmproj_found = False
+        for root, dirs, files in os.walk(MODELS_DIR):
+            if any("mmproj" in f.lower() and f.endswith(".gguf") and not f.endswith(".incomplete") for f in files):
+                mmproj_found = True
+                break
+        return mmproj_found
+
+    return True
 
 def get_any_available_model_key():
     """Find and return any model key that is currently downloaded on disk."""
