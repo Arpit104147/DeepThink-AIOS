@@ -2021,11 +2021,11 @@ class AgentOrchestrator:
             cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
         return cleaned.strip()
     def _strip_thinking(self, text):
-        """Remove thinking/reasoning blocks (<think>, <thought>, [THINKING]) from model output."""
+        """Remove thinking/reasoning blocks (<think>, <thought>, [THINKING]) from model output and deduplicate repetitive loops."""
         if not text:
             return text
 
-        # Handle standard tag pairs: <think>, <thought>, [THINKING]
+        # Handle standard tag pairs: <think>...</think>, <thought>...</thought>, [THINKING]...[/THINKING]
         tag_patterns = [
             (r'<think>.*?</think>', r'</?think>'),
             (r'<thought>.*?</thought>', r'</?thought>'),
@@ -2041,14 +2041,38 @@ class AgentOrchestrator:
                 else:
                     cleaned = re.sub(inline_pat, '', cleaned).strip()
 
-        # Handle unclosed tags
+        # Handle unclosed tags where model hit max tokens mid-thought
         for open_tag in ['<think>', '<thought>', '[THINKING]']:
-            if open_tag in cleaned and open_tag.replace('<', '</').replace('[', '[/') not in cleaned:
-                before_think, _ = cleaned.split(open_tag, 1)
-                if before_think.strip():
-                    cleaned = before_think.strip()
+            close_tag = open_tag.replace('<', '</').replace('[', '[/')
+            if open_tag in cleaned and close_tag not in cleaned:
+                parts = cleaned.split(open_tag, 1)
+                before_think = parts[0].strip()
+                after_think = parts[1].strip() if len(parts) > 1 else ""
+                
+                if before_think:
+                    cleaned = before_think
+                elif "\n\n" in after_think:
+                    # If model started with <think> and never closed it, look for text after initial thought paragraph
+                    paragraphs = [p.strip() for p in after_think.split("\n\n") if p.strip()]
+                    # Filter out paragraphs that look like internal self-monologue ("I need to", "I should", "Okay, so")
+                    content_paragraphs = [p for p in paragraphs if not p.lower().startswith(("okay,", "so,", "i need to", "i should", "first, i", "let's see", "i'll start"))]
+                    cleaned = "\n\n".join(content_paragraphs) if content_paragraphs else after_think
                 else:
-                    cleaned = cleaned.replace(open_tag, '').strip()
+                    cleaned = after_think
+
+        # Clean repetitive trailing loops (e.g. model repeating the same sentence 20+ times)
+        lines = cleaned.split("\n")
+        dedup_lines = []
+        seen_counts = {}
+        for line in lines:
+            stripped_line = line.strip()
+            if len(stripped_line) > 15:
+                count = seen_counts.get(stripped_line, 0)
+                if count >= 3:
+                    continue  # Drop lines repeated more than 3 times
+                seen_counts[stripped_line] = count + 1
+            dedup_lines.append(line)
+        cleaned = "\n".join(dedup_lines).strip()
 
         return cleaned
 
@@ -5149,7 +5173,8 @@ class AgentOrchestrator:
             "5. Glassmorphic info panel (top-right) with design name and layer legend\n"
             "6. Auto-rotation with OrbitControls\n"
             "7. Ambient + directional lighting\n"
-            "8. No ES6 imports. Use global THREE and THREE.OrbitControls.\n\n"
+            "8. No ES6 imports. Use global THREE and THREE.OrbitControls.\n"
+            "9. VARIABLE SCOPE SAFETY: Use 'let' or 'var' for geometry/material variables inside loops. NEVER redeclare 'const geometry' or 'const material' inside loops to prevent SyntaxErrors.\n\n"
             f"Design Context:\n{viz_ctx}\n\n"
             "Output ONLY complete HTML in ```html``` blocks."
         )
@@ -5283,37 +5308,14 @@ class AgentOrchestrator:
         all_errors = []
 
         planner_sys = (
-            "You are a world-class scientist, physicist, and software planner.\n"
-            "Your task is to draft a step-by-step logic plan for the user's query.\n\n"
+            "You are a world-class software architect and algorithm planner.\n"
+            "Your task is to draft a clean, step-by-step logic plan for the user's request.\n\n"
             "MANDATORY ACCURACY RULES:\n"
-            "1. Physical/Mathematical Rigor: Double-check ALL formulas before writing them. Use standard literature formulas exactly. "
-            "For example, E x B drift velocity is v = (E x B)/B^2 (it is independent of mass and charge). "
-            "State all physical constants explicitly and check your dimensional analysis.\n"
-            "2. Complete Multi-Dimensional Coordinates: For 3D problems, decompose EVERY vector "
-            "into all 3 components (x, y, z). Never reduce a 3D problem to 2D unless explicitly stated.\n"
-            "3. Initial Conditions: For well-known problems, use KNOWN PUBLISHED initial conditions from literature.\n"
-            "4. Numerical Methods: Specify the exact integration scheme. "
-            "CRITICAL TIME LIMIT: If integrating high-frequency oscillatory motion (e.g. cyclotron orbits, molecular vibrations), "
-            "calculate the period FIRST. NEVER integrate for millions of cycles. Cap the simulation time so it covers at most 50-100 cycles to prevent solver timeouts.\n"
-            "5. Conservation Laws: Explicitly state which conserved quantities (energy, momentum) should be verified.\n"
-            "6. OUTPUT FORMAT: Write a numbered list of steps. For scientific/mathematical tasks, each step must state WHAT to compute, the EXACT formula, and the expected data structure. For general coding, debugging, or algorithmic tasks, list the logical steps, functions, and control flow changes needed.\n"
-            "7. Think step by step. If you are unsure about any formula, derive it from first principles or explicitly state you need a web search check.\n"
-            "8. IMPORTANT: If 'Relevant past experience' is provided, prioritize the User Query's exact parameters over the past experience if they differ.\n"
-            "9. THINKING CONSTRAINT: Keep your reasoning brief and focused. Proceed to planning quickly.\n"
-            "10. LORENTZ FORCE / ELECTROMAGNETICS: The Lorentz force is F = q*(E + v×B), NOT q*(E×B). "
-            "The cross product is between VELOCITY and MAGNETIC FIELD, not between E and B. "
-            "Always expand v×B explicitly: (v×B)_x = vy*Bz - vz*By, (v×B)_y = vz*Bx - vx*Bz, (v×B)_z = vx*By - vy*Bx.\n"
-            "11. DRIFT VELOCITY EXTRACTION: To numerically verify a drift velocity from oscillatory trajectory data, "
-            "use np.polyfit(t, x, 1) to extract the linear slope (which filters out cyclotron oscillations). "
-            "Do NOT use endpoint averages like x(T)/T, as boundary oscillations cause >1%% relative error.\n"
-            "12. SYMPY-FIRST MANDATE (JEE Advanced Optimization):\n"
-            "    For ANY problem involving algebraic equations, calculus, coordinate geometry, mechanics, electrostatics, or optics:\n"
-            "    a) You MUST first derive the EXACT symbolic solution using sympy (sympy.solve, sympy.integrate, sympy.diff, sympy.simplify).\n"
-            "    b) State the closed-form symbolic result explicitly before substituting numerical values.\n"
-            "    c) Only after obtaining the symbolic solution, substitute the given numerical constants to get the final answer.\n"
-            "    d) Do NOT jump directly to scipy numerical solvers (solve_ivp, fsolve) for problems that have closed-form analytical solutions.\n"
-            "    e) Use scipy numerical methods ONLY when the symbolic solver explicitly fails (e.g., transcendental equations, chaotic systems).\n"
-            "    f) For projectile motion, collision, energy conservation, and kinematics: these ALWAYS have exact algebraic solutions. Use sympy."
+            "1. ADHERE TO USER SPECIFICATIONS: Pay strict attention to the target programming language, data structures, algorithms, and libraries requested by the user.\n"
+            "2. ALGORITHMIC & ARCHITECTURAL RIGOR: Outline the exact data structures, time/space complexity, function signatures, and step-by-step implementation logic.\n"
+            "3. LANGUAGE ACCURACY: Use standard idioms, built-in types, and standard library headers for the target language (e.g. <stdio.h>, <stdlib.h>, <pthread.h>, <stdatomic.h> for C).\n"
+            "4. OUTPUT FORMAT: Write a numbered list of steps explaining the logic, data structures, and edge cases.\n"
+            "5. THINKING CONSTRAINT: Keep your reasoning focused and proceed directly to the implementation plan."
         )
 
         coder_sys = (
@@ -5478,7 +5480,7 @@ class AgentOrchestrator:
                 # ── Phase 2: Reasoning Sandbox — Verify Logic ────────────────
                 self._check_cancelled("code:verify_logic")
                 active_router = router_llm if self._is_model_valid(router_llm) else self._get_model("router", required_ctx=1024)
-                use_logic_playground = self._is_playground_applicable(active_router, prompt)
+                use_logic_playground = (req_lang == "python") and self._is_playground_applicable(active_router, prompt)
                 verified = True
                 pg_out = ""
                 if use_logic_playground:
@@ -5588,8 +5590,21 @@ class AgentOrchestrator:
                         "Ensure styling uses modern glassmorphism, Google Fonts, hover effects, and CSS flex/grid spacing."
                     )
                 else:
-                    code_p = f"Write a complete, self-contained {lang_name} script for this plan:\n{plan_for_code}{repo_map_context}\n\nWrap in ```{req_lang}```."
-                    sys_prompt = f"You are a master {lang_name} programmer. Output only code inside ```{req_lang}``` blocks."
+                    code_p = (
+                        f"Write a complete, fully working, self-contained {lang_name} program for this request:\n"
+                        f"{prompt}\n\n"
+                        f"Plan:\n{plan_for_code}{repo_map_context}\n\n"
+                        f"REQUIREMENTS:\n"
+                        f"1. Write ONLY valid {lang_name} code inside ```{req_lang}``` blocks.\n"
+                        f"2. Do NOT write Python code or use Python libraries (like numpy or sympy).\n"
+                        f"3. Include standard {lang_name} library headers (e.g. <stdio.h>, <stdlib.h>, <pthread.h>, <stdatomic.h> for C).\n"
+                        f"4. Include a complete main() function that executes unit tests and prints test results."
+                    )
+                    sys_prompt = (
+                        f"You are an expert {lang_name} systems engineer.\n"
+                        f"You MUST write production-ready {lang_name} code using standard native {lang_name} libraries.\n"
+                        f"Never output Python code when asked for {lang_name}. Output ONLY code in ```{req_lang}``` blocks."
+                    )
 
                 raw_model_output = self._strip_thinking(self._call_model(oc_llm, code_p, gen_tokens, gen_temp, system_prompt=sys_prompt))
 

@@ -38,6 +38,17 @@ const ArtifactSandbox = ({ htmlCode }) => {
     try {
       let doc = htmlCode;
 
+      // Auto-inject missing Three.js / OrbitControls / Plotly CDN scripts if referenced but missing
+      if (doc.includes("THREE") && !doc.includes("three.min.js") && !doc.includes("three@")) {
+        doc = doc.replace("<head>", "<head>\n<script src=\"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js\"></script>");
+      }
+      if (doc.includes("OrbitControls") && !doc.includes("OrbitControls.js")) {
+        doc = doc.replace("</head>", "<script src=\"https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js\"></script>\n</head>");
+      }
+      if (doc.includes("Plotly") && !doc.includes("plotly")) {
+        doc = doc.replace("<head>", "<head>\n<script src=\"https://cdn.plot.ly/plotly-2.24.1.min.js\"></script>");
+      }
+
       const injection = `
         <style>
           html, body { background-color: #0d0d0d !important; color: #e0e0e0 !important; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; height: 100%; overflow: hidden; }
