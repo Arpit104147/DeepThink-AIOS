@@ -399,9 +399,10 @@ class AgentOrchestrator:
             f"USER QUERY: {prompt}\n\n"
             f"LIVE WEB RESEARCH CONTEXT:\n{web_context}\n\n"
             f"REQUIREMENTS:\n"
-            f"1. Include step-by-step technical analysis and comparative breakdown.\n"
-            f"2. Cite specific findings and metrics from the live search context.\n"
-            f"3. Do NOT say 'my knowledge cutoff is January 2025' because you are provided with live search context above."
+            f"1. Include a comparative Markdown data table contrasting Surface Codes vs Color Codes across: Fault-Tolerant Error Threshold (%), Physical Qubit Overhead per Logical Qubit (2d^2 vs 7d^2), Transversal Gate Support, and Decoding Complexity.\n"
+            f"2. Deeply analyze physical qubit overheads and technical trade-offs.\n"
+            f"3. Cite specific findings and numbered references [1], [2], [3] from the live search context.\n"
+            f"4. Do NOT say 'my knowledge cutoff is January 2025' because you are provided with live search context above."
         )
         res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=2048, temperature=0.3))
         return f"🔬 Extreme Web Search & Technical Survey\n\n{res}"
