@@ -1761,36 +1761,79 @@ class AgentOrchestrator:
     # =========================================================================
     def transcribe_image(self, image_input, status_callback=None):
         if status_callback:
-            status_callback(f"{self._get_display_model_name('qwen_vl')} parsing image...", "info", "qwen_vl", 5)
-        llm = self._get_model("qwen_vl")
-        vision_prompt = "Describe this image and extract all text and logic from it."
-        
+            status_callback("👁️ Processing image...", "info", "qwen_vl", 5)
+            
         import base64
+        import io
         data_url = None
+        raw_bytes = None
         
-        # ── Case 1: Already a data URL from frontend (data:image/...;base64,...) ──
+        # ── Step 1: Decode image data ──
         if isinstance(image_input, str) and image_input.startswith("data:"):
             data_url = image_input
-        # ── Case 2: File path on disk ──
+            try:
+                header, b64data = image_input.split(",", 1)
+                raw_bytes = base64.b64decode(b64data)
+            except Exception:
+                pass
         elif isinstance(image_input, str) and os.path.isfile(image_input):
             try:
                 with open(image_input, "rb") as f:
-                    img_data = base64.b64encode(f.read()).decode("utf-8")
+                    raw_bytes = f.read()
+                    img_b64 = base64.b64encode(raw_bytes).decode("utf-8")
                 ext = os.path.splitext(image_input)[1].lower().replace(".", "")
                 mime = "image/jpeg"
                 if ext in ["png", "webp", "gif"]:
                     mime = f"image/{ext}"
-                data_url = f"data:{mime};base64,{img_data}"
+                data_url = f"data:{mime};base64,{img_b64}"
             except Exception as e:
                 return f"Error reading image file: {e}"
         else:
-            return f"Error: Invalid image input (not a data URL or valid file path)."
+            return "Error: Invalid image input (not a data URL or valid file path)."
 
         if not data_url:
             return "Error: Could not process image data."
 
+        # ── Step 2: Attempt Python OCR (Tesseract / EasyOCR / PIL) first if available ──
+        ocr_extracted_text = ""
+        if raw_bytes:
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(raw_bytes))
+                try:
+                    import pytesseract
+                    ocr_extracted_text = pytesseract.image_to_string(img).strip()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # ── Step 3: Check if Qwen 2.5-VL Vision Model is downloaded ──
+        from backend.downloader import is_model_downloaded
+        qwen_installed = is_model_downloaded("qwen_vl")
+
+        if not qwen_installed:
+            if ocr_extracted_text:
+                return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
+            return (
+                "⚠️ Qwen 2.5-VL Vision Model is not downloaded on your system.\n"
+                "To enable full image description and visual understanding, please open Model Hub → Vision tab and download Qwen 2.5-VL."
+            )
+
+        # ── Step 4: Run Qwen 2.5-VL Vision Model ──
+        if status_callback:
+            status_callback(f"{self._get_display_model_name('qwen_vl')} parsing image...", "info", "qwen_vl", 10)
+            
+        try:
+            llm = self._get_model("qwen_vl")
+        except Exception as e:
+            if ocr_extracted_text:
+                return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
+            return f"⚠️ Vision model loading failed: {e}"
+
+        vision_prompt = "Describe this image in detail. Identify any persons, objects, scenes, or text present in the image."
+
         with self.inference_lock:
-            # Construct message payload for vision chat completion
             messages = [
                 {
                     "role": "user",
@@ -1804,15 +1847,15 @@ class AgentOrchestrator:
                 res = llm.create_chat_completion(messages=messages, max_tokens=500)
                 if status_callback:
                     status_callback(f"{self._get_display_model_name('qwen_vl')} transcription complete!", "success", "qwen_vl", 100)
-                return res["choices"][0]["message"]["content"]
+                desc = res["choices"][0]["message"]["content"].strip()
+                if ocr_extracted_text and ocr_extracted_text not in desc:
+                    desc += f"\n\n[OCR Text Output]:\n{ocr_extracted_text}"
+                return desc
             except Exception as e:
-                print(f"⚠️ Vision chat completion failed: {e}. Falling back to standard completion...")
-                if callable(llm):
-                    result = llm(vision_prompt, max_tokens=500)
-                    return result if isinstance(result, str) else result['choices'][0]['text']
-                else:
-                    res = llm(vision_prompt, max_tokens=500)
-                    return res['choices'][0]['text']
+                print(f"⚠️ Vision chat completion failed: {e}")
+                if ocr_extracted_text:
+                    return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
+                return f"⚠️ Vision parsing failed: {e}. Ensure mmproj-BF16.gguf projector file is present in model directory."
 
     # =========================================================================
     # MAIN AGENTIC PIPELINE
