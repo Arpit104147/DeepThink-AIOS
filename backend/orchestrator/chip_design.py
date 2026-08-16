@@ -73,8 +73,9 @@ class ChipDesignPipeline:
                 f"    end\n"
                 f"endmodule\n"
                 f"```\n"
-                f"2. NEVER output pseudo-code or non-Verilog keywords like 'begins with', 'sub module', 'always on clock', or C-style braces '{{}}'. Use standard Verilog 'module', 'always @(posedge clk)', 'begin ... end', 'if ... else'.\n"
-                f"3. Output TWO separate code blocks:\n"
+                f"2. NEVER output pseudo-code or non-Verilog keywords like 'begins with', 'submodule', 'always on clock', or C-style braces '{{}}'. Use standard Verilog 'module', 'always @(posedge clk)', 'begin ... end', 'if ... else'.\n"
+                f"3. NO NESTED MODULES: In standard Verilog, modules CANNOT be nested inside other modules. Write ONE top-level module 'module bcd_counter (...); ... endmodule'.\n"
+                f"4. Output TWO separate code blocks:\n"
                 f"   - Block 1: Design module in ```verilog```\n"
                 f"   - Block 2: Complete self-contained testbench with $dumpfile/$dumpvars in ```verilog```"
             )
@@ -123,16 +124,17 @@ class ChipDesignPipeline:
             html_extract = viz_resp
 
         viz_html = ""
-        if html_extract:
+        if html_extract and ("THREE" in html_extract or "<canvas" in html_extract or "<script" in html_extract):
             viz_html = f"<!--ARTIFACT_HTML-->\n{html_extract}\n<!--/ARTIFACT_HTML-->"
+
+        if not viz_html or "<!--ARTIFACT_HTML-->" not in viz_html:
+            viz_html = ChipDesignPipeline._build_3d_chip_fallback(prompt)
 
         output_parts = [
             f"### 🏗️ Stage 1: Architecture Decomposition\n\n{arch_plan}\n\n",
-            f"### ⚡ Stage 2: HDL Design\n\n```verilog\n{hdl_clean}\n```\n\n"
+            f"### ⚡ Stage 2: HDL Design\n\n```verilog\n{hdl_clean}\n```\n\n",
+            f"### 🔬 Stage 3: 3D Chip Architecture Visualization\n\n{viz_html}"
         ]
-
-        if viz_html:
-            output_parts.append(f"### 🔬 Stage 3: 3D Chip Architecture Visualization\n\n{viz_html}")
 
         if not eda_tools['iverilog']:
             output_parts.append("\n\n### 📦 Missing EDA Tools\n```bash\nsudo apt-get install -y iverilog yosys ngspice\n```")
@@ -141,3 +143,78 @@ class ChipDesignPipeline:
             status_callback("✅ Chip Design Pipeline complete!", "success", "system", 100)
 
         return "".join(output_parts)
+
+    @staticmethod
+    def _build_3d_chip_fallback(prompt):
+        return (
+            "<!--ARTIFACT_HTML-->\n"
+            "<!DOCTYPE html>\n"
+            "<html>\n"
+            "<head>\n"
+            "  <script src=\"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js\"></script>\n"
+            "  <script src=\"https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js\"></script>\n"
+            "  <style>\n"
+            "    html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #0d0d0d; font-family: system-ui, sans-serif; }\n"
+            "    #hud { position: absolute; top: 15px; right: 15px; background: rgba(20,20,30,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15); padding: 14px 18px; border-radius: 10px; color: #fff; font-size: 0.85rem; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 100; }\n"
+            "    #hud h3 { margin: 0 0 8px; font-size: 1rem; color: #60a5fa; }\n"
+            "    .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }\n"
+            "    .box { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }\n"
+            "  </style>\n"
+            "</head>\n"
+            "<body>\n"
+            "  <div id=\"hud\">\n"
+            "    <h3>🔬 3D Semiconductor Chip Architecture</h3>\n"
+            "    <div class=\"legend-item\"><span class=\"box\" style=\"background:#4a5568\"></span> Silicon Substrate</div>\n"
+            "    <div class=\"legend-item\"><span class=\"box\" style=\"background:#3182ce\"></span> N-Well / Diffusion</div>\n"
+            "    <div class=\"legend-item\"><span class=\"box\" style=\"background:#38a169\"></span> Polysilicon Gates</div>\n"
+            "    <div class=\"legend-item\"><span class=\"box\" style=\"background:#00b5d8\"></span> Metal 1 Traces</div>\n"
+            "    <div class=\"legend-item\"><span class=\"box\" style=\"background:#ecc94b\"></span> Via Interconnects</div>\n"
+            "    <div class=\"legend-item\"><span class=\"box\" style=\"background:#ed8936\"></span> Metal 2 Traces</div>\n"
+            "  </div>\n"
+            "  <script>\n"
+            "    document.addEventListener('DOMContentLoaded', function() {\n"
+            "      var scene = new THREE.Scene();\n"
+            "      scene.background = new THREE.Color(0x0d0d0d);\n"
+            "      var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);\n"
+            "      camera.position.set(0, 8, 16);\n"
+            "      var renderer = new THREE.WebGLRenderer({ antialias: true });\n"
+            "      renderer.setSize(window.innerWidth, window.innerHeight);\n"
+            "      document.body.appendChild(renderer.domElement);\n"
+            "      var controls = new THREE.OrbitControls(camera, renderer.domElement);\n"
+            "      controls.enableDamping = true;\n"
+            "      controls.target.set(0, 1, 0);\n"
+            "      var ambLight = new THREE.AmbientLight(0xffffff, 0.7);\n"
+            "      scene.add(ambLight);\n"
+            "      var dirLight = new THREE.DirectionalLight(0xffffff, 1.2);\n"
+            "      dirLight.position.set(10, 20, 10);\n"
+            "      scene.add(dirLight);\n"
+            "      // Layers\n"
+            "      var subGeo = new THREE.BoxGeometry(10, 0.5, 10);\n"
+            "      var subMat = new THREE.MeshPhongMaterial({ color: 0x4a5568, shininess: 80 });\n"
+            "      var sub = new THREE.Mesh(subGeo, subMat);\n"
+            "      scene.add(sub);\n"
+            "      var wellGeo = new THREE.BoxGeometry(3, 0.2, 3);\n"
+            "      var wellMat = new THREE.MeshPhongMaterial({ color: 0x3182ce, transparent: true, opacity: 0.85 });\n"
+            "      var well1 = new THREE.Mesh(wellGeo, wellMat); well1.position.set(-2.5, 0.35, -2); scene.add(well1);\n"
+            "      var well2 = new THREE.Mesh(wellGeo, wellMat); well2.position.set(2.5, 0.35, 2); scene.add(well2);\n"
+            "      var gateGeo = new THREE.BoxGeometry(8, 0.15, 0.5);\n"
+            "      var gateMat = new THREE.MeshPhongMaterial({ color: 0x38a169, shininess: 100 });\n"
+            "      for(var i=0; i<4; i++) { var gate = new THREE.Mesh(gateGeo, gateMat); gate.position.set(0, 0.6, -3 + i*2); scene.add(gate); }\n"
+            "      var m1Geo = new THREE.BoxGeometry(0.4, 0.15, 8);\n"
+            "      var m1Mat = new THREE.MeshPhongMaterial({ color: 0x00b5d8, shininess: 120 });\n"
+            "      for(var j=0; j<4; j++) { var m1 = new THREE.Mesh(m1Geo, m1Mat); m1.position.set(-3 + j*2, 1.0, 0); scene.add(m1); }\n"
+            "      var viaGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.4, 16);\n"
+            "      var viaMat = new THREE.MeshPhongMaterial({ color: 0xecc94b, shininess: 150 });\n"
+            "      for(var vx=-2; vx<=2; vx+=2) { for(var vz=-2; vz<=2; vz+=2) { var via = new THREE.Mesh(viaGeo, viaMat); via.position.set(vx, 1.4, vz); scene.add(via); } }\n"
+            "      var m2Geo = new THREE.BoxGeometry(8, 0.15, 0.4);\n"
+            "      var m2Mat = new THREE.MeshPhongMaterial({ color: 0xed8936, shininess: 120 });\n"
+            "      for(var k=0; k<4; k++) { var m2 = new THREE.Mesh(m2Geo, m2Mat); m2.position.set(0, 1.8, -3 + k*2); scene.add(m2); }\n"
+            "      function animate() { requestAnimationFrame(animate); controls.update(); scene.rotation.y += 0.003; renderer.render(scene, camera); }\n"
+            "      animate();\n"
+            "      window.addEventListener('resize', function() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });\n"
+            "    });\n"
+            "  </script>\n"
+            "</body>\n"
+            "</html>\n"
+            "<!--ARTIFACT_HTML-->"
+        )
