@@ -1,7 +1,6 @@
 """
 Evaluation and Verification Engines for AIOS Benchmarks.
-Includes sandbox unit test verification, direct model completion for HumanEval/MBPP,
-and regex math answer parsing.
+Includes sandbox unit test verification and regex math answer parsing.
 """
 import re
 import asyncio
@@ -9,122 +8,99 @@ import time
 from typing import Dict, Any, Tuple
 
 
-# ── HumanEval / MBPP: Direct Model Completion ────────────────────────────────
-# Standard benchmark methodology: ONE model call with the function stub as prompt.
-# The model completes the function body. No planning, no reflexion, no sandbox self-test.
-# This matches how OpenAI, Google, Meta, and every published leaderboard evaluates models.
-
-HUMANEVAL_SYSTEM_PROMPT = (
-    "You are an expert Python programmer. Complete the given Python function.\n"
-    "RULES:\n"
-    "1. Output ONLY the function body (the implementation), nothing else.\n"
-    "2. Do NOT repeat the function signature or docstring.\n"
-    "3. Do NOT write test cases, assertions, print statements, or if __name__ blocks.\n"
-    "4. Do NOT add any explanation, markdown, or comments outside the code.\n"
-    "5. Do NOT wrap your answer in ```python``` code fences.\n"
-    "6. Your output will be directly appended after the function signature and docstring.\n"
-    "7. Use proper indentation (4 spaces) as this is inside a function.\n"
-)
-
-
-async def direct_model_completion(orchestrator, problem: Dict[str, Any], worker_id: int, add_log_fn=None) -> str:
+def _extract_last_python_block(text: str) -> str:
     """
-    Generate a completion for a HumanEval/MBPP problem using a single direct LLM call.
-    Bypasses the full 7-phase pipeline which is designed for complex coding tasks,
-    not standardized function-completion benchmarks.
+    Extract the LAST Python code block from a markdown response.
     
-    Returns the raw model response string.
+    The AIOS _coding_pipeline returns a rich markdown response with multiple code blocks:
+      1. Planner's pseudo-code/logic sketch (FIRST block — NOT the real code)
+      2. Sandbox execution output (text block)  
+      3. Verified Working Code (LAST python block — THIS is the real code)
+    
+    Using re.search (which grabs the first match) was grabbing the planner's incomplete
+    pseudo-code instead of the final verified code. This function grabs the LAST match.
     """
-    prompt = problem["prompt"]
-    entry_point = problem.get("entry_point", "")
+    # Find ALL python code blocks
+    pattern = r"```\s*(?:python|py)\s*(.*?)\s*```"
+    matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
     
-    # Build a focused completion prompt
-    user_prompt = (
-        f"Complete the following Python function. Output ONLY the function body "
-        f"(the lines of code that go inside the function). Do not repeat the signature or docstring.\n\n"
-        f"{prompt}"
-    )
+    if matches:
+        # Return the LAST python code block (the verified working code)
+        code = matches[-1].strip()
+        # Remove hallucinated pip install commands
+        code = re.sub(r'^[!%]\s*pip\s+install.*$', '', code, flags=re.MULTILINE).strip()
+        return code
     
-    def _do_inference():
-        """Run inference in a thread — uses the orchestrator's model and lock safely."""
-        # Get the router model (smallest/fastest available model)
-        llm = orchestrator._get_model("router")
-        
-        # Use a modest token budget — HumanEval solutions are typically short
-        response = orchestrator._call_model(
-            llm, 
-            user_prompt, 
-            max_tokens=512, 
-            temperature=0.1,
-            system_prompt=HUMANEVAL_SYSTEM_PROMPT
-        )
-        return response
+    # Fallback: try generic code blocks
+    generic_matches = re.findall(r"```\s*(.*?)\s*```", text, re.DOTALL)
+    if generic_matches:
+        code = generic_matches[-1].strip()
+        # Skip if it looks like a text/output block
+        first_line = code.split('\n')[0].strip().lower()
+        known_tags = ['text', 'output', 'bash', 'sh', 'json', 'xml', 'html', 'css']
+        if first_line in known_tags:
+            # Try the second-to-last block
+            if len(generic_matches) >= 2:
+                code = generic_matches[-2].strip()
+            else:
+                return ""
+        # Strip language tag from first line if present
+        lang_tags = ['python', 'py', 'javascript', 'js', 'c', 'cpp', 'java']
+        if first_line in lang_tags:
+            code = '\n'.join(code.split('\n')[1:])
+        return re.sub(r'^[!%]\s*pip\s+install.*$', '', code, flags=re.MULTILINE).strip()
     
-    response = await asyncio.to_thread(_do_inference)
-    return response
+    return ""
 
 
-def _extract_function_body(response: str, prompt: str, entry_point: str) -> str:
+def _clean_pipeline_artifacts(code: str, entry_point: str = "") -> str:
     """
-    Extract the function implementation from a model's response for HumanEval evaluation.
+    Remove pipeline self-test artifacts from extracted code that would
+    interfere with HumanEval's official check() test harness.
     
-    Strategy:
-    1. If the response contains the full function (signature + body), extract just that function.
-    2. If the response is just indented code (the body), prepend the original prompt stub.
-    3. Strip any markdown fences, test code, print statements, and if __name__ blocks.
+    Strips:
+    - if __name__ == '__main__' blocks
+    - Standalone assert statements (not inside functions)
+    - Standalone print("ALL TESTS PASSED") and similar
+    - Direct function call invocations at module level
     """
-    text = response.strip()
+    lines = code.split('\n')
+    cleaned = []
+    skip_block = False
     
-    # Strip markdown code fences if present
-    if text.startswith("```"):
-        # Remove opening fence
-        first_newline = text.find("\n")
-        if first_newline != -1:
-            text = text[first_newline + 1:]
-        # Remove closing fence
-        if text.rstrip().endswith("```"):
-            text = text.rstrip()[:-3].rstrip()
-    
-    # Remove any if __name__ block and everything after it
-    main_match = re.search(r'\nif\s+__name__\s*==\s*["\']__main__["\']', text)
-    if main_match:
-        text = text[:main_match.start()]
-    
-    # Remove standalone test/assert/print lines at the end (pipeline artifacts)
-    lines = text.split('\n')
-    cleaned_lines = []
-    for line in lines:
+    for i, line in enumerate(lines):
         stripped = line.strip()
-        # Skip standalone assertions and print calls that aren't inside functions
-        if stripped.startswith(('assert ', 'print(')) and not line.startswith(('    ', '\t')):
+        
+        # Skip if __name__ == '__main__' block and everything after
+        if re.match(r"if\s+__name__\s*==\s*['\"]__main__['\"]", stripped):
+            skip_block = True
             continue
-        # Skip lines that call the entry point directly (test invocations)
-        if entry_point and stripped.startswith(f'{entry_point}('):
+        if skip_block:
+            # Skip indented lines that are part of the __main__ block
+            if line.startswith(('    ', '\t')) or stripped == '':
+                continue
+            else:
+                skip_block = False
+        
+        # Skip standalone test assertions (not inside functions — no leading indent)
+        if stripped.startswith('assert ') and not line.startswith(('    ', '\t')):
             continue
-        cleaned_lines.append(line)
-    text = '\n'.join(cleaned_lines).rstrip()
+        
+        # Skip standalone print calls at module level
+        if stripped.startswith('print(') and not line.startswith(('    ', '\t')):
+            continue
+            
+        # Skip standalone function call tests at module level
+        if entry_point and stripped.startswith(f'{entry_point}(') and not line.startswith(('    ', '\t')):
+            continue
+        
+        # Skip "# Test" / "# Self-test" comment headers at module level  
+        if stripped.startswith('# Test') and not line.startswith(('    ', '\t')):
+            continue
+            
+        cleaned.append(line)
     
-    # Check if the response includes the full function definition
-    if entry_point and f"def {entry_point}" in text:
-        # Extract just this function (including its body)
-        func_match = re.search(
-            rf"(def {re.escape(entry_point)}\b.*?)(?=\ndef |\Z)", 
-            text, re.DOTALL
-        )
-        if func_match:
-            return func_match.group(1).rstrip()
-    
-    # Response is just the body — prepend the original prompt stub
-    # Ensure proper indentation
-    if text and not text.startswith(('def ', 'class ')):
-        # Add indentation if missing
-        body_lines = text.split('\n')
-        needs_indent = any(line and not line.startswith(('    ', '\t')) for line in body_lines if line.strip())
-        if needs_indent:
-            text = '\n'.join('    ' + line if line.strip() else line for line in body_lines)
-        return prompt.rstrip() + '\n' + text
-    
-    return text
+    return '\n'.join(cleaned).rstrip()
 
 
 async def evaluate_problem_solution(
@@ -143,26 +119,42 @@ async def evaluate_problem_solution(
     if "test" in problem and problem["test"]:
         # Programmatic Python execution (HumanEval / MBPP / SWE-bench)
         entry_point = problem.get("entry_point", "")
+        prompt_clean = problem.get("prompt", "").strip()
         
-        # Extract function implementation from the model response
-        extracted_code = _extract_function_body(response, problem.get("prompt", ""), entry_point)
+        # Extract the LAST python code block (the verified working code from _coding_pipeline)
+        extracted_code = _extract_last_python_block(response)
         
         if not extracted_code or len(extracted_code.strip()) < 10:
-            # Fallback: try to find any function-like lines
-            raw_lines = [l for l in response.split('\n') if l.strip().startswith(('def ', 'import ', 'from ', 'return ', '    '))]
+            # Fallback: try the old extract_code method
+            from backend.sandbox import Sandbox
+            extracted_code = Sandbox.extract_code(response)
+        
+        if not extracted_code or len(extracted_code.strip()) < 10:
+            # Last resort: grab raw function-like lines
+            raw_lines = [l for l in response.split('\n') 
+                        if l.strip().startswith(('def ', 'import ', 'from ', 'return ', '    '))]
             if raw_lines:
-                extracted_code = problem.get("prompt", "").rstrip() + "\n" + "\n".join(raw_lines)
-
+                extracted_code = "\n".join(raw_lines)
+                
         if extracted_code and len(extracted_code.strip()) >= 5:
-            # Ensure the entry point function exists in the code
+            # Clean pipeline artifacts (self-tests, print statements, etc.)
+            extracted_code = _clean_pipeline_artifacts(extracted_code, entry_point)
+            
+            # Ensure function signature is present exactly once
             if entry_point and f"def {entry_point}" not in extracted_code:
-                # Prepend the original prompt stub
-                extracted_code = problem.get("prompt", "").rstrip() + "\n" + extracted_code
+                # Try to find the function in the full response
+                matches = re.findall(rf"(def {re.escape(entry_point)}\b[\s\S]*?)(?=\ndef |\Z)", response)
+                if matches:
+                    # Use the LAST match (most likely the verified code)
+                    extracted_code = _clean_pipeline_artifacts(matches[-1], entry_point)
+                else:
+                    # Prepend the original prompt stub
+                    extracted_code = prompt_clean + "\n" + extracted_code
 
             typing_imports = (
                 "from typing import List, Dict, Tuple, Set, Optional, Union, Any, Callable\n"
                 "import math\n"
-                "import re\n"
+                "import re as _re\n"
                 "import hashlib\n"
                 "from itertools import *\n"
                 "from collections import *\n\n"
