@@ -233,11 +233,19 @@ def is_model_downloaded(model_key):
     """Check if all required files for a model key exist on disk (instant O(1) cache lookup)."""
     auto_discover_local_gguf_models()
     if model_key not in MODEL_DEFINITIONS:
+        if _DISCOVERY_CACHE["files_map"]:
+            for fname in _DISCOVERY_CACHE["files_map"]:
+                if model_key.lower() in fname and not fname.startswith("mmproj"):
+                    return True
         return False
     definition = MODEL_DEFINITIONS[model_key]
     target_file = definition.get("filename", "").lower()
 
     if target_file not in _DISCOVERY_CACHE["files_map"]:
+        # If default filename is not found, check if ANY VL / vision model file is present on disk for vision
+        if model_key == "qwen_vl":
+            has_vl_file = any(("vl" in f or "vision" in f) and not f.startswith("mmproj") for f in _DISCOVERY_CACHE["files_map"])
+            return has_vl_file and _DISCOVERY_CACHE["has_mmproj"]
         return False
 
     # For qwen_vl vision model, verify mmproj projector is also present
@@ -259,6 +267,10 @@ def get_model_path(model_key):
     """Get the local path for a model key (instant O(1) cache lookup)."""
     auto_discover_local_gguf_models()
     if model_key not in MODEL_DEFINITIONS:
+        if _DISCOVERY_CACHE["files_map"]:
+            for fname, fpath in _DISCOVERY_CACHE["files_map"].items():
+                if model_key.lower() in fname and not fname.startswith("mmproj"):
+                    return fpath
         raise ValueError(f"Unknown model key: {model_key}")
         
     definition = MODEL_DEFINITIONS[model_key]
@@ -266,7 +278,13 @@ def get_model_path(model_key):
     
     if target_file in _DISCOVERY_CACHE["files_map"]:
         return _DISCOVERY_CACHE["files_map"][target_file]
-        
+
+    # For qwen_vl: if default filename is not on disk, return ANY discovered VL model file path!
+    if model_key == "qwen_vl" and _DISCOVERY_CACHE["files_map"]:
+        for fname, fpath in _DISCOVERY_CACHE["files_map"].items():
+            if ("vl" in fname or "vision" in fname) and not fname.startswith("mmproj"):
+                return fpath
+                
     subfolder = definition.get("type", "text")
     if "/" in subfolder:
         subfolder = subfolder.split("/")[-1]

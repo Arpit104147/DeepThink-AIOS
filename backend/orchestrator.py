@@ -1788,6 +1788,7 @@ class AgentOrchestrator:
         import io
         data_url = None
         raw_bytes = None
+        is_pdf = False
         
         # ── Step 1: Decode & Normalize input data (Image or PDF) ──
         if isinstance(image_input, str):
