@@ -43,6 +43,7 @@ class AgentOrchestrator:
         self.ram_safety_gb = 1.5
         self.vram_safety_gb = 1.0
         self.device_mode = "gpu"
+        self.gpu_layers = -1
         self.search_mode = "off"
         self.context_length = 0
         self.max_tokens = 2048

@@ -237,8 +237,8 @@ def get_system_status():
             "context_length": orchestrator.context_length,
             "max_tokens": orchestrator.max_tokens,
             "temperature": orchestrator.temperature,
-            "device_mode": orchestrator.device_mode,
-            "gpu_layers": orchestrator.gpu_layers,
+            "device_mode": getattr(orchestrator, "device_mode", "gpu"),
+            "gpu_layers": getattr(orchestrator, "gpu_layers", -1),
             "search_mode": getattr(orchestrator, "search_mode", "off")
         },
         "security": {
