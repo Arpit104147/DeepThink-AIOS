@@ -156,6 +156,7 @@ class ChatRequest(BaseModel):
     device_mode: Optional[str] = None
     gpu_layers: Optional[int] = None
     search_mode: str = "off"  # off, simple, prediction, extreme
+    history: Optional[List[dict]] = None
 
 class SettingsRequest(BaseModel):
     context_length: int
@@ -623,6 +624,18 @@ async def chat(request: ChatRequest):
                         except Exception as ex:
                             thread_cb(f"File transcription failed: {str(ex)}. Proceeding with prompt only.", "warning")
                     
+                    # Prepend recent conversation history to preserve multi-turn context
+                    if request.history and len(request.history) > 0:
+                        hist_text = ""
+                        for item in request.history[-6:]:
+                            role = item.get("role", "user")
+                            content = item.get("content", "").strip()
+                            if content:
+                                label = "User" if role == "user" else "Assistant"
+                                hist_text += f"{label}: {content}\n\n"
+                        if hist_text:
+                            final_prompt = f"Previous Conversation Context:\n{hist_text}Current User Request:\n{final_prompt}"
+
                     if generation_cancel.is_set():
                         q.put({"type": "error", "message": "Generation cancelled."})
                         return

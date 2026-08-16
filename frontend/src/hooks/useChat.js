@@ -95,6 +95,10 @@ export function useChat({
           device_mode: deviceMode,
           gpu_layers: -1,
           search_mode: searchMode,
+          history: history.slice(-6).map((m) => ({
+            role: m.type === "user" ? "user" : "assistant",
+            content: m.text || ""
+          })),
         }),
       });
 
