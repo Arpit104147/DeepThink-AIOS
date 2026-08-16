@@ -43,8 +43,8 @@ First, install the core dependencies that work on all operating systems:
 
 ```bash
 # Clone the repository and enter it
-git clone https://github.com/Bshdhorrhh/Team_Trenches.git
-cd Team_Trenches
+git clone https://github.com/Arpit104147/DeepThink-AIOS.git
+cd DeepThink-AIOS
 
 # Create a virtual environment
 python -m venv venv

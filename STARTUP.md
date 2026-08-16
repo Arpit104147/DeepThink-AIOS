@@ -148,23 +148,24 @@ When you send your **first prompt**, the system does a cold start — it loads t
 
 ## 🛠️ Troubleshooting
 
-### ❌ `Address already in use` (Port 8000 or 5173)
+### ❌ `Address already in use` (Port 8080 or 5173)
 
 A previous server is still running in the background. Kill it first:
 
 **Linux / Mac:**
 ```bash
+fuser -k 8080/tcp 2>/dev/null
 pkill -f "backend/app.py"
 pkill -f "vite"
-sleep 3
+sleep 2
 ```
 
 Then re-run both terminal commands from the top.
 
 **Windows (PowerShell):**
 ```powershell
-# Find PID on port 8000 and kill it
-netstat -ano | findstr :8000
+# Find PID on port 8080 and kill it
+netstat -ano | findstr :8080
 taskkill /PID <PID> /F
 
 # Find PID on port 5173 and kill it
@@ -180,7 +181,7 @@ The frontend cannot reach the backend. Check:
 1. Is Terminal 1 showing `Uvicorn running on http://127.0.0.1:8080`?
 2. Did the backend crash? Look for error messages in Terminal 1.
 3. Is it your **first prompt**? The backend may still be loading models (2–4 min). Wait and try again.
-4. In the UI, click **Settings** and confirm the API URL is `http://127.0.0.1:8000`.
+4. In the UI, click **Settings** and confirm the API URL is `http://127.0.0.1:8080`.
 
 ---
 

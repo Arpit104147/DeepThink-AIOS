@@ -15,22 +15,28 @@
 
 ---
 
-DeepThink AIOS is a **production-grade, fully offline multi-agent system** that routes user queries through specialized LLM pipelines for coding, reasoning, data science, 3D visualization, and semiconductor chip design — all running locally with dynamic hardware scaling from Intel iGPUs to NVIDIA H100s.
+DeepThink AIOS is a **production-grade, fully offline multi-agent system** that routes user queries through specialized LLM pipelines for coding, reasoning, data science, 3D visualization, PDF document parsing, multimodal vision, and semiconductor chip design — all running locally with dynamic hardware scaling from Intel iGPUs to NVIDIA H100s.
 
 > [!CAUTION]
 > This project is in active development. The multi-sandbox architecture and Dynamic Memory Allocator push consumer hardware to its limits.
 
 ---
 
-- **Universal Vulkan GPU Backend** — Universal acceleration on NVIDIA, AMD, and Intel GPUs via Vulkan compute
-- **LM Studio-Style Model Hub** — Dynamic HuggingFace GGUF model downloader, card library, and custom model assignment
-- **7-Way Intelligent Routing** — Intent-aware pipeline selection across coding, reasoning, prediction, search, 3D viz, and chip design
-- **Self-Scaffolding Code Generation** — Ornith 9B autonomously plans and writes code in a single unified trajectory
-- **AST-Aware Self-Healing** — Surgical patching via Python AST extraction instead of fixed-line windows
-- **Parallel Web Scraping** — ThreadPoolExecutor-based concurrent page fetching (N×timeout → 1×timeout)
-- **Dual Sandbox Verification** — Polyglot execution across 13 languages with kernel-level isolation
-- **Chip Design EDA Pipeline** — Full Verilog/SPICE synthesis with SkyWater 130nm PDK mapping
-- **Dynamic Memory Allocator (DMA)** — LRU model swapping enabling 7B+ models on 16GB RAM systems
+### ✨ Key Features
+
+- **Universal Vulkan GPU Backend** — Universal acceleration on NVIDIA, AMD, and Intel GPUs via Vulkan compute.
+- **LM Studio-Style Model Hub** — Dynamic HuggingFace GGUF model downloader, card library, and custom model role mapping.
+- **Dynamic Vision & Multimodal Projector Engine** — Auto-discovers and pairs **ANY** Vision Language GGUF model (`Qwen2.5-VL`, `Qwen3-VL`, `Llava`, `Moondream`) with its corresponding `mmproj*.gguf` projector file.
+- **Native PDF Document Extraction for ALL LLMs** — Native page-by-page PDF parser allowing **EVERY MODEL** (both Vision & Non-Vision LLMs like `DeepSeek-R1`, `Ornith`, `VibeThinker`, `Phi-3.5`, `Gemma-4`) to read, analyze, and explain uploaded PDF documents.
+- **PIL RGB Pre-Processing Pipeline** — Automatically normalizes images (converts PNG/WEBP/RGBA to clean 3-channel RGB JPEG, max 1024x1024) to eliminate aspect-ratio and channel distortions in CLIP vision encoders.
+- **Multi-Turn Conversation Memory** — Preserves recent conversation history (`history`) in `/api/chat` payloads so follow-up prompts (*"give me C code for it"*, *"explain page 2"*) maintain full context without hallucinating.
+- **7-Way Intelligent Routing** — Intent-aware pipeline selection across coding, reasoning, prediction, search, 3D viz, PDF/vision, and chip design.
+- **Self-Scaffolding Code Generation** — Primary Coder LLM autonomously plans and writes code in a single unified trajectory.
+- **AST-Aware Self-Healing** — Surgical patching via Python AST extraction instead of fixed-line windows.
+- **Parallel Web Scraping** — ThreadPoolExecutor-based concurrent page fetching (`N×timeout → 1×timeout`).
+- **Dual Sandbox Verification** — Polyglot execution across 13 languages with kernel-level isolation.
+- **Chip Design EDA Pipeline** — Full Verilog/SPICE synthesis with SkyWater 130nm PDK mapping.
+- **Dynamic Memory Allocator (DMA)** — LRU model swapping enabling 7B+ models on 16GB RAM systems.
 
 ---
 
@@ -42,7 +48,7 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 | **DeepSeek-R1-7B** | 7B (Q6_K) | Deep reasoning, chain-of-thought, logic planning, pedagogical synthesis |
 | **VibeThinker 3B** | 3B (Q6_K) | Agent IDE syntax linter — surgical AST-aware patching |
 | **Phi-3.5-Mini** | 3.8B (Q6_K) | Intent classification, routing, search query generation |
-| **Qwen-2.5-VL-7B** | 7B (Q6_K_XL) | Vision parsing, OCR, screenshot/chart transcription |
+| **Qwen-2.5-VL-7B / Qwen3-VL-2B** | 7B / 2B (GGUF) | Multimodal vision parsing, OCR, chart & image transcription |
 
 ---
 
@@ -51,7 +57,7 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 ```mermaid
 flowchart TD
     %% ── TOP-LEVEL INGESTION ──
-    USER([User Prompt]) --> ROUTER["Router: Phi-3.5 Mini"]
+    USER([User Prompt / Image / PDF]) --> ROUTER["Router: Phi-3.5 Mini"]
     
     ROUTER -->|Search Query Triggered| OPT_QUERY["Phi 3.5 Mini: Generate optimized query"]
     OPT_QUERY --> SCRAPE["Scrape Web Snippets & Live Data"]
@@ -60,18 +66,18 @@ flowchart TD
     ROUTER -->|No Search| CLASSIFY
 
     %% ── Intent Classification Branches ──
-    CLASSIFY --> PATH_SIMPLE["1. SIMPLE"]
+    CLASSIFY --> PATH_SIMPLE["1. SIMPLE / DIRECT"]
     CLASSIFY --> PATH_CODING["2. CODING"]
     CLASSIFY --> PATH_REASONING["3. REASONING (PAL)"]
     CLASSIFY --> PATH_PREDICT["4. PREDICTION"]
-    CLASSIFY --> PATH_3D["5. 3D VIZ"]
+    CLASSIFY --> PATH_VISION["5. VISION / PDF"]
     CLASSIFY --> PATH_EXTREME["6. EXTREME WEBSEARCH"]
     CLASSIFY --> PATH_CHIP["7. CHIP DESIGN"]
 
     %% ── 1. SIMPLE PATHWAY ──
-    PATH_SIMPLE --> SIMPLE_ANS["Phi-3.5 Mini: Answer directly with web context"]
+    PATH_SIMPLE --> SIMPLE_ANS["Phi-3.5 Mini: Answer directly with web/conversation context"]
 
-    %% ── 2. REASONING PATHWAY (PAL) ──
+    %% ── 2. REASONING PATHWAY ──
     PATH_REASONING --> REASON_BRANCH{"Playground Verifiable?"}
     REASON_BRANCH -->|Yes| PAL_DRAFT["Ornith 9B: Write SymPy/Verification Script"]
     PAL_DRAFT --> PAL_SB{"Execution Sandbox"}
@@ -82,7 +88,7 @@ flowchart TD
     PAL_SB -->|Syntax/Linter Error| VT_LINT["VibeThinker 3B: Rapid Agent IDE patch"]
     VT_LINT --> PAL_SB
     
-    PAL_SB -->|Logic / Formula Error| DS_FIX["DeepSeek R1-7B: Adjust logic & retry"]
+    PAL_SB -->|Logic Error| DS_FIX["DeepSeek R1-7B: Adjust logic & retry"]
     DS_FIX --> PAL_DRAFT
 
     REASON_BRANCH -->|No| DS_THEORY["DeepSeek R1-7B: Direct detailed academic LaTeX derivation"]
@@ -94,215 +100,77 @@ flowchart TD
     
     CODING_SB -->|Verified Success| CODE_PASS["Output final Verified Code Block"]
     
-    CODING_SB -->|Syntax/Linter Error| VT_CODE_LINT["VibeThinker 3B: Agent IDE surgical patch"]
+    CODING_SB -->|Syntax Error| VT_CODE_LINT["VibeThinker 3B: Agent IDE surgical patch"]
     VT_CODE_LINT --> CODING_SB
     
-    CODING_SB -->|Logic / Runtime Bug| C_FIX["Ornith 9B: Logic self-correction loop"]
+    CODING_SB -->|Runtime Bug| C_FIX["Ornith 9B: Logic self-correction loop"]
     C_FIX --> C_DRAFT
-    
-    CODING_SB -->|"Escalation (Max Retries)"| DS_CODE_FIX["DeepSeek R1-7B: Emergency traceback patch"]
-    DS_CODE_FIX --> CODING_SB
 
     %% ── 4. PREDICTION PATHWAY ──
-    PATH_PREDICT --> P_VRAM["Expand VRAM Context Limits"]
-    P_VRAM --> P_DRAFT["Ornith 9B: Draft Pandas/Scikit-learn Regression Script"]
-    
-    P_DRAFT -->|Empty / Failed Draft| P_DS_FALLBACK["DeepSeek R1-7B Fallback Draft"]
-    P_DRAFT -->|Successful Draft| P_SB{"Sandbox Execution"}
-    P_DS_FALLBACK --> P_SB
-    
-    P_SB -->|Verified Success| P_PASS["Parse 'PREDICTIVE_METRICS' JSON & Render Forecast UI"]
-    P_SB -->|Partial Success| P_BEST_EFFORT["Return Best-Effort Text Results"]
-    P_SB -->|Syntax/Linter Error| P_LINT["VibeThinker 3B: Agent IDE surgical patch"]
-    P_LINT --> P_SB
-    
-    P_SB -->|Runtime / Logic Error| P_CLEAN["Data Cleaning Loop: Ornith full rewrite"]
-    P_CLEAN --> P_SB
-    
-    REASON_PASS & CODE_PASS & P_PASS & P_BEST_EFFORT --> P_3D_GATE{"Triggers 3D Visuals?"}
-    P_3D_GATE -->|Yes| VIZ_DRAFT
-    P_3D_GATE -->|No| RENDER_UI
+    PATH_PREDICT --> P_DRAFT["Ornith 9B: ML Regression Script Generation"]
+    P_DRAFT --> P_SB{"Execution Sandbox"}
+    P_SB -->|Success| P_3D["3D Visualizer + Predictive Metrics"]
+    P_SB -->|Execution Error| P_DRAFT
 
-    %% ── 5. 3D VIZ PATHWAY ──
-    PATH_3D --> VIZ_DRAFT["Ornith 9B: Generate HTML (JS WebGL / Three.js)"]
-    VIZ_DRAFT --> VIZ_SB{"Node.js Sandbox: Verify syntax and DOM API logic"}
-    
-    VIZ_SB -->|Syntax Error| VIZ_LINT["VibeThinker 3B: Agent IDE patch"]
-    VIZ_LINT --> VIZ_SB
-    VIZ_SB -->|DOM/Logic Error| VIZ_FIX["Ornith 9B: Fix JS execution logic"]
-    VIZ_FIX --> VIZ_DRAFT
-    VIZ_SB -->|Success| VIZ_PASS["Output Interactive HTML to Frontend Frame"]
-
-    %% ── 6. EXTREME WEBSEARCH ──
-    PATH_EXTREME --> EXT_VRAM["Expand VRAM to Absolute Max Limit"]
-    EXT_VRAM --> DS_COMPARE["DeepSeek R1-7B: Deep Comparison & Data Structuring"]
-    DS_COMPARE --> EXT_REPORT["Generate Comprehensive Analytical Report"]
-    EXT_REPORT --> EXT_PLOT["DeepSeek R1-7B: Draft Plotly Script directly"]
-    EXT_PLOT --> EXT_SB{"Execution Sandbox: Verify JSON Output"}
-    EXT_SB -->|Success| EXT_PASS["Output Deep Analysis Report + Interactive Charts"]
-
-    %% ── 7. CHIP DESIGN PATHWAY ──
-    PATH_CHIP --> CHIP_ARCH["DeepSeek R1-7B: Architecture Decomposition"]
-    CHIP_HDL{"Analog or Digital?"}
-    CHIP_ARCH --> CHIP_HDL
-    CHIP_HDL -->|Digital| CHIP_VERILOG["DeepSeek R1-7B: Verilog RTL + Testbench"]
-    CHIP_HDL -->|Analog| CHIP_SPICE["DeepSeek R1-7B: SPICE Netlist"]
-    CHIP_VERILOG --> CHIP_EDA{"iverilog + Yosys Sandbox"}
-    CHIP_SPICE --> CHIP_NGSPICE{"Ngspice Sandbox"}
-    
-    CHIP_EDA -->|Syntax/Compile Error| CHIP_VT_LINT["VibeThinker 3B: Agent IDE patch"]
-    CHIP_VT_LINT --> CHIP_EDA
-    CHIP_EDA -->|DRC/Logic Error| CHIP_FIX["Reflexion: DeepSeek R1 Auto-correct HDL"]
-    CHIP_FIX --> CHIP_EDA
-    
-    CHIP_EDA -->|Verified| CHIP_3D["Ornith 9B: Three.js 3D Chip Layer Viz"]
-    CHIP_NGSPICE --> CHIP_3D
-    CHIP_3D --> CHIP_PASS["Output HDL + Synthesis Stats + 3D Visual"]
-
-    %% ── FINAL RENDERING TERMINUS ──
-    SIMPLE_ANS & VIZ_PASS & EXT_PASS & CHIP_PASS --> RENDER_UI["💻 React Frontend UI / Chat Output"]
-
-    %% ── STYLING ──
-    classDef default fill:#1E1E1E,stroke:#4A4A4A,stroke-width:2px,color:#FFF;
-    classDef gateway fill:#2D3748,stroke:#4A5568,stroke-width:2px,color:#FFF;
-    classDef routing fill:#5E2750,stroke:#9C27B0,stroke-width:2px,color:#FFF;
-    classDef sandbox fill:#E65100,stroke:#FF9800,stroke-width:2px,color:#FFF;
-    classDef terminal fill:#1B5E20,stroke:#4CAF50,stroke-width:2px,color:#FFF;
-    
-    class USER,ROUTER,OPT_QUERY,SCRAPE,CLASSIFY gateway;
-    class PATH_SIMPLE,PATH_CODING,PATH_REASONING,PATH_PREDICT,PATH_3D,PATH_EXTREME,PATH_CHIP,P_3D_GATE routing;
-    class REASON_SB,CODING_SB,P_SB,VIZ_SB,EXT_SB,CHIP_EDA,CHIP_NGSPICE,PAL_SB sandbox;
-    class RENDER_UI terminal;
-```
-
-### Pipeline Details
-
-| # | Pipeline | Generator | Linter | Description |
-|---|---|---|---|---|
-| 1 | **Simple** | Phi-3.5 | — | Direct answers with optional web context |
-| 2 | **Coding** | Ornith 9B | VibeThinker | Self-scaffolded code gen → Sandbox verify → AST patch loop |
-| 3 | **Reasoning** | DeepSeek-R1 | VibeThinker | SymPy/SciPy verification scripts → LaTeX synthesis by R1 |
-| 4 | **Prediction** | Ornith 9B | VibeThinker | ML regression with pandas/scikit-learn, data cleaning loops |
-| 5 | **Extreme Search** | DeepSeek-R1 | — | Parallel scraping + deep thematic synthesis + Plotly charts |
-| 6 | **3D Visualization** | Ornith 9B | VibeThinker | Three.js / Plotly.js interactive scenes in iframe sandbox |
-| 7 | **Chip Design** | Ornith 9B + R1 | VibeThinker | 3-stage EDA: Architecture → HDL verify → 3D chip layout |
-
----
-
-## 🛡️ System Components
-
-### Sandbox Isolation
-- **3-Tier Security:** Linux `unshare` namespaces + `chroot` jailing + resource limits
-- **13 Languages:** Python, C, C++, Java, JS, Go, Rust, Bash, TS, Verilog, SystemVerilog, SPICE, Yosys TCL
-- **Pre-Execution SAST:** Static security scanning blocks injection, reverse shells, and exfiltration
-
-### Self-Healing Loop
-```
-Draft Code → Sandbox Execute → [Success] → Output
-                                [Failure] ↓
-                    AST Context Extraction (exact broken function)
-                                ↓
-                    VibeThinker: Surgical Search/Replace Patch
-                                ↓
-                    [Fixed] → Re-execute → Output
-                    [Failed] → Ornith Full Rewrite → Re-execute
-                    [Failed] → DeepSeek-R1 Escalation → Nuclear Reset
-```
-
-### Dynamic Memory Allocator (DMA)
-- **LRU Eviction:** Hot-swaps models between VRAM ↔ System RAM
-- **KV Cache Quantization:** INT8 KV cache halves VRAM usage
-- **GPU Offloading:** KV cache pinned to VRAM via `offload_kqv`
-- **Auto-Scaling:** Context windows scale from 8K (iGPU) → 64K (H100)
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technologies |
-|---|---|
-| **Frontend** | React 19, Vite, Vanilla CSS (Glassmorphism), react-markdown, Plotly.js, Three.js |
-| **Backend** | FastAPI, Uvicorn, llama-cpp-python, ChromaDB (RAG), DuckDuckGo Search |
-| **Sandbox** | numpy, scipy, sympy, z3-solver, scikit-learn, biopython, rdkit, astropy, cryptography |
-| **EDA** | Icarus Verilog, Yosys, Ngspice, gdstk, KLayout |
-
----
-
-## 📂 Project Structure
-
-```
-Team_Trenches/
-├── backend/
-│   ├── app.py              # FastAPI server & endpoints
-│   ├── orchestrator.py     # Core 7-Way Pipeline orchestrator
-│   ├── downloader.py       # HuggingFace model downloader
-│   ├── memory.py           # ChromaDB RAG memory & HW registry
-│   ├── sandbox.py          # Polyglot sandbox (13 langs) & EDA verify
-│   ├── search.py           # Web search & parallel scraping
-│   ├── eda_setup.py        # EDA toolchain auto-installer
-│   ├── repo_map.py         # AST-based repository mapper
-│   └── git_agent.py        # Automated Git & PR agent
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx         # Main React UI
-│   │   └── components/     # Modular UI components
-│   ├── package.json
-│   └── vite.config.js
-├── start.sh                # One-click launcher
-├── requirements.txt
-└── README.md
+    %% ── 5. VISION & PDF PATHWAY ──
+    PATH_VISION --> V_CHECK{"Is PDF or Image?"}
+    V_CHECK -->|PDF Document| PDF_PARSE["Native PDF Page Text Extractor"]
+    PDF_PARSE --> ALL_LLM["Feed Page Text to ANY Selected LLM"]
+    V_CHECK -->|Image File| PIL_NORM["PIL RGB 1024x1024 Normalization"]
+    PIL_NORM --> VL_ENGINE["Qwen 2.5-VL / Qwen 3-VL + C++ mmproj Projector"]
+    VL_ENGINE --> ALL_LLM
 ```
 
 ---
 
-## 📊 Benchmark Studio & Evaluation Pipeline
+## ⚡ Quick Start
 
-DeepThink AIOS includes a built-in **Benchmark Studio** to evaluate LLM accuracy across standardized datasets (`HumanEval`, `MBPP`, `GSM8K`, `MATH`, `SWE-bench`).
-
-> [!WARNING]
-> **Full Multi-Agent Pipeline Execution Notice:**
-> - When running coding benchmarks (`HumanEval`/`MBPP`), the system executes the **full 7-phase AIOS pipeline** (`Planner` → `Reasoning Verification` → `Coder` → `Execution Sandbox` → `Reflexion`).
-> - **Performance Overhead:** Because each problem executes multiple LLM calls and model hot-swaps (VibeThinker 3B ↔ Ornith 9B ↔ DeepSeek-R1 7B), each problem takes **2 to 5 minutes** on 16GB GPUs (such as NVIDIA T4 on Kaggle).
-> - **Genuine Evaluation:** Code is extracted from the final verified execution block and evaluated against official test harnesses. Expect genuine model accuracy scores (30–60% for typical 7B/9B GGUF models).
-> - **Cancellation:** Use the **Stop Benchmark** button in the UI or `POST /api/benchmark/stop` to safely cancel an active run and release worker threads.
-
----
-
-## 🖥️ Requirements & Setup
-
-| Resource | Minimum | Recommended |
-|---|---|---|
-| **RAM** | 16 GB | 32 GB |
-| **Storage** | 25 GB | 45 GB |
-| **OS** | Ubuntu 22.04+ / macOS 14 | Ubuntu 24.04 |
-| **GPU** | 8GB VRAM (any vendor) | NVIDIA RTX 3090/4090 |
-
-### Quick Start
+### 1. Local System Startup
 
 ```bash
-# Clone & setup
-git clone https://github.com/Bshdhorrhh/Team_Trenches.git
-cd Team_Trenches
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/Arpit104147/DeepThink-AIOS.git
+cd DeepThink-AIOS
 
-# Frontend
-cd frontend && npm install && cd ..
-
-# Launch
-chmod +x start.sh && ./start.sh
+# Launch servers (Backend on :8080, Web UI on :5173)
+./start.sh
 ```
 
-Open `http://localhost:5173`. Models download automatically on first use.
-
-**Optional — EDA Toolchain:**
-```bash
-sudo apt-get install -y iverilog yosys ngspice
-pip install gdstk
-```
+Open **`http://localhost:5173`** in your browser.
 
 ---
 
-## 👥 Team
+### 2. Kaggle / Remote Cloud VM Setup
 
-**Team Trenches** — Local Multi-Agent AIOS Development Team.
+In your Kaggle notebook cell:
+
+```python
+# 1. Pull latest code
+!git pull origin main
+
+# 2. Install localtunnel
+!npm install -g localtunnel 2>/dev/null
+
+# 3. Start FastAPI Backend in background (Port 8080)
+import subprocess, time
+subprocess.Popen(["python3", "backend/app.py"])
+time.sleep(5)
+
+# 4. Expose public tunnel URL
+!npx localtunnel --port 8080
+```
+
+Copy the printed `https://xxxx.loca.lt` URL, open **`http://localhost:5173`** in your local browser, click **`⚙️ Settings`**, and paste the URL into **Server URL**.
+
+---
+
+## 💻 Tech Stack
+
+- **Backend:** FastAPI, Uvicorn, Python 3.10+, PyTorch, Vulkan SDK, `llama-cpp-python`, ChromaDB, PyPDF
+- **Frontend:** React 18, Vite, Vanilla CSS (Glassmorphism), Google Fonts
+- **Hardware Support:** Vulkan Compute (NVIDIA, AMD, Intel iGPU/dGPU), CPU Fallback
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
