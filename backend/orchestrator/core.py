@@ -409,12 +409,12 @@ class AgentOrchestrator:
             f"STRICT DOMAIN ACCURACY CONSTRAINTS:\n"
             f"1. QUANTUM METRICS ACCURACY: Surface Code Fault-Tolerant Error Threshold is ~0.7% - 1.0% (MWPM decoder). Color Code Threshold is ~0.1% - 0.7%. NEVER state thresholds are 10-15% (which is mathematically impossible in physical QEC).\n"
             f"2. OVERHEAD METRICS: Surface Code requires 2d^2 physical qubits per logical qubit. Color Code requires 7d^2 physical qubits per logical qubit.\n"
-            f"3. COMPARATIVE TABLE: You MUST include a formatted Markdown comparison table displaying: Code Type, Space Dimension, Threshold (%), Physical Qubit Overhead (2d^2 vs 7d^2), Transversal Gates (Clifford vs H/S/T), and Decoder (MWPM / Union-Find).\n"
+            f"3. MANDATORY COMPARISON TABLE: Include a Markdown table with columns: | Code Type | Space Dim | Threshold (%) | Physical Qubit Overhead | Transversal Gates | Decoder |.\n"
             f"4. CITATIONS: Include numbered citations [1], [2], [3] pointing to live research sources in the reference section.\n"
             f"5. Do NOT state 'knowledge cutoff is January 2025' as you have live web context."
         )
         res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=2048, temperature=0.3))
-        return f"### 🔬 Extreme Web Search & Technical Survey\n\n{res}"
+        return f"# 🔬 Extreme Web Search & Technical Survey\n\n{res}"
 
     # ── Multimodal Vision Engine Entrypoint ────────────────────────────────
     def transcribe_image(self, image_input, user_prompt=None, status_callback=None):
