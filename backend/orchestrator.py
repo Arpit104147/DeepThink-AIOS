@@ -1624,12 +1624,28 @@ class AgentOrchestrator:
                         break
 
                 if mmproj_path and os.path.exists(mmproj_path):
+                    chat_handler_instance = None
                     try:
                         from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-                        kwargs["chat_handler"] = Qwen25VLChatHandler(clip_model_path=mmproj_path)
-                        print(f"👁️ Loaded Qwen2.5-VL chat handler with mmproj: {mmproj_path}")
-                    except Exception as e:
-                        print(f"⚠️ Failed to load Qwen25VLChatHandler with mmproj '{mmproj_path}': {e}")
+                        chat_handler_instance = Qwen25VLChatHandler(clip_model_path=mmproj_path)
+                    except Exception:
+                        try:
+                            from llama_cpp.llama_chat_format import Qwen2VLChatHandler
+                            chat_handler_instance = Qwen2VLChatHandler(clip_model_path=mmproj_path)
+                        except Exception:
+                            try:
+                                from llama_cpp.llama_chat_format import LlamaCLIPCompletionHandler
+                                chat_handler_instance = LlamaCLIPCompletionHandler(clip_model_path=mmproj_path)
+                            except Exception:
+                                try:
+                                    from llama_cpp.llama_chat_format import Llava15ChatHandler
+                                    chat_handler_instance = Llava15ChatHandler(clip_model_path=mmproj_path)
+                                except Exception as ex_all:
+                                    print(f"⚠️ Failed to instantiate any vision chat handler for mmproj '{mmproj_path}': {ex_all}")
+
+                    if chat_handler_instance:
+                        kwargs["chat_handler"] = chat_handler_instance
+                        print(f"👁️ Loaded vision chat handler ({chat_handler_instance.__class__.__name__}) with mmproj: {mmproj_path}")
                 else:
                     print(f"⚠️ No mmproj GGUF projector file found in {search_dirs}. Qwen2.5-VL requires mmproj file for vision.")
 
@@ -1773,28 +1789,34 @@ class AgentOrchestrator:
         data_url = None
         raw_bytes = None
         
-        # ── Step 1: Decode image data ──
-        if isinstance(image_input, str) and image_input.startswith("data:"):
-            data_url = image_input
-            try:
-                header, b64data = image_input.split(",", 1)
-                raw_bytes = base64.b64decode(b64data)
-            except Exception:
-                pass
-        elif isinstance(image_input, str) and os.path.isfile(image_input):
-            try:
-                with open(image_input, "rb") as f:
-                    raw_bytes = f.read()
-                    img_b64 = base64.b64encode(raw_bytes).decode("utf-8")
-                ext = os.path.splitext(image_input)[1].lower().replace(".", "")
-                mime = "image/jpeg"
-                if ext in ["png", "webp", "gif"]:
-                    mime = f"image/{ext}"
-                data_url = f"data:{mime};base64,{img_b64}"
-            except Exception as e:
-                return f"Error reading image file: {e}"
-        else:
-            return "Error: Invalid image input (not a data URL or valid file path)."
+        # ── Step 1: Decode & Normalize image data ──
+        if isinstance(image_input, str):
+            if image_input.startswith("data:"):
+                data_url = image_input
+                try:
+                    header, b64data = image_input.split(",", 1)
+                    raw_bytes = base64.b64decode(b64data)
+                except Exception:
+                    pass
+            elif os.path.isfile(image_input):
+                try:
+                    with open(image_input, "rb") as f:
+                        raw_bytes = f.read()
+                        img_b64 = base64.b64encode(raw_bytes).decode("utf-8")
+                    ext = os.path.splitext(image_input)[1].lower().replace(".", "")
+                    mime = "image/jpeg"
+                    if ext in ["png", "webp", "gif"]:
+                        mime = f"image/{ext}"
+                    data_url = f"data:{mime};base64,{img_b64}"
+                except Exception as e:
+                    return f"Error reading image file: {e}"
+            else:
+                # Raw base64 string without data: prefix
+                try:
+                    raw_bytes = base64.b64decode(image_input)
+                    data_url = f"data:image/jpeg;base64,{image_input}"
+                except Exception:
+                    return "Error: Invalid image data."
 
         if not data_url:
             return "Error: Could not process image data."
