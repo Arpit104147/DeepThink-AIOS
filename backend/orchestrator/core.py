@@ -52,6 +52,15 @@ class AgentOrchestrator:
         self.memory_mode = "normal"
         self.max_auto_ctx = 16384
 
+    def update_settings(self, context_length=0, max_tokens=2048, temperature=0.7, device_mode="gpu", gpu_layers=-1, search_mode="off"):
+        """Update runtime orchestrator configuration settings."""
+        self.context_length = context_length
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.device_mode = device_mode
+        self.gpu_layers = gpu_layers
+        self.search_mode = search_mode
+
     # ── DMA Memory Management Helpers ────────────────────────────────────
     def _get_ram_free_gb(self):
         try:

@@ -443,14 +443,22 @@ def update_model_roles(mapping: dict = Body(...)):
 @app.post("/api/settings")
 def update_settings(settings: SettingsRequest):
     """Update settings on the orchestrator."""
-    orchestrator.update_settings(
-        context_length=settings.context_length,
-        max_tokens=settings.max_tokens,
-        temperature=settings.temperature,
-        device_mode=settings.device_mode,
-        gpu_layers=settings.gpu_layers,
-        search_mode=settings.search_mode
-    )
+    if hasattr(orchestrator, "update_settings"):
+        orchestrator.update_settings(
+            context_length=settings.context_length,
+            max_tokens=settings.max_tokens,
+            temperature=settings.temperature,
+            device_mode=settings.device_mode,
+            gpu_layers=settings.gpu_layers,
+            search_mode=settings.search_mode
+        )
+    else:
+        orchestrator.context_length = settings.context_length
+        orchestrator.max_tokens = settings.max_tokens
+        orchestrator.temperature = settings.temperature
+        orchestrator.device_mode = settings.device_mode
+        orchestrator.gpu_layers = settings.gpu_layers
+        orchestrator.search_mode = settings.search_mode
     return {"status": "updated"}
 
 # Audio transcription endpoint removed — no speech model in the Dual-Core pipeline.
