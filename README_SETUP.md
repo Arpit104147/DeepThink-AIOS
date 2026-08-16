@@ -18,17 +18,20 @@ DeepThink AIOS can execute code in multiple languages. For this to work, ensure 
 *(Note: If a compiler is missing, the AI engine will not crash; it will gracefully fall back to Python execution).*
 
 ### 🔧 EDA Toolchain (Optional — For Chip Design Pipeline)
-If you plan to use the Chip Design EDA Sandbox for Verilog/SPICE simulation:
+If you plan to use the Chip Design EDA Sandbox for Verilog/SPICE hardware simulation:
 
 ```bash
-# Linux (Debian/Ubuntu)
-sudo apt install iverilog yosys ngspice klayout
+# 🐧 Linux / Kaggle Notebooks:
+!apt-get update -y && !apt-get install -y iverilog yosys ngspice klayout
 
-# Mac (Homebrew)
+# 🍎 Mac (Homebrew):
 brew install icarus-verilog yosys ngspice
+
+# 🪟 Windows (Chocolatey / WSL2):
+choco install icarus-verilog ngspice
 ```
 
-*(These tools are optional. If missing, the AIOS will skip hardware simulation steps and still function for all other pipelines.)*
+*(These tools are optional. If missing, DeepThink AIOS will gracefully output the code and 3D chip architecture layout while skipping hardware binary simulation).*
 
 ### 🔒 Kernel Isolation Prerequisites (Optional — Enhanced Security)
 The sandbox automatically uses Linux kernel namespaces (`unshare`) for network/process isolation when available. No extra setup is needed on most modern Linux systems.
