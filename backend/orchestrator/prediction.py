@@ -43,22 +43,29 @@ class PredictionPipeline:
 
         metrics_md = ""
         if metrics_json:
+            r2_val = metrics_json.get('r2') or metrics_json.get('r2Score') or metrics_json.get('r2_score', 'N/A')
+            mse_val = metrics_json.get('mse') or metrics_json.get('mean_squared_error', 'N/A')
             metrics_md = (
                 f"\n\n### 🔮 Predictive Model Metrics\n"
-                f"- **R² Score:** `{metrics_json.get('r2', 'N/A')}`\n"
-                f"- **Mean Squared Error (MSE):** `{metrics_json.get('mse', 'N/A')}`\n"
+                f"- **R² Score:** `{r2_val}`\n"
+                f"- **Mean Squared Error (MSE):** `{mse_val}`\n"
             )
 
         viz_html = orchestrator._generate_3d_visualization(prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback)
         if not viz_html or "<!--ARTIFACT_HTML-->" not in viz_html:
             viz_html = PredictionPipeline._build_plotly_3d_fallback(prompt, metrics_json)
 
-        res_md = f"Prediction & Forecasting Analysis\n\n```python\n{code}\n```\n{metrics_md}\n\n{viz_html}"
+        res_md = f"# 🔮 Prediction & Forecasting Analysis\n\n```python\n{code}\n```\n{metrics_md}\n\n{viz_html}"
         return res_md
 
     @staticmethod
     def _build_plotly_3d_fallback(prompt, metrics_json=None):
-        preds = metrics_json.get("predictions", [1.2, 1.4, 1.6, 1.8, 2.0, 2.1, 2.3, 2.5, 2.7, 2.9]) if (metrics_json and isinstance(metrics_json, dict) and "predictions" in metrics_json) else [1.2, 1.4, 1.6, 1.8, 2.0, 2.1, 2.3, 2.5, 2.7, 2.9]
+        preds = [1.2, 1.4, 1.7, 2.1, 2.5, 2.8, 3.2, 3.6, 4.0, 4.5]
+        if isinstance(metrics_json, dict):
+            for k in ["predictions", "predict", "values", "y_future", "forecast"]:
+                if k in metrics_json and isinstance(metrics_json[k], list) and len(metrics_json[k]) > 0:
+                    preds = metrics_json[k]
+                    break
         preds_js = json.dumps(preds[:20])
         return (
             "<!--ARTIFACT_HTML-->\n"
@@ -72,11 +79,12 @@ class PredictionPipeline:
             "  <div id=\"plot\" style=\"width:100vw; height:100vh;\"></div>\n"
             "  <script>\n"
             "    document.addEventListener('DOMContentLoaded', function() {\n"
-            f"      const predictions = {preds_js};\n"
-            "      const steps = Array.from({length: predictions.length}, (_, i) => i + 1);\n"
-            "      const trace1 = {\n"
+            f"      var rawPreds = {preds_js};\n"
+            "      var predictions = Array.isArray(rawPreds) ? rawPreds : [1.2, 1.4, 1.7, 2.1, 2.5, 2.8, 3.2, 3.6, 4.0, 4.5];\n"
+            "      var steps = Array.from({length: predictions.length}, function(_, i) { return i + 1; });\n"
+            "      var trace1 = {\n"
             "        x: steps,\n"
-            "        y: predictions.map((v, i) => v * 0.85 + 0.1 * i),\n"
+            "        y: predictions.map(function(v, i) { return v * 0.85 + 0.1 * i; }),\n"
             "        z: predictions,\n"
             "        mode: 'lines+markers',\n"
             "        marker: { size: 6, color: '#00f2fe' },\n"
@@ -84,16 +92,16 @@ class PredictionPipeline:
             "        type: 'scatter3d',\n"
             "        name: '3D Predicted Energy Curve'\n"
             "      };\n"
-            "      const layout = {\n"
-            "        title: { text: '3D Predictive Energy Consumption Forecast', font: { color: '#ffffff' } },\n"
+            "      var layout = {\n"
+            "        title: { text: '3D Predictive Energy Consumption Forecast', font: { color: '#ffffff', size: 16 } },\n"
             "        paper_bgcolor: '#0d0d0d',\n"
             "        plot_bgcolor: '#0d0d0d',\n"
             "        scene: {\n"
-            "          xaxis: { title: 'Time Step', color: '#888' },\n"
-            "          yaxis: { title: 'Feature Load', color: '#888' },\n"
-            "          zaxis: { title: 'Predicted Value', color: '#888' }\n"
+            "          xaxis: { title: 'Time Step', color: '#aaaaaa' },\n"
+            "          yaxis: { title: 'Feature Load', color: '#aaaaaa' },\n"
+            "          zaxis: { title: 'Predicted Value', color: '#aaaaaa' }\n"
             "        },\n"
-            "        margin: { l:0, r:0, b:0, t:40 }\n"
+            "        margin: { l:10, r:10, b:10, t:40 }\n"
             "      };\n"
             "      Plotly.newPlot('plot', [trace1], layout);\n"
             "    });\n"
