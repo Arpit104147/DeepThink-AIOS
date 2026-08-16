@@ -35,7 +35,7 @@ const MessageList = ({ history, isGenerating, currentLogs, currentStream, displa
             {msg.type === "user" ? (
               <UserMessage text={msg.text} image={msg.image} />
             ) : (
-              <MessageRenderer text={msg.text} animate={i === history.length - 1 && !isGenerating} />
+              <MessageRenderer text={msg.text} animate={false} />
             )}
           </div>
         </div>
