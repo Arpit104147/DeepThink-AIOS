@@ -4571,29 +4571,29 @@ class AgentOrchestrator:
         # ── Six-Way Classification ────────────────────────────────────────
         router_llm = self._get_model("router", required_ctx=router_ctx)
         
-        # Define comprehensive predictive indicators
-        is_predictive = any(kw in prompt_lower for kw in [
-            "predict", "forecast", "prediction", "regression", "classifier", "classification",
-            "machine learning", "random forest", "scikit-learn", "linear regression",
-            "logistic regression", "ridge regression", "lasso regression", "neural network",
-            "train test split", "mean squared error", "r-squared", "r2 score"
-        ])
-        
         has_image_or_doc = "[Transcribed Image Content" in prompt or "[Uploaded PDF Document Content" in prompt
 
-        if has_image_or_doc and (not isinstance(mode, str) or mode.lower() == "auto"):
-            task_type = "SIMPLE"
-        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
+        # Strict explicit prediction check — ONLY run prediction pipeline when user explicitly asks to predict/forecast
+        is_explicit_prediction = (
+            (isinstance(mode, str) and mode.upper() == "PREDICTION") or
+            any(kw in prompt_lower for kw in [
+                "predict ", "predict\n", "prediction", "forecast", "regression model",
+                "run prediction", "predictive model", "build prediction"
+            ])
+        ) and not has_image_or_doc
+
+        if isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
             task_type = mode.upper()
+        elif is_explicit_prediction:
+            task_type = "PREDICTION"
         else:
-            if is_predictive and not has_image_or_doc:
-                task_type = "PREDICTION"
-            else:
-                task_type = self._classify_task(router_llm, prompt)
+            classified = self._classify_task(router_llm, prompt)
+            # Never let LLM router classify prompt as PREDICTION unless explicitly requested
+            task_type = classified if (classified != "PREDICTION" or is_explicit_prediction) else "SIMPLE"
             
         # ── Search Mode Overrides ─────────────────────────────────────────
         if active_web_search and (not isinstance(mode, str) or mode.lower() == "auto") and not has_image_or_doc:
-            if self.search_mode == "prediction" or is_predictive:
+            if is_explicit_prediction:
                 task_type = "PREDICTION"
                 # Prediction tasks with web search produce massive enriched prompts.
                 # Ensure ds_ctx and oc_ctx are large enough to hold the scraped web data.
