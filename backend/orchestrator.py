@@ -1764,7 +1764,7 @@ class AgentOrchestrator:
     # =========================================================================
     # VISION: Qwen 2.5 VL Image Parsing
     # =========================================================================
-    def transcribe_image(self, image_input, status_callback=None):
+    def transcribe_image(self, image_input, user_prompt=None, status_callback=None):
         if status_callback:
             status_callback("👁️ Processing image...", "info", "qwen_vl", 5)
             
@@ -1836,31 +1836,56 @@ class AgentOrchestrator:
                 return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
             return f"⚠️ Vision model loading failed: {e}"
 
-        vision_prompt = "Describe this image in detail. Identify any persons, objects, scenes, or text present in the image."
+        prompt_prefix = f"User Question: {user_prompt}\n" if user_prompt else ""
+        vision_prompt = f"{prompt_prefix}Describe this image in detail. Identify any persons, objects, landmarks, text, or scenes."
+
+        # In Qwen2.5-VL chat handlers, the image_url tag MUST be placed FIRST before text in the content list
+        payload_formats = [
+            # Format 1: Image URL FIRST (standard Qwen2.5-VL format)
+            [
+                {"type": "image_url", "image_url": {"url": data_url}},
+                {"type": "text", "text": vision_prompt}
+            ],
+            # Format 2: Direct string URL
+            [
+                {"type": "image_url", "image_url": data_url},
+                {"type": "text", "text": vision_prompt}
+            ],
+            # Format 3: Text first fallback
+            [
+                {"type": "text", "text": vision_prompt},
+                {"type": "image_url", "image_url": {"url": data_url}}
+            ]
+        ]
 
         with self.inference_lock:
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": vision_prompt},
-                        {"type": "image_url", "image_url": {"url": data_url}}
-                    ]
-                }
-            ]
-            try:
-                res = llm.create_chat_completion(messages=messages, max_tokens=500)
+            final_desc = None
+            for p_idx, content_payload in enumerate(payload_formats):
+                messages = [{"role": "user", "content": content_payload}]
+                try:
+                    res = llm.create_chat_completion(messages=messages, max_tokens=500)
+                    desc = res["choices"][0]["message"]["content"].strip()
+                    
+                    # Verify response actually analyzed the image and didn't state "do not have an image"
+                    lower_desc = desc.lower()
+                    if "do not have an image" in lower_desc or "no image to analyze" in lower_desc:
+                        continue
+                        
+                    final_desc = desc
+                    break
+                except Exception as e:
+                    print(f"⚠️ Vision chat payload format #{p_idx+1} failed: {e}")
+
+            if final_desc:
                 if status_callback:
                     status_callback(f"{self._get_display_model_name('qwen_vl')} transcription complete!", "success", "qwen_vl", 100)
-                desc = res["choices"][0]["message"]["content"].strip()
-                if ocr_extracted_text and ocr_extracted_text not in desc:
-                    desc += f"\n\n[OCR Text Output]:\n{ocr_extracted_text}"
-                return desc
-            except Exception as e:
-                print(f"⚠️ Vision chat completion failed: {e}")
-                if ocr_extracted_text:
-                    return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
-                return f"⚠️ Vision parsing failed: {e}. Ensure mmproj-BF16.gguf projector file is present in model directory."
+                if ocr_extracted_text and ocr_extracted_text not in final_desc:
+                    final_desc += f"\n\n[OCR Text Output]:\n{ocr_extracted_text}"
+                return final_desc
+
+            if ocr_extracted_text:
+                return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
+            return "⚠️ Qwen 2.5-VL was unable to parse the image payload structure. Ensure mmproj-BF16.gguf projector file is present in model directory."
 
     # =========================================================================
     # MAIN AGENTIC PIPELINE

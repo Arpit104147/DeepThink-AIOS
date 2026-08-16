@@ -265,6 +265,23 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
     }
   };
 
+  const handleDeleteCustomModel = async (modelKey) => {
+    try {
+      const res = await fetch(`${serverUrl}/api/models/custom/${modelKey}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setActionMessage(`🗑️ Removed custom model ${modelKey}`);
+        fetchStatus();
+      } else {
+        const d = await res.json();
+        setActionMessage(`Cannot delete: ${d.detail || "Error"}`);
+      }
+    } catch (e) {
+      setActionMessage(`Delete error: ${e.message}`);
+    }
+  };
+
   const currentRepoId = selectedRepo ? (selectedRepo.id || selectedRepo.model_id || selectedRepo.repo_id) : "";
 
   return (
@@ -577,55 +594,80 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
           {activeTab === "models" && (
             <div className="tab-panel">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <span style={{ fontSize: "0.82rem", color: "#94a3b8" }}>Installed GGUF model library on local system.</span>
+                <span style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
+                  Installed GGUF model library on local system ({Object.values(modelsStatus).filter(m => m.downloaded).length} ready).
+                </span>
                 <button onClick={fetchStatus} style={{ padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}>🔄 Refresh</button>
               </div>
 
-              <div style={{ display: "grid", gap: "10px", maxHeight: "380px", overflowY: "auto" }}>
-                {Object.entries(modelsStatus).map(([key, info]) => (
-                  <div key={key} style={{ padding: "14px", background: "rgba(255, 255, 255, 0.025)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.07)", display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: "600", fontSize: "0.95rem", color: "#f8fafc" }}>{info.name || key}</div>
-                        <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "3px" }}>
-                          Repo: <code style={{ background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: "4px" }}>{info.repo_id}</code> | File: <code style={{ background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: "4px" }}>{info.filename}</code>
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: "0.78rem", display: "flex", alignItems: "center", gap: "8px" }}>
-                        {info.downloaded ? (
-                          <span style={{ color: "#34d399", fontWeight: "600" }}>✅ Downloaded ({info.size})</span>
-                        ) : info.progress && info.progress.status === "downloading" ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ color: "#818cf8", fontWeight: "600" }}>🚀 Downloading {info.progress.percent}%</span>
-                            <button
-                              onClick={() => handleCancelDownload(key)}
-                              style={{ padding: "3px 8px", borderRadius: "4px", background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", color: "#ef4444", cursor: "pointer", fontSize: "0.72rem" }}
-                            >
-                              ⏹️ Cancel
-                            </button>
+              {Object.keys(modelsStatus).length === 0 ? (
+                <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8", fontSize: "0.88rem" }}>
+                  Searching for local GGUF models... Click <strong>Refresh</strong> if models are loaded in Kaggle/disk.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: "10px", maxHeight: "380px", overflowY: "auto" }}>
+                  {Object.entries(modelsStatus).map(([key, info]) => (
+                    <div key={key} style={{ padding: "14px", background: "rgba(255, 255, 255, 0.025)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.07)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontWeight: "600", fontSize: "0.95rem", color: "#f8fafc", display: "flex", alignItems: "center", gap: "8px" }}>
+                            {info.name || key}
+                            {info.is_custom && (
+                              <span style={{ fontSize: "0.68rem", background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)", color: "#818cf8", padding: "2px 6px", borderRadius: "4px" }}>
+                                Custom
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <span style={{ color: "#fbbf24", fontWeight: "600" }}>⏳ Not Downloaded</span>
-                        )}
-                      </div>
-                    </div>
+                          <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "3px" }}>
+                            Repo: <code style={{ background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: "4px" }}>{info.repo_id}</code> | File: <code style={{ background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: "4px" }}>{info.filename}</code>
+                          </div>
+                        </div>
 
-                    {/* Progress Bar in Local Models list (ONLY when downloading) */}
-                    {!info.downloaded && info.progress && info.progress.status === "downloading" && (
-                      <div style={{ width: "100%", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: "8px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#818cf8", marginBottom: "4px" }}>
-                          <span>Downloading: {info.progress.downloaded_gb} GB</span>
-                          <span>{info.progress.percent}%</span>
-                        </div>
-                        <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "3px", overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${info.progress.percent}%`, background: "linear-gradient(90deg, #6366f1, #a855f7)", transition: "width 0.3s ease" }} />
+                        <div style={{ fontSize: "0.78rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                          {info.downloaded ? (
+                            <span style={{ color: "#34d399", fontWeight: "600" }}>✅ Downloaded {info.size ? `(${info.size})` : ""}</span>
+                          ) : info.progress && info.progress.status === "downloading" ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span style={{ color: "#818cf8", fontWeight: "600" }}>🚀 Downloading {info.progress.percent}%</span>
+                              <button
+                                onClick={() => handleCancelDownload(key)}
+                                style={{ padding: "3px 8px", borderRadius: "4px", background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", color: "#ef4444", cursor: "pointer", fontSize: "0.72rem" }}
+                              >
+                                ⏹️ Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ color: "#fbbf24", fontWeight: "600" }}>⏳ Not Downloaded</span>
+                          )}
+
+                          {info.is_custom && (
+                            <button
+                              onClick={() => handleDeleteCustomModel(key)}
+                              style={{ padding: "3px 8px", borderRadius: "4px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", cursor: "pointer", fontSize: "0.72rem" }}
+                              title="Delete custom model entry"
+                            >
+                              🗑️ Remove
+                            </button>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+
+                      {/* Progress Bar in Local Models list (ONLY when downloading) */}
+                      {!info.downloaded && info.progress && info.progress.status === "downloading" && (
+                        <div style={{ width: "100%", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: "8px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#818cf8", marginBottom: "4px" }}>
+                            <span>Downloading: {info.progress.downloaded_gb} GB</span>
+                            <span>{info.progress.percent}%</span>
+                          </div>
+                          <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "3px", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${info.progress.percent}%`, background: "linear-gradient(90deg, #6366f1, #a855f7)", transition: "width 0.3s ease" }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

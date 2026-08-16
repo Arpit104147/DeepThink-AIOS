@@ -591,7 +591,7 @@ async def chat(request: ChatRequest):
                             q.put({"type": "error", "message": "Generation cancelled."})
                             return
                         try:
-                            ocr_text = orchestrator.transcribe_image(request.image, status_callback=thread_cb)
+                            ocr_text = orchestrator.transcribe_image(request.image, user_prompt=request.prompt, status_callback=thread_cb)
                             final_prompt = (
                                 f"[Transcribed Image Content via Qwen 2.5-VL 7B]:\n"
                                 f"{ocr_text}\n\n"
