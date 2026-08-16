@@ -230,16 +230,16 @@ class AgentOrchestrator:
         if self.cancel_event and self.cancel_event.is_set():
             raise RuntimeError("Generation cancelled by user.")
         with self.inference_lock:
-            if callable(model):
-                return model(prompt, max_tokens=max_tokens, temperature=temperature, system_prompt=system_prompt)
-            elif hasattr(model, 'create_chat_completion'):
+            if hasattr(model, 'create_chat_completion'):
                 messages = []
                 if system_prompt:
                     messages.append({"role": "system", "content": system_prompt})
                 messages.append({"role": "user", "content": prompt})
                 resp = model.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature)
                 return resp['choices'][0]['message']['content']
-            elif hasattr(model, '__call__'):
+            elif isinstance(model, TransformerWrapper):
+                return model(prompt, max_tokens=max_tokens, temperature=temperature, system_prompt=system_prompt)
+            elif callable(model):
                 return model(prompt, max_tokens=max_tokens, temperature=temperature)
             else:
                 raise Exception("Unknown model callable signature.")
