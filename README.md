@@ -22,6 +22,17 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 
 ---
 
+### 💻 System Requirements
+
+| Specification | Minimum (Lightweight LLMs) | Recommended (Full Agent Swarm) |
+|---|---|---|
+| **System RAM** | **8 GB RAM** *(using 1.5B–3.8B quants)* | **16 GB – 32 GB RAM** *(for 7B–9B quants)* |
+| **GPU VRAM** | Integrated iGPU / 2–4 GB VRAM | 8 GB – 16 GB+ VRAM *(Vulkan / CUDA / Metal)* |
+| **Storage** | 10 GB free disk space | 30 GB SSD space for full local GGUF fleet |
+| **OS** | Linux (Ubuntu/Debian), macOS (Apple Silicon), Windows 10/11 | Linux / Kaggle Cloud VM / macOS |
+
+---
+
 ### ✨ Key Features
 
 - **Universal Vulkan GPU Backend** — Universal acceleration on NVIDIA, AMD, and Intel GPUs via Vulkan compute.
@@ -36,19 +47,21 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 - **Parallel Web Scraping** — ThreadPoolExecutor-based concurrent page fetching (`N×timeout → 1×timeout`).
 - **Dual Sandbox Verification** — Polyglot execution across 13 languages with kernel-level isolation.
 - **Chip Design EDA Pipeline** — Full Verilog/SPICE synthesis with SkyWater 130nm PDK mapping.
-- **Dynamic Memory Allocator (DMA)** — LRU model swapping enabling 7B+ models on 16GB RAM systems.
+- **Dynamic Memory Allocator (DMA)** — LRU model swapping enabling 7B+ models on 8GB–16GB RAM systems.
 
 ---
 
-## 🤖 Model Fleet
+## 🤖 Default System Model Fleet
 
-| Model | Size | Role |
-|---|---|---|
-| **Ornith 1.0-9B** | 9B (Q6_K) | Primary code generation, 3D visualization, ML scripting, self-correction |
-| **DeepSeek-R1-7B** | 7B (Q6_K) | Deep reasoning, chain-of-thought, logic planning, pedagogical synthesis |
-| **VibeThinker 3B** | 3B (Q6_K) | Agent IDE syntax linter — surgical AST-aware patching |
-| **Phi-3.5-Mini** | 3.8B (Q6_K) | Intent classification, routing, search query generation |
-| **Qwen-2.5-VL-7B / Qwen3-VL-2B** | 7B / 2B (GGUF) | Multimodal vision parsing, OCR, chart & image transcription |
+| System Role | Model Name | HuggingFace Repo ID | GGUF Filename & Projector | Quants |
+|---|---|---|---|---|
+| **Master Router** | **Phi-3.5-Mini** | `bartowski/Phi-3.5-mini-instruct-GGUF` | `Phi-3.5-mini-instruct-Q6_K.gguf` | Q6_K / Q4_K |
+| **Agentic Coder** | **Ornith 1.0-9B** | `deepreinforce-ai/Ornith-1.0-9B-GGUF` | `ornith-1.0-9b-Q6_K.gguf` | Q6_K / Q4_K |
+| **Reasoning Engine** | **DeepSeek-R1-7B** | `unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF` | `DeepSeek-R1-Distill-Qwen-7B-Q6_K.gguf` | Q6_K / Q4_K |
+| **Syntax Linter** | **VibeThinker 3B** | `prithivMLmods/VibeThinker-3B-GGUF` | `VibeThinker-3B.Q6_K.gguf` | Q6_K / Q4_K |
+| **Vision & OCR** | **Qwen-2.5-VL-7B** / **Qwen3-VL-2B** | `unsloth/Qwen2.5-VL-7B-Instruct-GGUF` | `Qwen2.5-VL-7B-Instruct-UD-Q6_K_XL.gguf` + `mmproj-BF16.gguf` | Q6_K / Q4_K / Q8_0 |
+
+*Note: Lightweight 1.5B–3B GGUF models (e.g. Qwen-2.5-1.5B, Qwen3-VL-2B, Llama-3.2-1B/3B) can be assigned to any system role for 8 GB RAM systems via Model Hub.*
 
 ---
 
