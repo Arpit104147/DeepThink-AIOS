@@ -78,7 +78,7 @@ from backend.downloader import (
     add_custom_model, remove_custom_model, ROLE_ASSIGNMENTS, save_role_assignments, cancel_model_download
 )
 from backend.orchestrator import AgentOrchestrator
-from backend.benchmark_runner import BENCHMARK_STATE, run_benchmark_suite, STATE_LOCK
+from backend.benchmark_runner import BENCHMARK_STATE, run_benchmark_suite, stop_benchmark, STATE_LOCK
 from backend.vulkan_engine import (
     check_vulkan_engine_status, start_vulkan_update_background, get_vulkan_gpu_diagnostics
 )

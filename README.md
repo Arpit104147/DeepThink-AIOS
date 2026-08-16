@@ -255,6 +255,19 @@ Team_Trenches/
 
 ---
 
+## 📊 Benchmark Studio & Evaluation Pipeline
+
+DeepThink AIOS includes a built-in **Benchmark Studio** to evaluate LLM accuracy across standardized datasets (`HumanEval`, `MBPP`, `GSM8K`, `MATH`, `SWE-bench`).
+
+> [!WARNING]
+> **Full Multi-Agent Pipeline Execution Notice:**
+> - When running coding benchmarks (`HumanEval`/`MBPP`), the system executes the **full 7-phase AIOS pipeline** (`Planner` → `Reasoning Verification` → `Coder` → `Execution Sandbox` → `Reflexion`).
+> - **Performance Overhead:** Because each problem executes multiple LLM calls and model hot-swaps (VibeThinker 3B ↔ Ornith 9B ↔ DeepSeek-R1 7B), each problem takes **2 to 5 minutes** on 16GB GPUs (such as NVIDIA T4 on Kaggle).
+> - **Genuine Evaluation:** Code is extracted from the final verified execution block and evaluated against official test harnesses. Expect genuine model accuracy scores (30–60% for typical 7B/9B GGUF models).
+> - **Cancellation:** Use the **Stop Benchmark** button in the UI or `POST /api/benchmark/stop` to safely cancel an active run and release worker threads.
+
+---
+
 ## 🖥️ Requirements & Setup
 
 | Resource | Minimum | Recommended |
