@@ -31,13 +31,15 @@ async def evaluate_problem_solution(
                 
         if extracted_code and len(extracted_code.strip()) >= 5:
             entry_point = problem.get("entry_point")
+            prompt_clean = problem.get("prompt", "").strip()
             
+            # Ensure function signature is present exactly once
             if entry_point and f"def {entry_point}" not in extracted_code:
                 matches = re.findall(rf"(def {entry_point}\b[\s\S]*?)(?=\ndef |\Z)", response)
                 if matches:
                     extracted_code = "\n\n".join(matches)
-                elif f"def {entry_point}" not in extracted_code:
-                    extracted_code = problem.get("prompt", "") + extracted_code
+                else:
+                    extracted_code = prompt_clean + "\n" + extracted_code
 
             typing_imports = (
                 "from typing import List, Dict, Tuple, Set, Optional, Union, Any, Callable\n"
@@ -45,15 +47,8 @@ async def evaluate_problem_solution(
                 "import numpy as np\n\n"
             )
             
-            prompt_clean = problem.get("prompt", "")
-            if entry_point and f"def {entry_point}" in extracted_code:
-                test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
-            elif prompt_clean.strip() in extracted_code:
-                test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
-            else:
-                test_code = typing_imports + prompt_clean + "\n" + extracted_code + "\n\n" + problem["test"]
-                
-            if entry_point:
+            test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
+            if entry_point and f"check({entry_point})" not in problem["test"]:
                 test_code += f"\n\ncheck({entry_point})"
                 
             is_success, output = await asyncio.to_thread(orchestrator.sandbox.execute, test_code, "python", timeout=5.0)

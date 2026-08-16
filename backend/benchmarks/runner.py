@@ -214,8 +214,9 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                             BENCHMARK_STATE["workers"][worker_id]["progress"] = min(95, prog)
                             
                 try:
+                    benchmark_mode = "CODING" if category in ["HumanEval", "MBPP", "SWE-bench"] else "REASONING" if category in ["GSM8K", "MATH"] else "auto"
                     response = await asyncio.wait_for(
-                        asyncio.to_thread(orchestrator.process_query, problem["prompt"], cb),
+                        asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
                         timeout=180.0
                     )
                     success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
