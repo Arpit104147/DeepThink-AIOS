@@ -601,6 +601,13 @@ async def chat(request: ChatRequest):
                             return
                         try:
                             ocr_text = orchestrator.transcribe_image(request.image, user_prompt=request.prompt, status_callback=thread_cb)
+                            if isinstance(ocr_text, str) and (ocr_text.startswith("⚠️ Qwen") or ocr_text.startswith("⚠️ Vision")):
+                                thread_cb("Vision model not downloaded", "warning")
+                                q.put({"type": "chunk", "text": ocr_text})
+                                q.put({"type": "done"})
+                                q.put(None)
+                                return
+
                             final_prompt = (
                                 f"[Transcribed Image Content via Qwen 2.5-VL 7B]:\n"
                                 f"{ocr_text}\n\n"

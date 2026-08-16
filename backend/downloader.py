@@ -69,6 +69,10 @@ def resolve_model_key(key_or_role):
     if is_model_downloaded(resolved_key):
         return resolved_key
         
+    # FOR VISION: Never fall back to a text-only model!
+    if target_role == 'vision' or key_or_role in ['vision', 'qwen_vl']:
+        return 'qwen_vl'
+        
     fallback = get_any_available_model_key()
     if fallback:
         return fallback

@@ -336,13 +336,41 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search HuggingFace models (e.g. glm 4.7 flash, qwen)..."
+                    placeholder="Search HuggingFace models (e.g. qwen 2.5 vl, deepseek, phi)..."
                     className="lmstudio-search-input"
                   />
                   {searchQuery && (
                     <button type="button" onClick={() => { setSearchQuery(""); handleSearch(""); }} className="clear-search-btn">✕</button>
                   )}
                 </form>
+
+                {/* Quick Search Preset Tags */}
+                <div style={{ display: "flex", gap: "6px", overflowX: "auto", padding: "4px 0 8px 0" }}>
+                  {[
+                    { label: "👁️ Vision (Qwen-VL)", query: "qwen 2.5 vl gguf" },
+                    { label: "🧠 Reasoning (R1)", query: "deepseek r1 gguf" },
+                    { label: "💻 Coding (Ornith)", query: "ornith 1.0 gguf" },
+                    { label: "⚡ Router (Phi-3.5)", query: "phi-3.5 gguf" },
+                  ].map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => { setSearchQuery(chip.query); handleSearch(chip.query); }}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: "0.72rem",
+                        borderRadius: "12px",
+                        background: searchQuery.includes(chip.query.split(" ")[0]) ? "rgba(168, 85, 247, 0.3)" : "rgba(255, 255, 255, 0.06)",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        color: "#f8fafc",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
 
                 <div className="lmstudio-repo-list">
                   {loadingSearch ? (
@@ -357,14 +385,22 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                     searchResults.map((m) => {
                       const itemRepoId = m.id || m.model_id || m.repo_id;
                       const isSelected = currentRepoId && itemRepoId && currentRepoId === itemRepoId;
+                      const isVisionModel = itemRepoId.toLowerCase().includes("vl") || itemRepoId.toLowerCase().includes("vision") || itemRepoId.toLowerCase().includes("llava") || itemRepoId.toLowerCase().includes("smolvlm");
                       return (
                         <div
                           key={itemRepoId}
                           className={`lmstudio-repo-card ${isSelected ? "active" : ""}`}
                           onClick={() => handleSelectRepo(m)}
                         >
-                          <div className="card-title">
-                            <span>🤗</span> <span>{m.model_name || itemRepoId.split("/").pop()}</span>
+                          <div className="card-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span>🤗</span> <span>{m.model_name || itemRepoId.split("/").pop()}</span>
+                            </div>
+                            {isVisionModel && (
+                              <span style={{ fontSize: "0.65rem", background: "rgba(168,85,247,0.25)", border: "1px solid rgba(168,85,247,0.4)", color: "#c084fc", padding: "1px 5px", borderRadius: "4px" }}>
+                                👁️ VL Model
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: "0.75rem", opacity: 0.75, marginTop: "2px" }}>{m.author}</div>
                           <div className="card-meta">
