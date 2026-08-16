@@ -48,6 +48,11 @@ const ArtifactSandbox = ({ htmlCode }) => {
       if (doc.includes("Plotly") && !doc.includes("plotly")) {
         doc = doc.replace("<head>", "<head>\n<script src=\"https://cdn.plot.ly/plotly-2.24.1.min.js\"></script>");
       }
+      if (doc.includes("Plotly") && !doc.includes("id=")) {
+        doc = doc.replace("<body>", "<body>\n<div id=\"plot\" style=\"width:100vw;height:100vh;\"></div>");
+        doc = doc.replace("Plotly.newPlot(", "document.addEventListener('DOMContentLoaded', function() { Plotly.newPlot('plot', ");
+        doc = doc.replace("</script>", "});\n</script>");
+      }
 
       const injection = `
         <style>

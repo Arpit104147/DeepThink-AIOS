@@ -361,7 +361,8 @@ class AgentOrchestrator:
             "3. Plotly CDN: https://cdn.plot.ly/plotly-2.24.1.min.js\n"
             "4. Dark background #0d0d0d.\n"
             "5. NO ES6 imports. Use global THREE or Plotly.\n"
-            "6. STRICT JS RULES: NEVER reference non-existent JavaScript classes (like PolynomialRidgeRegression, scikit-learn). Implement mathematical formulas in pure JavaScript loops or plot 3D surfaces/scatters with Plotly.newPlot.\n\n"
+            "6. STRICT JS RULES: NEVER reference non-existent JavaScript classes (like PolynomialRidgeRegression, scikit-learn). Implement mathematical formulas in pure JavaScript loops or plot 3D surfaces/scatters with Plotly.newPlot.\n"
+            "7. DOM CONTAINER MANDATE: Always place <div id=\"plot\" style=\"width:100vw; height:100vh;\"></div> in the <body> BEFORE any <script> tag. Wrap Plotly.newPlot('plot', ...) inside document.addEventListener('DOMContentLoaded', function() { ... }) to ensure the container element is never null.\n\n"
             f"Topic: {prompt}\n\n"
             "Output ONLY complete HTML in ```html``` blocks."
         )
