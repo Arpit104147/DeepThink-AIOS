@@ -1900,16 +1900,27 @@ class AgentOrchestrator:
             except Exception:
                 pass
 
-        # ── Step 3: Check if Qwen 2.5-VL Vision Model is downloaded ──
-        from backend.downloader import is_model_downloaded
+        # ── Step 3: Check if Qwen 2.5-VL / Qwen 3-VL Vision Model is downloaded ──
+        from backend.downloader import is_model_downloaded, _DISCOVERY_CACHE
         qwen_installed = is_model_downloaded("qwen_vl")
 
         if not qwen_installed:
             if ocr_extracted_text:
                 return f"Extracted Text from Image (via OCR):\n{ocr_extracted_text}"
+                
+            has_vl_file = any(("vl" in f or "vision" in f) and not f.startswith("mmproj") for f in _DISCOVERY_CACHE.get("files_map", {}))
+            has_mmproj = _DISCOVERY_CACHE.get("has_mmproj", False)
+
+            if has_vl_file and not has_mmproj:
+                return (
+                    "⚠️ **Vision Projector (`mmproj`) Missing**\n\n"
+                    "The Vision Model file is installed on your system, but the required multimodal projector (`mmproj-BF16.gguf` / `mmproj.gguf`) is missing.\n"
+                    "Please open **Model Hub (LM Studio)** → **Installed Library** to download the `mmproj` projector file."
+                )
+
             return (
-                "⚠️ Qwen 2.5-VL Vision Model is not downloaded on your system.\n"
-                "To enable full image description and visual understanding, please open Model Hub → Vision tab and download Qwen 2.5-VL."
+                "⚠️ **Vision Engine Not Installed**\n\n"
+                "To enable image description and visual understanding, please open **Model Hub (LM Studio)** → **Featured Models** and download **Qwen 2.5-VL** / **Qwen 3-VL** (downloads model + vision projector automatically)."
             )
 
         # ── Step 4: Run Qwen 2.5-VL Vision Model ──
