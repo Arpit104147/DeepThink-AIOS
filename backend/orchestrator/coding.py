@@ -77,6 +77,7 @@ class CodingPipeline:
                     status_callback(lbl, "info", model_key, 20 + rnd*10)
 
                 ds_llm = orchestrator._get_model(model_key, required_ctx=ds_ctx)
+                ds_display = orchestrator._get_display_model_name(model_key)
                 plan_p = f"Create a step-by-step logic plan:\n{ds_safe}"
                 if lessons:
                     plan_p += f"\n\nLESSONS FROM PREVIOUS FAILURES:\n{lessons[:800]}"
@@ -90,11 +91,12 @@ class CodingPipeline:
                 pg_out = ""
                 if use_logic_playground:
                     if status_callback:
-                        status_callback(f"Reasoning Sandbox: Verifying logic...", "info", model_key, 30 + rnd*10)
+                        status_callback(f"Reasoning Sandbox: Verifying logic with {ds_display}...", "info", model_key, 30 + rnd*10)
                     verified, pg_out, _ = orchestrator._run_playground(ds_llm, ds_draft, "logic", status_callback=status_callback, model_key=model_key, original_prompt=prompt)
 
                 if not verified:
                     ds_llm = orchestrator._get_model("deepseek_r1", required_ctx=ds_ctx)
+                    ds_display = orchestrator._get_display_model_name("deepseek_r1")
                     fix_p = f"ORIGINAL REQUEST:\n{prompt}\n\nLogic plan FAILED verification.\nPlan:\n{ds_draft[:2000]}\nError:\n{pg_out[:1000]}\nRewrite a corrected logic plan."
                     ds_draft = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, fix_p, gen_tokens, logic_temp, system_prompt=planner_sys))
 
@@ -102,10 +104,10 @@ class CodingPipeline:
 
                 # Phase 3: Write Code
                 orchestrator._check_cancelled("code:write_code")
+                oc_llm = orchestrator._get_model("ornith", required_ctx=oc_ctx)
                 coder_display = orchestrator._get_display_model_name("ornith")
                 if status_callback:
                     status_callback(f"💻 {coder_display} writing code...", "info", "ornith", 50 + rnd*10)
-                oc_llm = orchestrator._get_model("ornith", required_ctx=oc_ctx)
 
                 if req_lang == "python":
                     code_p = f"Write a complete Python script for this plan:\n{compiled_plan}\n\nWrap in ```python```."

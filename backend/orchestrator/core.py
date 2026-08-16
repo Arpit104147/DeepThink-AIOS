@@ -318,11 +318,17 @@ class AgentOrchestrator:
 
     def _get_display_model_name(self, model_key):
         """Get the actual user-friendly display name of the model on disk / assigned role."""
-        model_path = get_model_path(model_key)
+        resolved_key = resolve_model_key(model_key)
+        model_path = None
+        try:
+            model_path = get_model_path(resolved_key)
+        except Exception:
+            pass
+            
         if model_path and os.path.exists(model_path):
             filename = os.path.basename(model_path)
             return filename.replace('.gguf', '').replace('.safetensors', '')
-        return MODEL_DEFINITIONS.get(model_key, {}).get("name", model_key)
+        return MODEL_DEFINITIONS.get(resolved_key, {}).get("name", MODEL_DEFINITIONS.get(model_key, {}).get("name", model_key))
 
     def _check_cancelled(self, stage_name=""):
         if self.cancel_event and self.cancel_event.is_set():
