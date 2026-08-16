@@ -1,9 +1,18 @@
 import os
 import sys
 import re
+import subprocess
 
 # Standard backend setup
 os.environ.setdefault("GGML_VK_VISIBLE_DEVICES", "0")
+
+# Auto-release ports 8000 & 8080 on Linux/Kaggle environments before initializing
+if sys.platform != 'win32':
+    for _port in [8000, 8080]:
+        try:
+            subprocess.run(f"fuser -k -9 {_port}/tcp", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        except Exception:
+            pass
 
 # Add root folder to sys.path to resolve backend package imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
