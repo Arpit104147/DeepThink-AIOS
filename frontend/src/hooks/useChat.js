@@ -62,7 +62,7 @@ export function useChat({
     if (setAttachedImage) setAttachedImage(null);
     if (textareaRef?.current) textareaRef.current.style.height = "auto";
 
-    setHistory((prev) => [...prev, { type: "user", text: userText || "📎 Image attached" }]);
+    setHistory((prev) => [...prev, { type: "user", text: userText || "📎 Image attached", image: img }]);
     setIsGenerating(true);
     setCurrentStream("");
     setCurrentLogs([]);

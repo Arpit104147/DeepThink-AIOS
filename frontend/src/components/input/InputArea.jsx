@@ -30,19 +30,49 @@ const InputArea = ({
   };
 
   const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => setAttachedImage(reader.result);
+    reader.onloadend = () => {
+      setAttachedImage(reader.result);
+    };
     reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => setAttachedImage(reader.result);
+          reader.readAsDataURL(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
   };
 
   return (
     <div className="input-area">
+      {/* Hidden file input permanently mounted in DOM so onChange never gets lost */}
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileInputRef}
+        style={{ display: "none" }}
+        onChange={handleFileUpload}
+      />
+
       <div className="input-wrapper">
         {attachedImage && (
           <span className="image-badge">
-            📎 Image attached
+            <img src={attachedImage} alt="Attached" className="image-badge-preview" />
+            <span className="image-badge-text">Image attached</span>
             <button
               onClick={() => setAttachedImage(null)}
               className="image-badge-remove"
@@ -56,8 +86,7 @@ const InputArea = ({
         {/* Popup menu */}
         {menuOpen && (
           <div className="popup-menu">
-            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
-            <button className="popup-item" onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}>
+            <button className="popup-item" onClick={() => { setMenuOpen(false); setTimeout(() => fileInputRef.current?.click(), 50); }}>
               <span className="popup-icon">📷</span> Upload photo or file
             </button>
             <div className="popup-divider" />
@@ -126,6 +155,7 @@ const InputArea = ({
           placeholder="Ask anything"
           value={prompt}
           onChange={handleTextareaInput}
+          onPaste={handlePaste}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(e); }}
           disabled={isGenerating}
         />

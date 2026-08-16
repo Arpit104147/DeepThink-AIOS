@@ -33,7 +33,7 @@ const MessageList = ({ history, isGenerating, currentLogs, currentStream, displa
               <ThinkingBlock logs={msg.logs} isActive={false} />
             )}
             {msg.type === "user" ? (
-              <UserMessage text={msg.text} />
+              <UserMessage text={msg.text} image={msg.image} />
             ) : (
               <MessageRenderer text={msg.text} animate={i === history.length - 1 && !isGenerating} />
             )}

@@ -861,13 +861,44 @@ html, body {
 .image-badge {
   position: absolute;
   left: 52px;
-  top: -10px;
-  background: var(--accent);
+  top: -14px;
+  background: var(--accent, #0ea5e9);
   color: white;
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border-radius: 10px;
+  font-size: 0.72rem;
+  padding: 3px 10px 3px 6px;
+  border-radius: 14px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 15;
+}
+
+.image-badge-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.user-msg-image-wrap {
+  margin-bottom: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 280px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.user-msg-image {
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+  object-fit: cover;
+  display: block;
 }
 
 /* ═══════════════════════════════════════════════════

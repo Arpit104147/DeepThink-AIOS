@@ -6,7 +6,7 @@ import MessageRenderer from "./MessageRenderer";
  * Renders a user's chat message with collapse/expand support
  * (truncates after 4 lines) and a copy-to-clipboard button.
  */
-const UserMessage = ({ text }) => {
+const UserMessage = ({ text, image }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -35,6 +35,11 @@ const UserMessage = ({ text }) => {
 
   return (
     <div className="user-message-container">
+      {image && (
+        <div className="user-msg-image-wrap">
+          <img src={image} alt="User upload" className="user-msg-image" />
+        </div>
+      )}
       <div
         ref={textRef}
         className={`user-message-content ${isExpanded ? "expanded" : "collapsed"}`}
