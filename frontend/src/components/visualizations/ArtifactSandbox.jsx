@@ -53,6 +53,10 @@ const ArtifactSandbox = ({ htmlCode }) => {
         doc = doc.replace("Plotly.newPlot(", "document.addEventListener('DOMContentLoaded', function() { Plotly.newPlot('plot', ");
         doc = doc.replace("</script>", "});\n</script>");
       }
+      
+      // Auto-fix redeclaration of let/const camera, scene, renderer, controls
+      doc = doc.replace(/let\s+(camera|scene|renderer|controls)\b/g, "var $1");
+      doc = doc.replace(/const\s+(camera|scene|renderer|controls)\b/g, "var $1");
 
       const injection = `
         <style>

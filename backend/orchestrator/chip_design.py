@@ -96,7 +96,8 @@ class ChipDesignPipeline:
             "   <script src=\"https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js\"></script>\n"
             "2. CSS: html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #0d0d0d; font-family: sans-serif; }\n"
             "3. 3D SCENE SETUP:\n"
-            "   - Create scene, camera, renderer. Append renderer.domElement to document.body.\n"
+            "   - Declare 'var scene, camera, renderer, controls;' ONCE at the top of the <script> block.\n"
+            "   - Initialize scene, camera, renderer. Append renderer.domElement to document.body.\n"
             "   - Set renderer size to window.innerWidth, window.innerHeight.\n"
             "   - Add AmbientLight and DirectionalLight.\n"
             "   - Add OrbitControls(camera, renderer.domElement) with enableDamping=true.\n"
@@ -111,7 +112,7 @@ class ChipDesignPipeline:
             "6. RENDER LOOP: Implement animate() calling controls.update(), scene rotation, and renderer.render(scene, camera). RequestAnimationFrame(animate).\n"
             "7. RESIZE LISTENER: Add window.onresize handler updating camera aspect and renderer size.\n"
             "8. NO ES6 IMPORTS. Use global THREE and THREE.OrbitControls.\n"
-            "9. VARIABLE SCOPE: Use 'let' or 'var' inside loops. NEVER redeclare 'const geometry' or 'const material'.\n\n"
+            "9. VARIABLE SCOPE SAFETY: Use 'var' at top of script. NEVER re-declare 'let camera' or 'const camera' inside event listeners or functions to prevent SyntaxError.\n\n"
             f"Topic: {prompt}\n\n"
             "Output ONLY valid, complete HTML inside ```html``` blocks."
         )
