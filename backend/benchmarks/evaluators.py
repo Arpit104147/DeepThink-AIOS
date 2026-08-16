@@ -156,6 +156,7 @@ async def evaluate_problem_solution(
                 "import math\n"
                 "import re as _re\n"
                 "import hashlib\n"
+                "import copy\n"
                 "from itertools import *\n"
                 "from collections import *\n\n"
             )

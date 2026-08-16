@@ -306,6 +306,12 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
             BENCHMARK_STATE["workers"][worker_id]["progress"] = 100
 
         queue.task_done()
+        
+        # ── Inter-problem cleanup ──
+        # Free GPU VRAM/RAM fragments left by model hot-swaps during the previous problem
+        import gc
+        gc.collect()
+        print(f"🔄 [Worker {worker_id}] Finished {problem['id']} ({latency:.1f}s) — moving to next problem...", flush=True)
 
 ALL_BENCHMARK_SUITES = [
     "HumanEval",
