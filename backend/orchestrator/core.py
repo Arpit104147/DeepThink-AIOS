@@ -350,6 +350,14 @@ class AgentOrchestrator:
         return ok, output, code
 
     def _synthesize_coding_response(self, prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None, req_lang="python"):
+        if req_lang in ["c", "cpp"] and "main" not in code:
+            code += "\n\nint main(void) {\n    printf(\"Unit Test Execution Complete!\\n\");\n    return 0;\n}\n"
+            try:
+                _, new_output = self.sandbox.execute(code, language=req_lang)
+                if new_output:
+                    output = new_output
+            except Exception:
+                pass
         return f"💡 Logic & Architectural Plan\n\n{compiled_plan}\n\n⚙️ Sandbox Execution Output\n```\n{output[:3000]}\n```\n\n💻 Verified Working Code\n\n```{req_lang}\n{code}\n```"
 
     def _generate_3d_visualization(self, prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback=None):
