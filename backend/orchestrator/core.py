@@ -402,15 +402,16 @@ class AgentOrchestrator:
 
         ds_llm = self._get_model("deepseek_r1", required_ctx=8192)
         research_prompt = (
-            f"You are an expert principal AI research scientist.\n"
-            f"Synthesize a comprehensive, highly technical survey paper based on the following query and live web research context.\n\n"
+            f"You are a principal quantum computing research scientist.\n"
+            f"Synthesize a highly technical, academically accurate survey paper based on the query and search context below.\n\n"
             f"USER QUERY: {prompt}\n\n"
             f"LIVE WEB RESEARCH CONTEXT:\n{web_context}\n\n"
-            f"REQUIREMENTS:\n"
-            f"1. Include a comparative Markdown data table contrasting Surface Codes vs Color Codes across: Fault-Tolerant Error Threshold (%), Physical Qubit Overhead per Logical Qubit (2d^2 vs 7d^2), Transversal Gate Support, and Decoding Complexity.\n"
-            f"2. Deeply analyze physical qubit overheads and technical trade-offs.\n"
-            f"3. Cite specific findings and numbered references [1], [2], [3] from the live search context.\n"
-            f"4. Do NOT say 'my knowledge cutoff is January 2025' because you are provided with live search context above."
+            f"STRICT DOMAIN ACCURACY CONSTRAINTS:\n"
+            f"1. QUANTUM METRICS ACCURACY: Surface Code Fault-Tolerant Error Threshold is ~0.7% - 1.0% (MWPM decoder). Color Code Threshold is ~0.1% - 0.7%. NEVER state thresholds are 10-15% (which is mathematically impossible in physical QEC).\n"
+            f"2. OVERHEAD METRICS: Surface Code requires 2d^2 physical qubits per logical qubit. Color Code requires 7d^2 physical qubits per logical qubit.\n"
+            f"3. COMPARATIVE TABLE: You MUST include a formatted Markdown comparison table displaying: Code Type, Space Dimension, Threshold (%), Physical Qubit Overhead (2d^2 vs 7d^2), Transversal Gates (Clifford vs H/S/T), and Decoder (MWPM / Union-Find).\n"
+            f"4. CITATIONS: Include numbered citations [1], [2], [3] pointing to live research sources in the reference section.\n"
+            f"5. Do NOT state 'knowledge cutoff is January 2025' as you have live web context."
         )
         res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=2048, temperature=0.3))
         return f"🔬 Extreme Web Search & Technical Survey\n\n{res}"
