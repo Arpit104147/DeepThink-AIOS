@@ -164,7 +164,7 @@ class CodingPipeline:
 
                 # Agent IDE surgical patch / rewrite
                 oc_fix = orchestrator._get_model("ornith", required_ctx=oc_ctx)
-                fix_p = f"Fix the following {lang_name} code:\n\nCODE:\n{code[:2000]}\n\nERROR:\n{output[:800]}\n\nOutput complete script in ```{req_lang}```."
+                fix_p = f"Fix the following {lang_name} code:\n\n{c_header_rule}CODE:\n{code[:2000]}\n\nERROR:\n{output[:800]}\n\nOutput complete script in ```{req_lang}```."
                 code = Sandbox.extract_code(orchestrator._strip_thinking(orchestrator._call_model(oc_fix, fix_p, gen_tokens, gen_temp)))
                 ok, output = orchestrator.sandbox.execute(code, language=req_lang)
                 if ok:

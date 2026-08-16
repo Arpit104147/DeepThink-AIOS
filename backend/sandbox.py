@@ -90,14 +90,14 @@ LANG_SIGNATURES = {
     'c': {
         'strong': [r'#include\s*<\w+\.h>', r'int\s+main\s*\(', r'printf\s*\(', r'scanf\s*\(', r'malloc\s*\(', r'free\s*\('],
         'ext': '.c',
-        'compile': ['gcc', '{src}', '-o', '{bin}', '-lm'],
+        'compile': ['gcc', '{src}', '-o', '{bin}', '-lm', '-pthread'],
         'run': ['{bin}'],
     },
     'cpp': {
         'strong': [r'#include\s*<iostream>', r'#include\s*<vector>', r'#include\s*<string>',
                    r'std::', r'cout\s*<<', r'cin\s*>>', r'using\s+namespace\s+std'],
         'ext': '.cpp',
-        'compile': ['g++', '{src}', '-o', '{bin}', '-lm', '-lstdc++'],
+        'compile': ['g++', '{src}', '-o', '{bin}', '-lm', '-lstdc++', '-pthread'],
         'run': ['{bin}'],
     },
     'bash': {
@@ -1276,6 +1276,8 @@ class Sandbox:
             return False, f"Unsupported language: {language}"
 
         if lang_config['compile'] is not None:
+            if language in ['c', 'cpp']:
+                code = code.replace("#include <atomic.h>", "#include <stdatomic.h>")
             temp_dir = tempfile.mkdtemp(prefix="sandbox_")
             try:
                 return self._execute_compiled(code, lang_config, language, temp_dir)
