@@ -119,9 +119,11 @@ class CodingPipeline:
                     c_header_rule = ""
                     if req_lang == "c" or req_lang == "cpp":
                         c_header_rule = (
-                            "STRICT C/C++ HEADER RULES:\n"
-                            "1. Use standard C11 <stdatomic.h> or GCC builtins (__atomic_compare_exchange_n) for atomic operations.\n"
-                            "2. NEVER include <atomic.h> because <atomic.h> DOES NOT EXIST in standard C/C++. Always use <stdatomic.h> and <pthread.h>.\n\n"
+                            "STRICT C/C++ SYNTAX & HEADER RULES:\n"
+                            "1. HEADERS: Use standard C11 <stdatomic.h> and <pthread.h>. NEVER include <atomic.h>.\n"
+                            "2. ARRAY POINTER SYNTAX: array[i] evaluates to an element value. NEVER write '*array[i] = x' (causes invalid type argument of unary '*' error). Write 'array[i] = x'.\n"
+                            "3. FUNCTION PROTOTYPES: Declare all function prototypes (or place function definitions) BEFORE main() and caller functions to prevent implicit declaration errors.\n"
+                            "4. LOCK-FREE ATOMICS: Use standard atomic_compare_exchange_weak_explicit(&var, &expected, desired, memory_order_relaxed, memory_order_relaxed) or atomic_compare_exchange_strong.\n\n"
                         )
                     code_p = (
                         f"Write a complete, fully working, self-contained {lang_name} program for this request:\n{prompt}\n\n"
