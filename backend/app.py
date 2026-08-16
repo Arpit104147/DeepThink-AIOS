@@ -778,6 +778,20 @@ def workspace_commit(
         raise HTTPException(status_code=503, detail="Git agent not available")
     return git_agent.commit_files(workspace_path, files, message)
 
+def free_port(port: int):
+    """Cleanly terminate any stale process holding the specified port."""
+    import subprocess
+    try:
+        if sys.platform != 'win32':
+            subprocess.run(f"fuser -k {port}/tcp", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run("pkill -f 'backend/app.py'", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            time.sleep(0.5)
+    except Exception:
+        pass
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8000))
+    free_port(port)
+    print(f"🚀 Starting FastAPI backend on http://0.0.0.0:{port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)

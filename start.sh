@@ -10,11 +10,13 @@ echo "============================================="
 # ── Universal Execution Environment ─────────────────────────
 export GGML_VK_VISIBLE_DEVICES=0
 
-# ── Step 1: Kill any stale processes by name ─────────────────────────────────
+# ── Step 1: Kill any stale processes by name & port ─────────────────────────
 echo "Stopping any previous instances..."
-pkill -f "backend/app.py" 2>/dev/null
-pkill -f "uvicorn" 2>/dev/null
-pkill -f "vite" 2>/dev/null
+fuser -k 8000/tcp 2>/dev/null
+fuser -k 5173/tcp 2>/dev/null
+pkill -9 -f "backend/app.py" 2>/dev/null
+pkill -9 -f "uvicorn" 2>/dev/null
+pkill -9 -f "vite" 2>/dev/null
 
 # ── Step 2: Wait until ports are actually free (up to 15s) ───────────────────
 echo "Waiting for ports 8000 and 5173 to be released..."
