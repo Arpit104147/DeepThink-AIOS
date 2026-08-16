@@ -56,7 +56,7 @@ async def evaluate_problem_solution(
             if entry_point:
                 test_code += f"\n\ncheck({entry_point})"
                 
-            is_success, output = await asyncio.to_thread(orchestrator.sandbox.execute, test_code, "python")
+            is_success, output = await asyncio.to_thread(orchestrator.sandbox.execute, test_code, "python", timeout=5.0)
             success = is_success
             
             if not success and add_log_fn:

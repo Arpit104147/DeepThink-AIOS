@@ -462,7 +462,7 @@ print(json.dumps(result))
 
 
 class Sandbox:
-    def __init__(self, timeout=300):
+    def __init__(self, timeout=15):
         self.timeout = timeout
         self.active_workspaces = set()
         self.os_type = platform.system().lower()  # 'linux', 'windows', 'darwin'
@@ -1241,12 +1241,14 @@ class Sandbox:
             if os.path.exists(path):
                 os.unlink(path)
 
-    def execute(self, code, language=None):
+    def execute(self, code, language=None, timeout=None):
         """
         Polyglot Sandbox: Execute code in Python, C, C++, Bash, JavaScript, or Java.
         Auto-detects the language if not specified.
         Returns (success: bool, output: str)
         """
+        exec_timeout = timeout if timeout is not None else self.timeout
+
         # ── Pre-Execution Analysis ───────────────────────────────────────
         gui_lib = self._detect_gui(code)
         loop_pattern = self._detect_infinite_loop(code)
@@ -1266,7 +1268,7 @@ class Sandbox:
 
         # ── Python Execution: Restricted First, Fallback to Unrestricted ─
         if language == 'python':
-            return self._execute_python_restricted(code, loop_pattern)
+            return self._execute_python_restricted(code, loop_pattern, timeout=exec_timeout)
 
         # ── Compiled Languages (C, C++, Java) ────────────────────────────
         lang_config = LANG_SIGNATURES.get(language)
@@ -1283,26 +1285,8 @@ class Sandbox:
         # ── Interpreted Languages (Bash, JavaScript) ─────────────────────
         return self._execute_interpreted(code, lang_config, language)
 
-    def _execute_python_restricted(self, code, loop_pattern=None):
-        """
-        Execute Python code in a RESTRICTED in-memory sandbox.
-        
-        Architecture:
-        1. The AI code is written to a temp file.
-        2. A special "runner" script is generated that:
-           a. Sets Linux resource limits (256MB RAM, 30s CPU, 0 child processes)
-           b. Strips away all dangerous builtins (open, exec, eval, __import__)
-           c. Injects a custom __import__ that only allows whitelisted modules
-           d. Runs exec(code) inside the restricted namespace
-        3. The runner executes in a subprocess (process isolation from FastAPI).
-        4. If the restricted sandbox blocks a legitimate import, it automatically
-           falls back to unrestricted subprocess execution.
-        
-        This gives us THREE layers of protection:
-        - Layer 1: Process isolation (subprocess can't crash the server)
-        - Layer 2: Restricted builtins (no open/exec/eval/import of OS modules)
-        - Layer 3: Resource limits (RAM/CPU/disk caps prevent DoS attacks)
-        """
+    def _execute_python_restricted(self, code, loop_pattern=None, timeout=None):
+        exec_timeout = timeout if timeout is not None else self.timeout
         # Pre-check for syntax/truncation errors
         try:
             import ast
@@ -1361,7 +1345,7 @@ class Sandbox:
             # are SIGKILL'd along with the runner on timeout.
             res = self._run_with_kill(
                 [sys.executable, runner_path, code_path],
-                timeout=self.timeout,
+                timeout=exec_timeout,
                 use_isolation=self.isolation_available,
             )
 
