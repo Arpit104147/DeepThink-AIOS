@@ -11,7 +11,7 @@ import threading
 from typing import Dict, List, Any, Optional
 
 from backend.benchmarks.datasets import MOCK_PROBLEMS, COMPARISON_BASELINES, fetch_real_dataset
-from backend.benchmarks.evaluators import evaluate_problem_solution
+from backend.benchmarks.evaluators import evaluate_problem_solution, direct_model_completion
 
 import json
 
@@ -214,29 +214,41 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                             BENCHMARK_STATE["workers"][worker_id]["progress"] = min(95, prog)
                             
                 try:
-                    benchmark_mode = "CODING" if category in ["HumanEval", "MBPP", "SWE-bench"] else "REASONING" if category in ["GSM8K", "MATH"] else "auto"
-                    
-                    # Create a per-problem cancel token so we can abort orphaned threads on timeout.
-                    # asyncio.wait_for CANNOT kill Python threads — when it times out, the thread
-                    # running process_query keeps going (holding the inference lock). By setting
-                    # this event, _check_cancelled() inside the thread will raise RuntimeError,
-                    # releasing the lock and letting the next problem proceed.
+                    # Create a per-problem cancel token for timeout safety
                     import threading as _threading
                     problem_cancel = _threading.Event()
                     old_cancel = orchestrator.cancel_event
                     orchestrator.cancel_event = problem_cancel
                     
+                    is_direct_completion = category in ["HumanEval", "MBPP"]
+                    
                     try:
-                        response = await asyncio.wait_for(
-                            asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
-                            timeout=180.0
-                        )
+                        if is_direct_completion:
+                            # ── Direct Model Completion (Standard Benchmark Methodology) ──
+                            # For HumanEval/MBPP: Single LLM call to complete the function stub.
+                            # This matches how OpenAI, Google, Meta evaluate on published leaderboards.
+                            # The full 7-phase pipeline is designed for complex coding tasks,
+                            # not standardized function-completion benchmarks.
+                            with STATE_LOCK:
+                                BENCHMARK_STATE["workers"][worker_id]["status"] = f"Generating {problem['id']}..."
+                                BENCHMARK_STATE["workers"][worker_id]["progress"] = 30
+                            response = await asyncio.wait_for(
+                                direct_model_completion(orchestrator, problem, worker_id, add_log_fn=add_log),
+                                timeout=120.0
+                            )
+                        else:
+                            # ── Full Pipeline (REASONING, PREDICTION, etc.) ──
+                            benchmark_mode = "REASONING" if category in ["GSM8K", "MATH"] else "auto"
+                            response = await asyncio.wait_for(
+                                asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
+                                timeout=180.0
+                            )
                     finally:
                         orchestrator.cancel_event = old_cancel
                     
                     with STATE_LOCK:
                         BENCHMARK_STATE["workers"][worker_id]["status"] = f"Evaluating {problem['id']}..."
-                        BENCHMARK_STATE["workers"][worker_id]["progress"] = 98
+                        BENCHMARK_STATE["workers"][worker_id]["progress"] = 90
                     success, generated_tokens = await evaluate_problem_solution(orchestrator, problem, response, worker_id, add_log_fn=add_log)
                     with STATE_LOCK:
                         BENCHMARK_STATE["workers"][worker_id]["status"] = f"Completed {problem['id']}"
@@ -244,7 +256,8 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                 except asyncio.TimeoutError:
                     # Signal the orphaned background thread to abort immediately
                     problem_cancel.set()
-                    add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after 180s — moving to next problem")
+                    timeout_s = 120 if is_direct_completion else 180
+                    add_log(f"[Worker {worker_id}] ⏱️ {problem['id']} timed out after {timeout_s}s — moving to next problem")
                     success = False
                     generated_tokens = 50
                     # Give the orphaned thread a moment to notice the cancel and release the lock
