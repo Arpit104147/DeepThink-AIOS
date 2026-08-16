@@ -528,7 +528,7 @@ class VulkanServerWrapper:
         result = None
         for attempt in range(max_retries):
             try:
-                res = requests.post(f"{self.url}/v1/chat/completions", json=payload, timeout=300)
+                res = requests.post(f"{self.url}/v1/chat/completions", json=payload, timeout=175)
                 if res.status_code == 503:
                     print(f"⏳ GPU Engine is finishing VRAM load (503 Service Unavailable, attempt {attempt+1}/{max_retries})... Waiting 2s.", flush=True)
                     time.sleep(2)
@@ -2607,7 +2607,9 @@ class AgentOrchestrator:
         messages.append({"role": "user", "content": prompt})
 
         # Prevent concurrent C++ deadlocks in llama.cpp with non-blocking timeout safety
-        acquired = self.inference_lock.acquire(timeout=60.0)
+        acquired = self.inference_lock.acquire(timeout=240.0)
+        if not acquired:
+            raise RuntimeError("GPU Engine is blocked by another request. Aborting concurrent execution to prevent C++ deadlock.")
         try:
             # Use streaming to support instant cancellation for GGUF/llama-cpp-python models
             chunks = llm.create_chat_completion(
@@ -2617,9 +2619,14 @@ class AgentOrchestrator:
                 stream=True
             )
             content_pieces = []
+            start_time = time.time()
             try:
                 for chunk in chunks:
                     self._check_cancelled()
+                    if time.time() - start_time > 175.0:
+                        print("⚠️ LLM Generation exceeded 175s limit. Forcing stop to prevent orphaned threads.", flush=True)
+                        break
+                        
                     choices = chunk.get('choices', [])
                     if choices:
                         delta = choices[0].get('delta', {})
