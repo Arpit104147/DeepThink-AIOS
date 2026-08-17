@@ -294,7 +294,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <h2 className="hub-title">Model Hub & Discovery</h2>
-                <span className="hub-subtitle-badge">LM Studio Engine</span>
+                <span className="hub-subtitle-badge">AIOS Engine</span>
               </div>
               <p className="hub-description">Search HuggingFace GGUF repository cards, choose quantization variants, and monitor live download progress.</p>
             </div>

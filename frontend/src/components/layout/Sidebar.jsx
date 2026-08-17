@@ -42,7 +42,7 @@ const Sidebar = ({
           <span className="nav-icon">🧹</span> Offload Memory
         </button>
         <button className="nav-item" onClick={() => setModelHubOpen(true)}>
-          <span className="nav-icon">📦</span> Model Hub (LM Studio)
+          <span className="nav-icon">📦</span> Model Hub
         </button>
         <button className="nav-item" onClick={() => setBenchmarkOpen(true)}>
           <span className="nav-icon">📊</span> Benchmark Studio

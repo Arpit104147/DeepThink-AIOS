@@ -36,7 +36,7 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 ### ✨ Key Features
 
 - **Universal Vulkan GPU Backend** — Universal acceleration on NVIDIA, AMD, and Intel GPUs via Vulkan compute.
-- **LM Studio-Style Model Hub** — Dynamic HuggingFace GGUF model downloader, card library, and custom model role mapping.
+- **Model Hub** — Dynamic HuggingFace GGUF model downloader, card library, and custom model role mapping.
 - **Dynamic Vision & Multimodal Projector Engine** — Auto-discovers and pairs **ANY** Vision Language GGUF model (`Qwen2.5-VL`, `Qwen3-VL`, `Llava`, `Moondream`) with its corresponding `mmproj*.gguf` projector file.
 - **Native PDF Document Extraction for ALL LLMs** — Native page-by-page PDF parser allowing **EVERY MODEL** (both Vision & Non-Vision LLMs like `DeepSeek-R1`, `Ornith`, `VibeThinker`, `Phi-3.5`, `Gemma-4`) to read, analyze, and explain uploaded PDF documents.
 - **PIL RGB Pre-Processing Pipeline** — Automatically normalizes images (converts PNG/WEBP/RGBA to clean 3-channel RGB JPEG, max 1024x1024) to eliminate aspect-ratio and channel distortions in CLIP vision encoders.
