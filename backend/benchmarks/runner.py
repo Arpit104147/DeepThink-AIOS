@@ -403,17 +403,14 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
         for i in range(num_workers)
     ]
     
-    while not queue.empty() and BENCHMARK_STATE.get("active", False):
+    while BENCHMARK_STATE.get("active", False):
         await asyncio.sleep(0.5)
         with STATE_LOCK:
             BENCHMARK_STATE["elapsed_seconds"] = round(time.time() - start_time, 1)
-
-    if BENCHMARK_STATE.get("active", False):
-        try:
-            # Allow in-flight worker tasks to finish the last problem
-            await asyncio.wait_for(queue.join(), timeout=300.0)
-        except Exception:
-            pass
+            done_count = BENCHMARK_STATE["passed"] + BENCHMARK_STATE["failed"]
+        
+        if done_count >= total_problems or queue.empty() and all(w.get("status") == "Idle" for w in BENCHMARK_STATE["workers"]):
+            break
 
     # Cancel worker tasks after completion or on cancellation
     for t in tasks:

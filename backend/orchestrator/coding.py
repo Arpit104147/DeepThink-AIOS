@@ -69,11 +69,12 @@ class CodingPipeline:
 
         benchmark_coder_sys = (
             "You are an expert computational programmer and algorithm engineer.\n"
-            "Your task is to write a complete, efficient, and bug-free Python solution implementing the plan.\n"
+            "Your task is to write a complete, efficient, and bug-free Python solution implementing the requested function.\n"
             "STRICT RULES:\n"
             "1. Output ONLY valid Python code inside ```python``` blocks.\n"
-            "2. Complete the requested function or class directly with all imports.\n"
-            "3. Do NOT generate example print statements, dummy calls, or top-level assertion tests."
+            "2. Complete the requested function directly with pure Python logic.\n"
+            "3. Do NOT add artificial type checking or raise unexpected ValueErrors.\n"
+            "4. Do NOT generate example print statements, dummy calls, or top-level assertion tests."
         )
 
         for reset in range(max_resets):
