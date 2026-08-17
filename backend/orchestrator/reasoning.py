@@ -1,5 +1,6 @@
 import re
 from backend.sandbox import Sandbox
+from backend.orchestrator.router import TaskRouter
 
 class ReasoningPipeline:
     """Program-Aided Language (PAL) Reasoning Pipeline & SymPy Sandbox Verifier."""
@@ -8,7 +9,7 @@ class ReasoningPipeline:
     def execute(orchestrator, prompt, mode="auto", selected_models=None, status_callback=None):
         ds_ctx, oc_ctx, router_ctx, gen_tokens, gen_temp = orchestrator._compute_headroom()
         active_router = orchestrator._get_model("router", required_ctx=1024)
-        use_playground = orchestrator.router.is_playground_applicable(orchestrator, active_router, prompt)
+        use_playground = TaskRouter.is_playground_applicable(orchestrator, active_router, prompt)
 
         if not use_playground:
             if status_callback:

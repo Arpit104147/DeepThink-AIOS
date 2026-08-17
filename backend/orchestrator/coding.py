@@ -2,8 +2,10 @@ import os
 import re
 import gc
 import uuid
+import re
 import shutil
 from backend.sandbox import Sandbox
+from backend.orchestrator.router import TaskRouter
 
 class CodingPipeline:
     """7-Phase Agentic Actor-Critic Coding Pipeline & AST Linter Surgical Patcher."""
@@ -86,7 +88,7 @@ class CodingPipeline:
                 # Phase 2: Reasoning Sandbox (Only for Python)
                 orchestrator._check_cancelled("code:verify_logic")
                 active_router = orchestrator._get_model("router", required_ctx=1024)
-                use_logic_playground = (req_lang == "python") and orchestrator.router.is_playground_applicable(orchestrator, active_router, prompt)
+                use_logic_playground = (req_lang == "python") and TaskRouter.is_playground_applicable(orchestrator, active_router, prompt)
                 verified = True
                 pg_out = ""
                 if use_logic_playground:
