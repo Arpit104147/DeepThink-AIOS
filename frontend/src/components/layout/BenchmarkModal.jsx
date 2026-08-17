@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 
 /**
  * @component BenchmarkModal
  * State-of-the-art Human-Engineered AI OS Benchmark Studio & Performance Monitor.
  * Provides real-time parallel worker telemetry, accuracy scoring against published
- * AI model baselines (GPT-4o, Claude 3.5 Sonnet, Llama 3 70B), and live streaming logs.
+ * AI model baselines (GPT-4o, Claude 3.5 Sonnet, Llama 3 70B), category pills, and live streaming logs.
  */
 export default function BenchmarkModal({ open, setOpen, serverUrl }) {
   const [activeCategory, setActiveCategory] = useState("HumanEval");
+  const [logFilter, setLogFilter] = useState("all"); // 'all', 'passed', 'failed', 'info'
+  const [copiedLogs, setCopiedLogs] = useState(false);
   const [status, setStatus] = useState({
     active: false,
     category: null,
@@ -21,6 +23,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
     elapsed_seconds: 0.0,
     workers: [],
     logs: [],
+    history: {},
     comparison_baselines: {}
   });
   const [loading, setLoading] = useState(false);
@@ -51,37 +54,34 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
   useEffect(() => {
     if (open && consoleRef.current && status.active) {
       const el = consoleRef.current;
-      // Only auto-scroll if user is near bottom or when benchmark is active
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
       if (isNearBottom) {
         el.scrollTop = el.scrollHeight;
       }
     }
-  }, [status.logs, open, status.active]);
-
-  if (!open) return null;
+  }, [status.logs, open, status.active, logFilter]);
 
   const categories = [
-    { id: "HumanEval", label: "HumanEval (Python Code)" },
-    { id: "MBPP", label: "MBPP (Basic Python)" },
-    { id: "GSM8K", label: "GSM8K (Grade Math)" },
-    { id: "MATH", label: "MATH (Competition Math)" },
-    { id: "GPQA (PhD Science)", label: "GPQA (PhD Science)" },
-    { id: "AIME (Olympiad Logic)", label: "AIME (Olympiad Math)" },
-    { id: "MuSR (PhD Logic)", label: "MuSR (Logical Reasoning)" },
-    { id: "MMLU-Pro (Prof STEM)", label: "MMLU-Pro (STEM)" },
-    { id: "SWE-bench Lite", label: "SWE-bench Lite (Git Fixes)" },
-    { id: "SWE-bench Pro", label: "SWE-bench Pro (Complex Git)" },
-    { id: "SearchQA / HotpotQA", label: "SearchQA (RAG Search)" }
+    { id: "HumanEval", label: "HumanEval", icon: "🐍", desc: "Python Function Synthesis" },
+    { id: "MBPP", label: "MBPP", icon: "⚙️", desc: "Basic Python Programming" },
+    { id: "GSM8K", label: "GSM8K", icon: "🧮", desc: "Grade Math Multi-Step" },
+    { id: "MATH", label: "MATH", icon: "📐", desc: "Competition Mathematics" },
+    { id: "GPQA (PhD Science)", label: "GPQA", icon: "🔬", desc: "PhD-Level Science" },
+    { id: "AIME (Olympiad Logic)", label: "AIME", icon: "🏆", desc: "Olympiad Reasoning" },
+    { id: "MuSR (PhD Logic)", label: "MuSR", icon: "🧠", desc: "Murder Mystery Logic" },
+    { id: "MMLU-Pro (Prof STEM)", label: "MMLU-Pro", icon: "🏛️", desc: "Professional STEM" },
+    { id: "SWE-bench Lite", label: "SWE-Lite", icon: "🛠️", desc: "Software Issue Fixes" },
+    { id: "SWE-bench Pro", label: "SWE-Pro", icon: "⚡", desc: "Complex Architecture" },
+    { id: "SearchQA / HotpotQA", label: "SearchQA", icon: "🔍", desc: "Multi-Hop Web Search" }
   ];
 
-  const handleStart = async () => {
+  const handleStart = async (cat = activeCategory) => {
     setLoading(true);
     try {
       await fetch(`${serverUrl}/api/benchmark/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: activeCategory })
+        body: JSON.stringify({ category: cat })
       });
     } catch (err) {
       console.error("Failed to start benchmark:", err);
@@ -113,6 +113,44 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
     }
   };
 
+  const handleCopyLogs = () => {
+    if (!status.logs || status.logs.length === 0) return;
+    navigator.clipboard.writeText(status.logs.join("\n"));
+    setCopiedLogs(true);
+    setTimeout(() => setCopiedLogs(false), 2000);
+  };
+
+  const handleExportReport = () => {
+    const reportData = {
+      timestamp: new Date().toISOString(),
+      active_category: status.category || activeCategory,
+      accuracy: status.accuracy,
+      passed: status.passed,
+      failed: status.failed,
+      total: status.total,
+      avg_latency_s: status.avg_latency,
+      tokens_per_sec: status.tokens_per_sec,
+      elapsed_seconds: status.elapsed_seconds,
+      history: status.history || {},
+      logs: status.logs || []
+    };
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `deepthink_aios_benchmark_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filteredLogs = useMemo(() => {
+    if (!status.logs) return [];
+    if (logFilter === "passed") return status.logs.filter((l) => l.includes("✅") || l.includes("PASSED"));
+    if (logFilter === "failed") return status.logs.filter((l) => l.includes("❌") || l.includes("failed") || l.includes("FAILED") || l.includes("Error"));
+    if (logFilter === "info") return status.logs.filter((l) => !l.includes("✅") && !l.includes("❌"));
+    return status.logs;
+  }, [status.logs, logFilter]);
+
   const currentBaseline = (status?.comparison_baselines && status.comparison_baselines[status?.category || activeCategory]) || {
     gpt4: 90.0,
     claude35_sonnet: 92.0,
@@ -120,17 +158,40 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
     deepthink_aios: 91.5
   };
 
+  if (!open) return null;
+
   return (
     <div className="modal-backdrop" onClick={() => setOpen(false)}>
       <div className="modal-content benchmark-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="benchmark-header">
           <div className="benchmark-header-title">
-            <span className="benchmark-icon">📊</span>
+            <span className="benchmark-icon">⚡</span>
             <div>
-              <h2>AIOS Benchmark Studio</h2>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <h2>DeepThink AIOS Benchmark Studio</h2>
+                {status.active && (
+                  <span
+                    style={{
+                      background: "rgba(239, 68, 68, 0.15)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      color: "#f87171",
+                      padding: "2px 8px",
+                      borderRadius: "12px",
+                      fontSize: "0.72rem",
+                      fontWeight: "700",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px"
+                    }}
+                  >
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444", display: "inline-block", animation: "pulse 1.5s infinite" }}></span>
+                    LIVE EVALUATION
+                  </span>
+                )}
+              </div>
               <p className="benchmark-subtitle">
-                Parallel Execution Telemetry & Performance Baselines
+                Parallel Hardware Telemetry, Real-time Code Execution & Published Baselines
               </p>
             </div>
           </div>
@@ -139,32 +200,70 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
           </button>
         </div>
 
-        {/* Control Bar */}
-        <div className="benchmark-controls">
-          <div className="category-select-wrapper">
-            <label>Select Suite:</label>
-            <select
-              value={activeCategory}
-              onChange={(e) => setActiveCategory(e.target.value)}
-              disabled={status.active}
-            >
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+        {/* Category Selector Pills */}
+        <div style={{ marginBottom: "18px" }}>
+          <div style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", marginBottom: "8px", letterSpacing: "0.04em" }}>
+            Select Benchmark Suite:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {categories.map((c) => {
+              const isSelected = (status.category || activeCategory) === c.id;
+              const hasHistory = status.history && status.history[c.id];
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    if (!status.active) setActiveCategory(c.id);
+                  }}
+                  disabled={status.active}
+                  title={c.desc}
+                  style={{
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.25))"
+                      : "rgba(255, 255, 255, 0.03)",
+                    border: isSelected ? "1px solid #818cf8" : "1px solid rgba(255, 255, 255, 0.08)",
+                    color: isSelected ? "#ffffff" : "#94a3b8",
+                    padding: "7px 14px",
+                    borderRadius: "20px",
+                    fontSize: "0.82rem",
+                    fontWeight: isSelected ? "600" : "500",
+                    cursor: status.active ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  <span>{c.icon}</span>
+                  <span>{c.label}</span>
+                  {hasHistory && (
+                    <span style={{ fontSize: "0.72rem", color: hasHistory.accuracy >= 75 ? "#34d399" : "#fbbf24", fontWeight: "700" }}>
+                      ({hasHistory.accuracy}%)
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="benchmark-controls" style={{ marginTop: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "0.88rem", color: "#cbd5e1" }}>
+              Active Suite: <strong style={{ color: "#818cf8" }}>{status.category || activeCategory}</strong>
+            </span>
           </div>
 
-          <div className="action-buttons" style={{ display: "flex", gap: "8px" }}>
+          <div className="action-buttons" style={{ display: "flex", gap: "10px" }}>
             {!status.active ? (
               <>
                 <button
                   className="btn-run-benchmark"
-                  onClick={handleStart}
+                  onClick={() => handleStart(activeCategory)}
                   disabled={loading}
                 >
-                  {loading ? "Starting..." : "▶ Run Suite"}
+                  {loading ? "Starting..." : `▶ Run ${activeCategory.split(" ")[0]}`}
                 </button>
                 <button
                   className="btn-run-all-benchmark"
@@ -183,7 +282,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
                     transition: "transform 0.2s ease, box-shadow 0.2s ease"
                   }}
                 >
-                  ⚡ Run All Benchmarks
+                  ⚡ Run All 11 Suites
                 </button>
               </>
             ) : (
@@ -191,6 +290,22 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
                 ⏹ Cancel Evaluation
               </button>
             )}
+
+            <button
+              onClick={handleExportReport}
+              style={{
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                color: "#cbd5e1",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                fontSize: "0.82rem",
+                cursor: "pointer"
+              }}
+              title="Export complete benchmark history & logs as JSON"
+            >
+              📥 Export Report
+            </button>
           </div>
         </div>
 
@@ -216,7 +331,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
           </div>
 
           <div className="kpi-card">
-            <div className="kpi-label">Avg Task Latency</div>
+            <div className="kpi-label">Avg Latency</div>
             <div className="kpi-value">{status.avg_latency}s</div>
             <div className="kpi-subtext">Elapsed: {status.elapsed_seconds}s</div>
           </div>
@@ -274,7 +389,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
             <div className="baseline-item active-system">
               <div className="baseline-header">
                 <span>⚡ Current AIOS Engine</span>
-                <span>{status.accuracy}%</span>
+                <span style={{ color: "#34d399", fontWeight: "700" }}>{status.accuracy}%</span>
               </div>
               <div className="baseline-track">
                 <div
@@ -314,7 +429,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
         {/* Stored Benchmark History Table */}
         {status?.history && Object.keys(status.history).length > 0 && (
           <div className="benchmark-section">
-            <h3>🏆 Stored Benchmark Results ({Object.keys(status.history).length} Suites Evaluated)</h3>
+            <h3>🏆 Benchmark Suite History ({Object.keys(status.history).length} Completed)</h3>
             <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "10px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", color: "#e2e8f0" }}>
                 <thead>
@@ -344,20 +459,71 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
           </div>
         )}
 
-        {/* Live Execution Console Log */}
+        {/* Live Execution Console Log with Filter Bar */}
         <div className="benchmark-section">
-          <h3>Live Telemetry & Execution Log</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <h3>Live Telemetry & Execution Log</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", borderRadius: "6px", padding: "2px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                {["all", "passed", "failed", "info"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setLogFilter(f)}
+                    style={{
+                      background: logFilter === f ? "#6366f1" : "transparent",
+                      color: logFilter === f ? "#fff" : "#94a3b8",
+                      border: "none",
+                      padding: "3px 8px",
+                      borderRadius: "4px",
+                      fontSize: "0.74rem",
+                      cursor: "pointer",
+                      textTransform: "capitalize",
+                      fontWeight: logFilter === f ? "600" : "400"
+                    }}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleCopyLogs}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#cbd5e1",
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  fontSize: "0.74rem",
+                  cursor: "pointer"
+                }}
+              >
+                {copiedLogs ? "✅ Copied" : "📋 Copy Logs"}
+              </button>
+            </div>
+          </div>
+
           <div className="benchmark-console" ref={consoleRef}>
-            {status.logs?.length === 0 ? (
+            {filteredLogs.length === 0 ? (
               <div className="console-empty">
-                Console ready. Select a benchmark suite above and click "Run Suite" or "Run All Benchmarks".
+                Console ready. Select a benchmark suite above and click "Run Suite" or "Run All 11 Suites".
               </div>
             ) : (
-              status.logs.map((log, index) => (
-                <div key={index} className="console-line">
-                  {log}
-                </div>
-              ))
+              filteredLogs.map((log, index) => {
+                const isSuccess = log.includes("✅") || log.includes("PASSED");
+                const isFail = log.includes("❌") || log.includes("failed") || log.includes("FAILED");
+                return (
+                  <div
+                    key={index}
+                    className="console-line"
+                    style={{
+                      color: isSuccess ? "#34d399" : isFail ? "#f87171" : "#38bdf8"
+                    }}
+                  >
+                    {log}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -365,3 +531,4 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
     </div>
   );
 }
+
