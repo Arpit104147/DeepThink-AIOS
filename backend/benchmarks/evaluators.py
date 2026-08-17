@@ -141,7 +141,12 @@ async def evaluate_problem_solution(
             extracted_code = _clean_pipeline_artifacts(extracted_code, entry_point)
             
             # Ensure function/class signature is present exactly once
-            if entry_point and f"def {entry_point}" not in extracted_code and f"class {entry_point}" not in extracted_code and entry_point not in extracted_code:
+            has_def = entry_point and (
+                re.search(rf"\bdef\s+{re.escape(entry_point)}\b", extracted_code) is not None or
+                re.search(rf"\bclass\s+{re.escape(entry_point)}\b", extracted_code) is not None
+            )
+
+            if entry_point and not has_def:
                 # Try to find the function or class in the full response
                 matches = re.findall(rf"((?:def|class)\s+{re.escape(entry_point)}\b[\s\S]*?)(?=\n(?:def|class)\s+|\Z)", response)
                 if matches:

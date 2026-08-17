@@ -220,7 +220,9 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                     old_cancel = orchestrator.cancel_event
                     orchestrator.cancel_event = problem_cancel
                     
-                    benchmark_mode = "CODING" if category in ["HumanEval", "MBPP", "SWE-bench"] else "REASONING" if category in ["GSM8K", "MATH"] else "auto"
+                    is_coding = any(k in category for k in ["HumanEval", "MBPP", "SWE-bench", "Coding"])
+                    is_reasoning = any(k in category for k in ["GSM8K", "MATH", "GPQA", "AIME", "MuSR", "MMLU", "Reasoning"])
+                    benchmark_mode = "CODING" if is_coding else "REASONING" if is_reasoning else "auto"
                     
                     try:
                         response = await asyncio.wait_for(
