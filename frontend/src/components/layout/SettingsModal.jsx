@@ -71,9 +71,21 @@ const SettingsModal = ({
   if (!settingsOpen) return null;
 
   const handleSetupGpuEngine = async (engineTarget = "auto") => {
+    if (vulkanStatus?.progress?.status === "updating") return;
+    const targetKey = engineTarget === "nvidia" ? "cuda" : (engineTarget === "apple" ? "metal" : engineTarget);
+    const isAlreadyInstalled = 
+      (targetKey === "cuda" && (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))) ||
+      (targetKey === "vulkan" && (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))) ||
+      (targetKey === "metal" && (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal")));
+    
+    if (isAlreadyInstalled) {
+      setVulkanMsg(`✅ Engine ${targetKey.toUpperCase()} is already installed and active.`);
+      return;
+    }
+
     try {
-      setVulkanMsg(`🚀 Initiating ${engineTarget.toUpperCase()} GPU Acceleration Setup...`);
-      const res = await fetch(`${serverUrl}/api/gpu/setup?engine=${engineTarget}`, { method: "POST" });
+      setVulkanMsg(`🚀 Initiating ${targetKey.toUpperCase()} GPU Acceleration Setup...`);
+      const res = await fetch(`${serverUrl}/api/gpu/setup?engine=${targetKey}`, { method: "POST" });
       if (res.ok) {
         fetchVulkanStatus();
       }
@@ -208,142 +220,153 @@ const SettingsModal = ({
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
                   
                   {/* ENGINE 1: NVIDIA CUDA */}
-                  <div style={{
-                    background: vulkanStatus?.detected_platform === "nvidia" ? "rgba(16, 185, 129, 0.12)" : "rgba(15, 23, 42, 0.5)",
-                    border: vulkanStatus?.detected_platform === "nvidia" ? "2px solid #10b981" : "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "10px",
-                    padding: "12px",
-                    opacity: vulkanStatus?.detected_platform === "nvidia" ? 1 : 0.7,
-                    boxShadow: vulkanStatus?.detected_platform === "nvidia" ? "0 0 16px rgba(16, 185, 129, 0.25)" : "none"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#34d399" }}>🟢 NVIDIA CUDA</span>
-                      {vulkanStatus?.detected_platform === "nvidia" && (
-                        <span style={{ fontSize: "0.62rem", background: "#10b981", color: "#000", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
-                      CUDA / cu122 driver for RTX/GTX/T4 GPUs.
-                    </div>
-                    <button
-                      className="hub-save-btn"
-                      onClick={() => handleSetupGpuEngine("cuda")}
-                      disabled={vulkanStatus?.progress?.status === "updating"}
-                      style={{
-                        width: "100%",
-                        background: (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
-                          ? "rgba(16, 185, 129, 0.2)"
-                          : (vulkanStatus?.detected_platform === "nvidia" ? "#10b981" : "rgba(255,255,255,0.08)"),
-                        color: (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
-                          ? "#34d399"
-                          : (vulkanStatus?.detected_platform === "nvidia" ? "#000" : "#ccc"),
-                        border: (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
-                          ? "1px solid #10b981"
-                          : "none",
-                        padding: "6px 10px",
-                        fontSize: "0.75rem",
-                        fontWeight: "700"
-                      }}
-                    >
-                      {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "cuda"
-                        ? "⏳ Installing..."
-                        : ((vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
-                            ? "✅ Installed & Active"
-                            : (vulkanStatus?.detected_platform === "nvidia" ? "⚡ Activate CUDA" : "Setup CUDA"))}
-                    </button>
-                  </div>
+                  {(() => {
+                    const isCudaActive = vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda");
+                    return (
+                      <div style={{
+                        background: vulkanStatus?.detected_platform === "nvidia" ? "rgba(16, 185, 129, 0.12)" : "rgba(15, 23, 42, 0.5)",
+                        border: vulkanStatus?.detected_platform === "nvidia" ? "2px solid #10b981" : "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "10px",
+                        padding: "12px",
+                        opacity: vulkanStatus?.detected_platform === "nvidia" ? 1 : 0.7,
+                        boxShadow: vulkanStatus?.detected_platform === "nvidia" ? "0 0 16px rgba(16, 185, 129, 0.25)" : "none"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#34d399" }}>🟢 NVIDIA CUDA</span>
+                          {vulkanStatus?.detected_platform === "nvidia" && (
+                            <span style={{ fontSize: "0.62rem", background: "#10b981", color: "#000", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
+                          CUDA / cu122 driver for RTX/GTX/T4 GPUs.
+                        </div>
+                        <button
+                          className="hub-save-btn"
+                          onClick={() => handleSetupGpuEngine("cuda")}
+                          disabled={isCudaActive || vulkanStatus?.progress?.status === "updating"}
+                          style={{
+                            width: "100%",
+                            background: isCudaActive
+                              ? "rgba(16, 185, 129, 0.2)"
+                              : (vulkanStatus?.detected_platform === "nvidia" ? "#10b981" : "rgba(255,255,255,0.08)"),
+                            color: isCudaActive
+                              ? "#34d399"
+                              : (vulkanStatus?.detected_platform === "nvidia" ? "#000" : "#ccc"),
+                            border: isCudaActive ? "1px solid #10b981" : "none",
+                            padding: "6px 10px",
+                            fontSize: "0.75rem",
+                            fontWeight: "700",
+                            cursor: (isCudaActive || vulkanStatus?.progress?.status === "updating") ? "default" : "pointer",
+                            opacity: isCudaActive ? 0.9 : 1
+                          }}
+                        >
+                          {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "cuda"
+                            ? "⏳ Installing..."
+                            : (isCudaActive
+                                ? "✅ Installed & Active"
+                                : (vulkanStatus?.detected_platform === "nvidia" ? "⚡ Activate CUDA" : "Setup CUDA"))}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* ENGINE 2: INTEL / AMD VULKAN */}
-                  <div style={{
-                    background: vulkanStatus?.detected_platform === "vulkan" ? "rgba(99, 102, 241, 0.12)" : "rgba(15, 23, 42, 0.5)",
-                    border: vulkanStatus?.detected_platform === "vulkan" ? "2px solid #6366f1" : "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "10px",
-                    padding: "12px",
-                    opacity: vulkanStatus?.detected_platform === "vulkan" ? 1 : 0.7,
-                    boxShadow: vulkanStatus?.detected_platform === "vulkan" ? "0 0 16px rgba(99, 102, 241, 0.25)" : "none"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#818cf8" }}>🔵 Intel / AMD Vulkan</span>
-                      {vulkanStatus?.detected_platform === "vulkan" && (
-                        <span style={{ fontSize: "0.62rem", background: "#6366f1", color: "#fff", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
-                      Vulkan SPIR-V engine for Radeon & Arc GPUs.
-                    </div>
-                    <button
-                      className="hub-save-btn"
-                      onClick={() => handleSetupGpuEngine("vulkan")}
-                      disabled={vulkanStatus?.progress?.status === "updating"}
-                      style={{
-                        width: "100%",
-                        background: (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
-                          ? "rgba(99, 102, 241, 0.2)"
-                          : (vulkanStatus?.detected_platform === "vulkan" ? "#6366f1" : "rgba(255,255,255,0.08)"),
-                        color: (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
-                          ? "#a5b4fc"
-                          : "#fff",
-                        border: (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
-                          ? "1px solid #6366f1"
-                          : "none",
-                        padding: "6px 10px",
-                        fontSize: "0.75rem",
-                        fontWeight: "700"
-                      }}
-                    >
-                      {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "vulkan"
-                        ? "⏳ Downloading..."
-                        : ((vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
-                            ? "✅ Installed & Active"
-                            : (vulkanStatus?.detected_platform === "vulkan" ? "⚡ Activate Vulkan" : "Download Vulkan"))}
-                    </button>
-                  </div>
+                  {(() => {
+                    const isVulkanActive = vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan");
+                    return (
+                      <div style={{
+                        background: vulkanStatus?.detected_platform === "vulkan" ? "rgba(99, 102, 241, 0.12)" : "rgba(15, 23, 42, 0.5)",
+                        border: vulkanStatus?.detected_platform === "vulkan" ? "2px solid #6366f1" : "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "10px",
+                        padding: "12px",
+                        opacity: vulkanStatus?.detected_platform === "vulkan" ? 1 : 0.7,
+                        boxShadow: vulkanStatus?.detected_platform === "vulkan" ? "0 0 16px rgba(99, 102, 241, 0.25)" : "none"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#818cf8" }}>🔵 Intel / AMD Vulkan</span>
+                          {vulkanStatus?.detected_platform === "vulkan" && (
+                            <span style={{ fontSize: "0.62rem", background: "#6366f1", color: "#fff", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
+                          Vulkan SPIR-V engine for Radeon & Arc GPUs.
+                        </div>
+                        <button
+                          className="hub-save-btn"
+                          onClick={() => handleSetupGpuEngine("vulkan")}
+                          disabled={isVulkanActive || vulkanStatus?.progress?.status === "updating"}
+                          style={{
+                            width: "100%",
+                            background: isVulkanActive
+                              ? "rgba(99, 102, 241, 0.2)"
+                              : (vulkanStatus?.detected_platform === "vulkan" ? "#6366f1" : "rgba(255,255,255,0.08)"),
+                            color: isVulkanActive ? "#a5b4fc" : "#fff",
+                            border: isVulkanActive ? "1px solid #6366f1" : "none",
+                            padding: "6px 10px",
+                            fontSize: "0.75rem",
+                            fontWeight: "700",
+                            cursor: (isVulkanActive || vulkanStatus?.progress?.status === "updating") ? "default" : "pointer",
+                            opacity: isVulkanActive ? 0.9 : 1
+                          }}
+                        >
+                          {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "vulkan"
+                            ? "⏳ Downloading..."
+                            : (isVulkanActive
+                                ? "✅ Installed & Active"
+                                : (vulkanStatus?.detected_platform === "vulkan" ? "⚡ Activate Vulkan" : "Download Vulkan"))}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* ENGINE 3: APPLE SILICON METAL */}
-                  <div style={{
-                    background: vulkanStatus?.detected_platform === "apple" ? "rgba(168, 85, 247, 0.12)" : "rgba(15, 23, 42, 0.5)",
-                    border: vulkanStatus?.detected_platform === "apple" ? "2px solid #a855f7" : "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "10px",
-                    padding: "12px",
-                    opacity: vulkanStatus?.detected_platform === "apple" ? 1 : 0.7,
-                    boxShadow: vulkanStatus?.detected_platform === "apple" ? "0 0 16px rgba(168, 85, 247, 0.25)" : "none"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#c084fc" }}>🍎 Apple Metal</span>
-                      {vulkanStatus?.detected_platform === "apple" && (
-                        <span style={{ fontSize: "0.62rem", background: "#a855f7", color: "#fff", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
-                      Metal MPS backend for M1/M2/M3/M4 Macs.
-                    </div>
-                    <button
-                      className="hub-save-btn"
-                      onClick={() => handleSetupGpuEngine("metal")}
-                      disabled={vulkanStatus?.progress?.status === "updating"}
-                      style={{
-                        width: "100%",
-                        background: (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
-                          ? "rgba(168, 85, 247, 0.2)"
-                          : (vulkanStatus?.detected_platform === "apple" ? "#a855f7" : "rgba(255,255,255,0.08)"),
-                        color: (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
-                          ? "#c084fc"
-                          : "#fff",
-                        border: (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
-                          ? "1px solid #a855f7"
-                          : "none",
-                        padding: "6px 10px",
-                        fontSize: "0.75rem",
-                        fontWeight: "700"
-                      }}
-                    >
-                      {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "metal"
-                        ? "⏳ Compiling..."
-                        : ((vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
-                            ? "✅ Installed & Active"
-                            : (vulkanStatus?.detected_platform === "apple" ? "⚡ Activate Metal" : "Setup Metal"))}
-                    </button>
-                  </div>
+                  {(() => {
+                    const isMetalActive = vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal");
+                    return (
+                      <div style={{
+                        background: vulkanStatus?.detected_platform === "apple" ? "rgba(168, 85, 247, 0.12)" : "rgba(15, 23, 42, 0.5)",
+                        border: vulkanStatus?.detected_platform === "apple" ? "2px solid #a855f7" : "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "10px",
+                        padding: "12px",
+                        opacity: vulkanStatus?.detected_platform === "apple" ? 1 : 0.7,
+                        boxShadow: vulkanStatus?.detected_platform === "apple" ? "0 0 16px rgba(168, 85, 247, 0.25)" : "none"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#c084fc" }}>🍎 Apple Metal</span>
+                          {vulkanStatus?.detected_platform === "apple" && (
+                            <span style={{ fontSize: "0.62rem", background: "#a855f7", color: "#fff", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
+                          Metal MPS backend for M1/M2/M3/M4 Macs.
+                        </div>
+                        <button
+                          className="hub-save-btn"
+                          onClick={() => handleSetupGpuEngine("metal")}
+                          disabled={isMetalActive || vulkanStatus?.progress?.status === "updating"}
+                          style={{
+                            width: "100%",
+                            background: isMetalActive
+                              ? "rgba(168, 85, 247, 0.2)"
+                              : (vulkanStatus?.detected_platform === "apple" ? "#a855f7" : "rgba(255,255,255,0.08)"),
+                            color: isMetalActive ? "#c084fc" : "#fff",
+                            border: isMetalActive ? "1px solid #a855f7" : "none",
+                            padding: "6px 10px",
+                            fontSize: "0.75rem",
+                            fontWeight: "700",
+                            cursor: (isMetalActive || vulkanStatus?.progress?.status === "updating") ? "default" : "pointer",
+                            opacity: isMetalActive ? 0.9 : 1
+                          }}
+                        >
+                          {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "metal"
+                            ? "⏳ Compiling..."
+                            : (isMetalActive
+                                ? "✅ Installed & Active"
+                                : (vulkanStatus?.detected_platform === "apple" ? "⚡ Activate Metal" : "Setup Metal"))}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                 </div>
 
