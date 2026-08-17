@@ -166,10 +166,14 @@ async def evaluate_problem_solution(
             if entry_point and f"check({entry_point})" not in problem["test"]:
                 test_code += f"\n\ncheck({entry_point})"
                 
-            is_success, output = await asyncio.to_thread(
-                orchestrator.sandbox.execute, test_code, "python", timeout=10.0
-            )
-            success = is_success
+            try:
+                is_success, output = await asyncio.to_thread(
+                    orchestrator.sandbox.execute, test_code, "python", timeout=10.0
+                )
+                success = is_success
+            except Exception as eval_err:
+                success = False
+                output = f"Evaluation Execution Error: {eval_err}"
             
             if not success and add_log_fn:
                 error_lines = [l for l in str(output).strip().split('\n') if l.strip()]
