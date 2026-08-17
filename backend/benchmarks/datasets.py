@@ -2,6 +2,7 @@
 Dataset Loaders and Baselines for AIOS Benchmark Suite.
 Supports HuggingFace Datasets fetching with automatic offline mock fallbacks.
 """
+import re
 from typing import Dict, List, Any
 
 # Published reference scores from model evaluation papers.

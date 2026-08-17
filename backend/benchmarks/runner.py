@@ -406,7 +406,14 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
         with STATE_LOCK:
             BENCHMARK_STATE["elapsed_seconds"] = round(time.time() - start_time, 1)
 
-    # Cancel tasks immediately & drain queue on cancellation
+    if BENCHMARK_STATE.get("active", False):
+        try:
+            # Allow in-flight worker tasks to finish the last problem
+            await asyncio.wait_for(queue.join(), timeout=300.0)
+        except Exception:
+            pass
+
+    # Cancel worker tasks after completion or on cancellation
     for t in tasks:
         t.cancel()
 
