@@ -424,17 +424,54 @@ class AgentOrchestrator:
     def process_query(self, prompt, mode="auto", selected_models=None, status_callback=None):
         self._check_cancelled("start_query")
 
-        router_llm = self._get_model("router", required_ctx=2048)
-        task_type = TaskRouter.classify_task(self, router_llm, prompt)
+        # 1. Determine search mode setting (off, simple/search, extreme)
+        search_mode = str(getattr(self, "search_mode", "off")).lower()
 
-        if isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
+        # If search_mode is set to extreme, force EXTREME_WEBSEARCH
+        if search_mode in ["extreme", "ext..."]:
+            task_type = "EXTREME_WEBSEARCH"
+        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
             task_type = mode.upper()
+        else:
+            router_llm = self._get_model("router", required_ctx=2048)
+            task_type = TaskRouter.classify_task(self, router_llm, prompt)
+            # If search_mode is simple search, do NOT allow auto-classification to jump to EXTREME_WEBSEARCH
+            if search_mode in ["simple", "search", "se..."] and task_type == "EXTREME_WEBSEARCH" and mode.upper() != "EXTREME_WEBSEARCH":
+                task_type = "SIMPLE"
 
         if status_callback:
             status_callback(f"Task classified as: {task_type}", "info", "router", 12)
 
+        # 2. Simple Web Search context retrieval if search_mode == simple/search
+        web_context = ""
+        if search_mode in ["simple", "search", "se..."]:
+            if status_callback:
+                status_callback("🔍 Simple WebSearch: Scraping live web sources...", "info", "system", 25)
+            try:
+                search_res = self.web_search.search(prompt)
+                if isinstance(search_res, list) and search_res:
+                    formatted = []
+                    for idx, item in enumerate(search_res[:5]):
+                        title = item.get("title", f"Source {idx+1}")
+                        url = item.get("url", "")
+                        snippet = item.get("snippet", "")
+                        formatted.append(f"[{idx+1}] {title} ({url}): {snippet}")
+                    web_context = "\n".join(formatted)
+                elif isinstance(search_res, str):
+                    web_context = search_res
+            except Exception:
+                pass
+
         if task_type == "SIMPLE":
-            res = self._call_model(router_llm, prompt, max_tokens=self.max_tokens, temperature=self.temperature)
+            router_llm = self._get_model("router", required_ctx=2048)
+            final_p = prompt
+            if web_context:
+                final_p = (
+                    f"Live Web Search Context:\n{web_context}\n\n"
+                    f"User Prompt: {prompt}\n\n"
+                    f"Answer the user's question accurately using the live web search context provided."
+                )
+            res = self._call_model(router_llm, final_p, max_tokens=self.max_tokens, temperature=self.temperature)
             return self._clean_cutoff_notes(res)
 
         elif task_type == "CODING":
@@ -458,5 +495,6 @@ class AgentOrchestrator:
             return self._clean_cutoff_notes(res)
 
         else:
+            router_llm = self._get_model("router", required_ctx=2048)
             res = self._call_model(router_llm, prompt, max_tokens=self.max_tokens, temperature=self.temperature)
             return self._clean_cutoff_notes(res)
