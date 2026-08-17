@@ -231,15 +231,25 @@ const SettingsModal = ({
                       disabled={vulkanStatus?.progress?.status === "updating"}
                       style={{
                         width: "100%",
-                        background: vulkanStatus?.detected_platform === "nvidia" ? "#10b981" : "rgba(255,255,255,0.08)",
-                        color: vulkanStatus?.detected_platform === "nvidia" ? "#000" : "#ccc",
-                        border: "none",
+                        background: (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
+                          ? "rgba(16, 185, 129, 0.2)"
+                          : (vulkanStatus?.detected_platform === "nvidia" ? "#10b981" : "rgba(255,255,255,0.08)"),
+                        color: (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
+                          ? "#34d399"
+                          : (vulkanStatus?.detected_platform === "nvidia" ? "#000" : "#ccc"),
+                        border: (vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
+                          ? "1px solid #10b981"
+                          : "none",
                         padding: "6px 10px",
                         fontSize: "0.75rem",
                         fontWeight: "700"
                       }}
                     >
-                      {vulkanStatus?.detected_platform === "nvidia" ? "⚡ Active (NVIDIA CUDA)" : "Setup CUDA"}
+                      {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "cuda"
+                        ? "⏳ Installing..."
+                        : ((vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"))
+                            ? "✅ Installed & Active"
+                            : (vulkanStatus?.detected_platform === "nvidia" ? "⚡ Activate CUDA" : "Setup CUDA"))}
                     </button>
                   </div>
 
@@ -267,15 +277,25 @@ const SettingsModal = ({
                       disabled={vulkanStatus?.progress?.status === "updating"}
                       style={{
                         width: "100%",
-                        background: vulkanStatus?.detected_platform === "vulkan" ? "#6366f1" : "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                        border: "none",
+                        background: (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
+                          ? "rgba(99, 102, 241, 0.2)"
+                          : (vulkanStatus?.detected_platform === "vulkan" ? "#6366f1" : "rgba(255,255,255,0.08)"),
+                        color: (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
+                          ? "#a5b4fc"
+                          : "#fff",
+                        border: (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
+                          ? "1px solid #6366f1"
+                          : "none",
                         padding: "6px 10px",
                         fontSize: "0.75rem",
                         fontWeight: "700"
                       }}
                     >
-                      {vulkanStatus?.detected_platform === "vulkan" ? "⚡ Active (Vulkan)" : "Download Vulkan"}
+                      {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "vulkan"
+                        ? "⏳ Downloading..."
+                        : ((vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))
+                            ? "✅ Installed & Active"
+                            : (vulkanStatus?.detected_platform === "vulkan" ? "⚡ Activate Vulkan" : "Download Vulkan"))}
                     </button>
                   </div>
 
@@ -303,15 +323,25 @@ const SettingsModal = ({
                       disabled={vulkanStatus?.progress?.status === "updating"}
                       style={{
                         width: "100%",
-                        background: vulkanStatus?.detected_platform === "apple" ? "#a855f7" : "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                        border: "none",
+                        background: (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
+                          ? "rgba(168, 85, 247, 0.2)"
+                          : (vulkanStatus?.detected_platform === "apple" ? "#a855f7" : "rgba(255,255,255,0.08)"),
+                        color: (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
+                          ? "#c084fc"
+                          : "#fff",
+                        border: (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
+                          ? "1px solid #a855f7"
+                          : "none",
                         padding: "6px 10px",
                         fontSize: "0.75rem",
                         fontWeight: "700"
                       }}
                     >
-                      {vulkanStatus?.detected_platform === "apple" ? "⚡ Active (Apple Metal)" : "Setup Metal"}
+                      {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "metal"
+                        ? "⏳ Compiling..."
+                        : ((vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"))
+                            ? "✅ Installed & Active"
+                            : (vulkanStatus?.detected_platform === "apple" ? "⚡ Activate Metal" : "Setup Metal"))}
                     </button>
                   </div>
 

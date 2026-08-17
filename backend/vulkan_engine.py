@@ -144,6 +144,45 @@ def detect_hardware_platform():
     # 3. Default to Intel / AMD Vulkan
     return "vulkan"
 
+INSTALLED_STATE_FILE = os.path.join(VULKAN_DIR, "installed_state.json")
+
+def load_installed_state():
+    if os.path.exists(INSTALLED_STATE_FILE):
+        try:
+            with open(INSTALLED_STATE_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"cuda": False, "vulkan": False, "metal": False}
+
+def save_installed_state(state):
+    try:
+        os.makedirs(VULKAN_DIR, exist_ok=True)
+        with open(INSTALLED_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+def check_engine_installed(engine_key):
+    state = load_installed_state()
+    if state.get(engine_key):
+        return True
+
+    if engine_key in ["cuda", "nvidia"]:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return True
+        except Exception:
+            pass
+    elif engine_key in ["metal", "apple"]:
+        if platform.system().lower() == "darwin" and ("arm" in platform.machine().lower() or "aarch" in platform.machine().lower()):
+            return True
+    elif engine_key == "vulkan":
+        if get_vulkan_binary_path() is not None:
+            return True
+    return False
+
 def check_vulkan_engine_status():
     """Check installed pre-compiled GPU engine status and hardware platform."""
     binary_path = get_vulkan_binary_path()
@@ -165,7 +204,8 @@ def check_vulkan_engine_status():
 
     return {
         "detected_platform": detected,
-        "installed": binary_path is not None or detected in ["nvidia", "apple"],
+        "active_target": VULKAN_UPDATE_PROGRESS.get("target", detected),
+        "installed": binary_path is not None or check_engine_installed(detected),
         "installed_version": installed_ver or ("Installed" if binary_path else "Ready"),
         "latest_version": latest_tag or installed_ver or "Latest",
         "has_update": has_update,
@@ -175,17 +215,20 @@ def check_vulkan_engine_status():
             "nvidia": {
                 "name": "NVIDIA CUDA Engine",
                 "backend": "CUDA / cu122",
-                "detected": detected == "nvidia"
+                "detected": detected == "nvidia",
+                "installed": check_engine_installed("cuda")
             },
             "vulkan": {
                 "name": "Intel / AMD Vulkan Engine",
                 "backend": "Vulkan SPIR-V",
-                "detected": detected == "vulkan"
+                "detected": detected == "vulkan",
+                "installed": check_engine_installed("vulkan")
             },
             "apple": {
                 "name": "Apple Silicon Metal Engine",
                 "backend": "Metal MPS",
-                "detected": detected == "apple"
+                "detected": detected == "apple",
+                "installed": check_engine_installed("metal")
             }
         }
     }
@@ -199,28 +242,37 @@ def setup_target_gpu_engine(engine_target="auto"):
         engine_target = detect_hardware_platform()
 
     if engine_target in ["cuda", "nvidia"]:
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 10, "message": "Installing NVIDIA CUDA llama.cpp backend..."}
+        VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 10, "message": "Installing NVIDIA CUDA llama.cpp backend..."}
         try:
             cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/wheels/cu122", "--force-reinstall", "--no-cache-dir"]
             subprocess.check_call(cmd)
-            VULKAN_UPDATE_PROGRESS = {"status": "completed", "percent": 100, "message": "✅ NVIDIA CUDA engine compiled & ready!"}
+            state = load_installed_state()
+            state["cuda"] = True
+            save_installed_state(state)
+            VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA engine compiled & ready!"}
         except Exception as e:
-            VULKAN_UPDATE_PROGRESS = {"status": "error", "percent": 0, "message": f"CUDA setup failed: {str(e)}"}
+            VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "cuda", "percent": 0, "message": f"CUDA setup failed: {str(e)}"}
 
     elif engine_target in ["metal", "apple"]:
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 10, "message": "Compiling Apple Silicon Metal Performance Shaders backend..."}
+        VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "metal", "percent": 10, "message": "Compiling Apple Silicon Metal Performance Shaders backend..."}
         try:
             env = os.environ.copy()
             env["CMAKE_ARGS"] = "-DGGML_METAL=on"
             cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--force-reinstall", "--no-cache-dir"]
             subprocess.check_call(cmd, env=env)
-            VULKAN_UPDATE_PROGRESS = {"status": "completed", "percent": 100, "message": "✅ Apple Silicon Metal engine compiled & ready!"}
+            state = load_installed_state()
+            state["metal"] = True
+            save_installed_state(state)
+            VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "metal", "percent": 100, "message": "✅ Apple Silicon Metal engine compiled & ready!"}
         except Exception as e:
-            VULKAN_UPDATE_PROGRESS = {"status": "error", "percent": 0, "message": f"Metal setup failed: {str(e)}"}
+            VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "metal", "percent": 0, "message": f"Metal setup failed: {str(e)}"}
 
     else:
         # Default Vulkan download & extract
         _download_and_extract_vulkan()
+        state = load_installed_state()
+        state["vulkan"] = True
+        save_installed_state(state)
 
 def _download_and_extract_vulkan():
     global VULKAN_UPDATE_PROGRESS
