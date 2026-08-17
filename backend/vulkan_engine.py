@@ -252,16 +252,37 @@ def setup_target_gpu_engine(engine_target="auto"):
         engine_target = detect_hardware_platform()
 
     if engine_target in ["cuda", "nvidia"]:
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 10, "message": "Installing NVIDIA CUDA llama.cpp backend..."}
+        VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 10, "message": "Compiling CUDA GPU backend (GGML_CUDA=on)..."}
         try:
-            cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/wheels/cu122", "--force-reinstall", "--no-cache-dir"]
-            subprocess.check_call(cmd)
+            env = os.environ.copy()
+            env["CMAKE_ARGS"] = "-DGGML_CUDA=on"
+            env["FORCE_CMAKE"] = "1"
+            cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--force-reinstall", "--no-cache-dir"]
+            subprocess.check_call(cmd, env=env)
             state = load_installed_state()
             state["cuda"] = True
             save_installed_state(state)
-            VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA engine compiled & ready!"}
+            VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA GPU engine compiled & ready!"}
         except Exception as e:
-            VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "cuda", "percent": 0, "message": f"CUDA setup failed: {str(e)}"}
+            try:
+                VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 50, "message": "Fetching CUDA wheel..."}
+                cuda_tag = "cu121"
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        ver = torch.version.cuda
+                        if ver:
+                            cuda_tag = f"cu{ver.replace('.', '')[:3]}"
+                except Exception:
+                    pass
+                cmd2 = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--extra-index-url", f"https://abetlen.github.io/llama-cpp-python/wheels/{cuda_tag}", "--force-reinstall", "--no-cache-dir"]
+                subprocess.check_call(cmd2)
+                state = load_installed_state()
+                state["cuda"] = True
+                save_installed_state(state)
+                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA wheel installed & ready!"}
+            except Exception as e2:
+                VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "cuda", "percent": 0, "message": f"CUDA setup failed: {str(e2)}"}
 
     elif engine_target in ["metal", "apple"]:
         VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "metal", "percent": 10, "message": "Compiling Apple Silicon Metal Performance Shaders backend..."}
