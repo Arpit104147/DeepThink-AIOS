@@ -152,27 +152,98 @@ Open **`http://localhost:5173`** in your browser.
 
 ---
 
-### 2. Kaggle / Remote Cloud VM Setup
+### 2. Kaggle / Remote Cloud GPU Setup (Continuous Runner)
 
-In your Kaggle notebook cell:
+Paste and run this complete Python script inside a single Kaggle Notebook cell:
 
 ```python
-# 1. Pull latest code
-!git pull origin main
+# =========================================================================
+# 🚀 DEEPTHINK-AIOS: KAGGLE BACKEND + CLOUDFLARE TUNNEL (CONTINUOUS RUNNER)
+# =========================================================================
 
-# 2. Install localtunnel
-!npm install -g localtunnel 2>/dev/null
+import os, subprocess, time, re, sys
 
-# 3. Start FastAPI Backend in background (Port 8080)
-import subprocess, time
-subprocess.Popen(["python3", "backend/app.py"])
-time.sleep(5)
+# 1. Clone or Auto-Update Repository
+if os.path.exists("/kaggle/working/DeepThink-AIOS"):
+    os.chdir("/kaggle/working/DeepThink-AIOS")
+    subprocess.run(["git", "pull", "origin", "main"], check=True)
+else:
+    os.chdir("/kaggle/working")
+    subprocess.run(["git", "clone", "https://github.com/Arpit104147/DeepThink-AIOS.git"], check=True)
+    os.chdir("/kaggle/working/DeepThink-AIOS")
 
-# 4. Expose public tunnel URL
-!npx localtunnel --port 8080
+# 1.5 Install System EDA Chip Design Tools (Icarus Verilog, Yosys, NGSPICE, KLayout)
+print("🔬 Installing System EDA Chip Design Tools (iverilog, yosys, ngspice, klayout)...", flush=True)
+subprocess.run(["apt-get", "update", "-y", "-q"], check=False)
+subprocess.run(["apt-get", "install", "-y", "-q", "iverilog", "yosys", "ngspice", "klayout"], check=False)
+
+# 2. Install dependencies & Pre-compile CUDA llama-cpp-python for Kaggle GPU
+print("⚡ Installing requirements & pre-compiling CUDA llama-cpp-python for Kaggle GPU...", flush=True)
+subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"], check=True)
+
+try:
+    import torch
+    if torch.cuda.is_available():
+        print("🔥 Pre-installing CUDA-accelerated llama-cpp-python for Kaggle GPU...", flush=True)
+        env = os.environ.copy()
+        env["CMAKE_ARGS"] = "-DGGML_CUDA=on"
+        env["FORCE_CMAKE"] = "1"
+        subprocess.run([
+            sys.executable, "-m", "pip", "install",
+            "llama-cpp-python", "--force-reinstall", "--no-cache-dir", "-q"
+        ], env=env, check=False)
+except Exception as e:
+    print(f"⚠️ CUDA setup note: {e}")
+
+# 3. Download Cloudflare Tunnel binary
+subprocess.run(["wget", "-q", "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64", "-O", "/tmp/cloudflared"], check=True)
+subprocess.run(["chmod", "+x", "/tmp/cloudflared"], check=True)
+
+# 4. Launch FastAPI Backend
+print("⏳ Launching FastAPI Backend on Port 8000...", flush=True)
+backend_proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"])
+
+# 5. Create Cloudflare Tunnel
+print("🌐 Creating Secure Cloudflare Tunnel...", flush=True)
+tunnel_proc = subprocess.Popen(
+    ["/tmp/cloudflared", "tunnel", "--url", "http://localhost:8000"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True
+)
+
+time.sleep(4)
+
+# 6. Extract & Print Public URL
+public_url = None
+for line in tunnel_proc.stdout:
+    match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line)
+    if match:
+        public_url = match.group(0)
+        print("\n" + "="*72, flush=True)
+        print("🎉 YOUR KAGGLE BACKEND PUBLIC URL:", flush=True)
+        print(f"👉 {public_url}", flush=True)
+        print("="*72, flush=True)
+        print("📌 COPY the URL above and paste it into your local Laptop Frontend!", flush=True)
+        print("="*72 + "\n", flush=True)
+        break
+
+# 7. Continuous Heartbeat to keep Kaggle alive overnight
+start_time = time.time()
+print("⚡ Backend is ACTIVE & serving requests continuously...", flush=True)
+
+try:
+    while True:
+        time.sleep(120)
+        elapsed_min = int((time.time() - start_time) // 60)
+        print(f"💓 [HEARTBEAT - {elapsed_min}m elapsed] DeepThink-AIOS Backend Running | URL: {public_url}", flush=True)
+except KeyboardInterrupt:
+    print("Stopping server...", flush=True)
+    backend_proc.terminate()
+    tunnel_proc.terminate()
 ```
 
-Copy the printed `https://xxxx.loca.lt` URL, open **`http://localhost:5173`** in your local browser, click **`⚙️ Settings`**, and paste the URL into **Server URL**.
+Copy the printed `https://xxxx.trycloudflare.com` URL, open **`http://localhost:5173`** in your local browser, click **`⚙️ Settings`**, and paste the URL into **Server URL**.
 
 ---
 
