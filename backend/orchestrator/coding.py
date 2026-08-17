@@ -43,6 +43,7 @@ class CodingPipeline:
         lessons = ""
         initial_failed_code = ""
         initial_failed_error = ""
+        c_header_rule = ""
 
         planner_sys = (
             "You are a world-class software architect and algorithm planner.\n"

@@ -140,14 +140,14 @@ async def evaluate_problem_solution(
             # Clean pipeline artifacts (self-tests, print statements, etc.)
             extracted_code = _clean_pipeline_artifacts(extracted_code, entry_point)
             
-            # Ensure function signature is present exactly once
-            if entry_point and f"def {entry_point}" not in extracted_code:
-                # Try to find the function in the full response
-                matches = re.findall(rf"(def {re.escape(entry_point)}\b[\s\S]*?)(?=\ndef |\Z)", response)
+            # Ensure function/class signature is present exactly once
+            if entry_point and f"def {entry_point}" not in extracted_code and f"class {entry_point}" not in extracted_code and entry_point not in extracted_code:
+                # Try to find the function or class in the full response
+                matches = re.findall(rf"((?:def|class)\s+{re.escape(entry_point)}\b[\s\S]*?)(?=\n(?:def|class)\s+|\Z)", response)
                 if matches:
                     # Use the LAST match (most likely the verified code)
                     extracted_code = _clean_pipeline_artifacts(matches[-1], entry_point)
-                else:
+                elif prompt_clean and prompt_clean not in extracted_code:
                     # Prepend the original prompt stub
                     extracted_code = prompt_clean + "\n" + extracted_code
 
