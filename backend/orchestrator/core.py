@@ -414,20 +414,30 @@ class AgentOrchestrator:
             status_callback("🔬 Synthesizing research paper with DeepSeek-R1...", "info", "deepseek_r1", 60)
 
         ds_llm = self._get_model("deepseek_r1", required_ctx=8192)
+        is_quantum = any(k in prompt.lower() for k in ["qubit", "quantum", "surface code", "color code", "fault-tolerant", "qec"])
+        domain_constraints = ""
+        if is_quantum:
+            domain_constraints = (
+                "STRICT QUANTUM DOMAIN ACCURACY CONSTRAINTS:\n"
+                "1. Surface Code Fault-Tolerant Error Threshold is ~0.7% - 1.0% (MWPM decoder). Color Code Threshold is ~0.1% - 0.7%.\n"
+                "2. Surface Code requires 2d^2 physical qubits per logical qubit. Color Code requires 7d^2 physical qubits per logical qubit.\n"
+                "3. Include a Markdown comparison table with columns: | Code Type | Space Dim | Threshold (%) | Physical Qubit Overhead | Transversal Gates | Decoder |.\n\n"
+            )
+
         research_prompt = (
-            f"You are a principal quantum computing research scientist.\n"
-            f"Synthesize a highly technical, academically accurate survey paper based on the query and search context below.\n\n"
+            f"You are a distinguished research analyst and domain expert.\n"
+            f"Synthesize an in-depth, comprehensive, well-structured guide/survey based on the query and live search context below.\n\n"
             f"USER QUERY: {prompt}\n\n"
             f"LIVE WEB RESEARCH CONTEXT:\n{web_context}\n\n"
-            f"STRICT DOMAIN ACCURACY CONSTRAINTS:\n"
-            f"1. QUANTUM METRICS ACCURACY: Surface Code Fault-Tolerant Error Threshold is ~0.7% - 1.0% (MWPM decoder). Color Code Threshold is ~0.1% - 0.7%. NEVER state thresholds are 10-15% (which is mathematically impossible in physical QEC).\n"
-            f"2. OVERHEAD METRICS: Surface Code requires 2d^2 physical qubits per logical qubit. Color Code requires 7d^2 physical qubits per logical qubit.\n"
-            f"3. MANDATORY COMPARISON TABLE: Include a Markdown table with columns: | Code Type | Space Dim | Threshold (%) | Physical Qubit Overhead | Transversal Gates | Decoder |.\n"
-            f"4. CITATIONS: Include numbered citations [1], [2], [3] pointing to live research sources in the reference section.\n"
-            f"5. Do NOT state 'knowledge cutoff is January 2025' as you have live web context."
+            f"{domain_constraints}"
+            f"GUIDELINES:\n"
+            f"1. Provide thorough, concrete, actionable, and accurate information directly addressing the user's topic.\n"
+            f"2. Structure with clear section headers, organized bullet points, and key mechanics/best practices.\n"
+            f"3. Include numbered citations [1], [2], [3] matching the live research sources in the reference section.\n"
+            f"4. Do NOT state 'knowledge cutoff is January 2025' as you have live web context."
         )
         res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=2048, temperature=0.3))
-        return f"# 🔬 Extreme Web Search & Technical Survey\n\n{res}"
+        return f"# 🔬 Extreme Web Search & Deep Synthesis\n\n{res}"
 
     # ── Multimodal Vision Engine Entrypoint ────────────────────────────────
     def transcribe_image(self, image_input, user_prompt=None, status_callback=None):
