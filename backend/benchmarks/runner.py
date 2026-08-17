@@ -222,12 +222,12 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
                     
                     is_coding = any(k in category for k in ["HumanEval", "MBPP", "SWE-bench", "Coding"])
                     is_reasoning = any(k in category for k in ["GSM8K", "MATH", "GPQA", "AIME", "MuSR", "MMLU", "Reasoning"])
-                    benchmark_mode = "CODING" if is_coding else "REASONING" if is_reasoning else "auto"
+                    benchmark_mode = "BENCHMARK_CODING" if is_coding else "REASONING" if is_reasoning else "auto"
                     
                     try:
                         response = await asyncio.wait_for(
                             asyncio.to_thread(orchestrator.process_query, problem["prompt"], benchmark_mode, None, cb),
-                            timeout=180.0
+                            timeout=90.0
                         )
                     finally:
                         orchestrator.cancel_event = old_cancel

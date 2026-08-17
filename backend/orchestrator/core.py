@@ -233,7 +233,14 @@ class AgentOrchestrator:
     def _call_model(self, model, prompt, max_tokens=512, temperature=0.7, system_prompt=None):
         if self.cancel_event and self.cancel_event.is_set():
             raise RuntimeError("Generation cancelled by user.")
-        with self.inference_lock:
+        
+        # Acquire inference lock with timeout to prevent deadlock
+        acquired = self.inference_lock.acquire(timeout=60.0)
+        if not acquired:
+            raise RuntimeError("Inference lock acquisition timed out.")
+        try:
+            if self.cancel_event and self.cancel_event.is_set():
+                raise RuntimeError("Generation cancelled by user.")
             if hasattr(model, 'create_chat_completion'):
                 messages = []
                 if system_prompt:
@@ -247,6 +254,8 @@ class AgentOrchestrator:
                 return model(prompt, max_tokens=max_tokens, temperature=temperature)
             else:
                 raise Exception("Unknown model callable signature.")
+        finally:
+            self.inference_lock.release()
 
     def _strip_thinking(self, text):
         from backend.orchestrator.dma import TransformerWrapper

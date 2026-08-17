@@ -39,7 +39,8 @@ class CodingPipeline:
         crunch_budget = max(1024, ds_ctx - gen_tokens - 1000)
         ds_safe = orchestrator._crunch_prompt(prompt, "deepseek_r1", crunch_budget, status_callback)
 
-        max_resets = 2
+        is_benchmark = (mode == "BENCHMARK_CODING" or mode == "BENCHMARK")
+        max_resets = 1 if is_benchmark else 2
         lessons = ""
         initial_failed_code = ""
         initial_failed_error = ""
@@ -67,7 +68,7 @@ class CodingPipeline:
         )
 
         for reset in range(max_resets):
-            max_rounds = 2 if reset == 0 else 1
+            max_rounds = 1 if (is_benchmark or reset > 0) else 2
             for rnd in range(max_rounds):
                 # Phase 1: Logic Plan
                 orchestrator._check_cancelled("code:draft_logic")
