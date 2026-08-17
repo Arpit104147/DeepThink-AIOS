@@ -70,17 +70,19 @@ const SettingsModal = ({
 
   if (!settingsOpen) return null;
 
-  const handleUpdateVulkan = async () => {
+  const handleSetupGpuEngine = async (engineTarget = "auto") => {
     try {
-      setVulkanMsg("🚀 Contacting GitHub Releases for pre-compiled Vulkan binary...");
-      const res = await fetch(`${serverUrl}/api/vulkan/update`, { method: "POST" });
+      setVulkanMsg(`🚀 Initiating ${engineTarget.toUpperCase()} GPU Acceleration Setup...`);
+      const res = await fetch(`${serverUrl}/api/gpu/setup?engine=${engineTarget}`, { method: "POST" });
       if (res.ok) {
         fetchVulkanStatus();
       }
     } catch (e) {
-      setVulkanMsg(`Update request error: ${e.message}`);
+      setVulkanMsg(`Engine setup error: ${e.message}`);
     }
   };
+
+  const handleUpdateVulkan = () => handleSetupGpuEngine("vulkan");
 
   const handleSave = () => {
     let finalUrl = serverUrl.trim();
