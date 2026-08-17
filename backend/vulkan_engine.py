@@ -168,18 +168,28 @@ def check_engine_installed(engine_key):
     if state.get(engine_key):
         return True
 
+    detected = detect_hardware_platform()
+
     if engine_key in ["cuda", "nvidia"]:
-        try:
-            import torch
-            if torch.cuda.is_available():
-                return True
-        except Exception:
-            pass
+        if detected == "nvidia":
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    return True
+            except Exception:
+                pass
+            try:
+                import subprocess
+                smi = subprocess.check_output(["nvidia-smi"], stderr=subprocess.DEVNULL)
+                if smi:
+                    return True
+            except Exception:
+                pass
     elif engine_key in ["metal", "apple"]:
-        if platform.system().lower() == "darwin" and ("arm" in platform.machine().lower() or "aarch" in platform.machine().lower()):
+        if detected == "apple":
             return True
     elif engine_key == "vulkan":
-        if get_vulkan_binary_path() is not None:
+        if detected == "vulkan" and get_vulkan_binary_path() is not None:
             return True
     return False
 
