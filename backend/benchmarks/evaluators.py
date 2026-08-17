@@ -55,47 +55,44 @@ def _extract_last_python_block(text: str) -> str:
 
 def _clean_pipeline_artifacts(code: str, entry_point: str = "") -> str:
     """
-    Remove pipeline self-test artifacts from extracted code that would
-    interfere with HumanEval's official check() test harness.
-    
-    Strips:
-    - if __name__ == '__main__' blocks
-    - Standalone assert statements (not inside functions)
-    - Standalone print("ALL TESTS PASSED") and similar
-    - Direct function call invocations at module level
+    Cleanly strips pipeline self-test artifacts, example calls, and standalone assertions
+    from extracted code to ensure pristine integration with official benchmark harnesses.
     """
     lines = code.split('\n')
     cleaned = []
     skip_block = False
     
-    for i, line in enumerate(lines):
+    for line in lines:
         stripped = line.strip()
         
-        # Skip if __name__ == '__main__' block and everything after
+        # Skip markdown code fence leaks
+        if stripped.startswith('```'):
+            continue
+            
+        # Skip if __name__ == '__main__' block and its indented children
         if re.match(r"if\s+__name__\s*==\s*['\"]__main__['\"]", stripped):
             skip_block = True
             continue
         if skip_block:
-            # Skip indented lines that are part of the __main__ block
             if line.startswith(('    ', '\t')) or stripped == '':
                 continue
             else:
                 skip_block = False
         
-        # Skip standalone test assertions (not inside functions — no leading indent)
+        # Skip top-level standalone assertions outside function definitions
         if stripped.startswith('assert ') and not line.startswith(('    ', '\t')):
             continue
         
-        # Skip standalone print calls at module level
+        # Skip top-level print calls
         if stripped.startswith('print(') and not line.startswith(('    ', '\t')):
             continue
             
-        # Skip standalone function call tests at module level
-        if entry_point and stripped.startswith(f'{entry_point}(') and not line.startswith(('    ', '\t')):
+        # Skip top-level sample function calls (e.g. is_prime(5))
+        if entry_point and re.match(rf"^{re.escape(entry_point)}\s*\(", stripped) and not line.startswith(('    ', '\t')):
             continue
         
-        # Skip "# Test" / "# Self-test" comment headers at module level  
-        if stripped.startswith('# Test') and not line.startswith(('    ', '\t')):
+        # Skip comment headers for test suites
+        if (stripped.startswith('# Test') or stripped.startswith('# Example') or stripped.startswith('# Self-test')) and not line.startswith(('    ', '\t')):
             continue
             
         cleaned.append(line)
@@ -121,43 +118,37 @@ async def evaluate_problem_solution(
         entry_point = problem.get("entry_point", "")
         prompt_clean = problem.get("prompt", "").strip()
         
-        # Extract the LAST python code block (the verified working code from _coding_pipeline)
+        # Extract the LAST python code block
         extracted_code = _extract_last_python_block(response)
         
         if not extracted_code or len(extracted_code.strip()) < 10:
-            # Fallback: try the old extract_code method
             from backend.sandbox import Sandbox
             extracted_code = Sandbox.extract_code(response)
         
         if not extracted_code or len(extracted_code.strip()) < 10:
-            # Last resort: grab raw function-like lines
             raw_lines = [l for l in response.split('\n') 
-                        if l.strip().startswith(('def ', 'import ', 'from ', 'return ', '    '))]
+                        if l.strip().startswith(('def ', 'import ', 'from ', 'return ', '    ', 'class '))]
             if raw_lines:
                 extracted_code = "\n".join(raw_lines)
                 
         if extracted_code and len(extracted_code.strip()) >= 5:
-            # Clean pipeline artifacts (self-tests, print statements, etc.)
             extracted_code = _clean_pipeline_artifacts(extracted_code, entry_point)
             
-            # Ensure function/class signature is present exactly once
+            # Ensure function/class signature is present
             has_def = entry_point and (
                 re.search(rf"\bdef\s+{re.escape(entry_point)}\b", extracted_code) is not None or
                 re.search(rf"\bclass\s+{re.escape(entry_point)}\b", extracted_code) is not None
             )
 
             if entry_point and not has_def:
-                # Try to find the function or class in the full response
                 matches = re.findall(rf"((?:def|class)\s+{re.escape(entry_point)}\b[\s\S]*?)(?=\n(?:def|class)\s+|\Z)", response)
                 if matches:
-                    # Use the LAST match (most likely the verified code)
                     extracted_code = _clean_pipeline_artifacts(matches[-1], entry_point)
                 elif prompt_clean and prompt_clean not in extracted_code:
-                    # Prepend the original prompt stub
                     extracted_code = prompt_clean + "\n" + extracted_code
 
             typing_imports = (
-                "from typing import List, Dict, Tuple, Set, Optional, Union, Any, Callable\n"
+                "from typing import List, Dict, Tuple, Set, Optional, Union, Any, Callable, Iterable\n"
                 "import math\n"
                 "import re as _re\n"
                 "import hashlib\n"
@@ -166,23 +157,24 @@ async def evaluate_problem_solution(
                 "from collections import *\n\n"
             )
             
-            # Assemble: imports + function code + official test harness
+            # Assemble: imports + solution code + official test harness
             test_code = typing_imports + extracted_code + "\n\n" + problem["test"]
-            if entry_point and f"check({entry_point})" not in problem["test"]:
-                test_code += f"\n\ncheck({entry_point})"
+            if entry_point:
+                if f"check({entry_point})" not in problem["test"] and "def check(" in problem["test"]:
+                    test_code += f"\n\ncheck({entry_point})"
                 
             try:
                 is_success, output = await asyncio.to_thread(
-                    orchestrator.sandbox.execute, test_code, "python", timeout=10.0
+                    orchestrator.sandbox.execute, test_code, "python", timeout=15.0
                 )
                 success = is_success
             except Exception as eval_err:
                 success = False
-                output = f"Evaluation Execution Error: {eval_err}"
+                output = f"Execution Error: {eval_err}"
             
             if not success and add_log_fn:
                 error_lines = [l for l in str(output).strip().split('\n') if l.strip()]
-                fail_reason = error_lines[-1] if error_lines else "Unknown"
+                fail_reason = error_lines[-1] if error_lines else "Assertion failed"
                 add_log_fn(f"[Worker {worker_id}] ❌ {problem['id']} failed: {fail_reason[:120]}")
             elif success and add_log_fn:
                 add_log_fn(f"[Worker {worker_id}] ✅ {problem['id']} passed!")
@@ -190,20 +182,33 @@ async def evaluate_problem_solution(
             if add_log_fn:
                 add_log_fn(f"[Worker {worker_id}] ❌ {problem['id']}: No Python code found in response")
     else:
-        # Fallback for theoretical/math datasets without programmatic test blocks (GPQA, GSM8K, MATH)
+        # Theoretical / Math datasets (GSM8K, MATH, GPQA, AIME, MuSR, MMLU)
         if "answer" in problem and problem["answer"]:
-            expected_answer = str(problem["answer"]).strip().lower()
+            expected_answer = str(problem["answer"]).strip()
             if "####" in expected_answer:
                 expected_answer = expected_answer.split("####")[-1].strip()
                 
             resp_lower = response.lower()
-            expected_clean = expected_answer.replace(",", "").replace("$", "").strip()
+            expected_clean = expected_answer.lower().replace(",", "").replace("$", "").strip()
             
-            if expected_clean and re.fullmatch(r"-?\d+(?:\.\d+)?", expected_clean):
-                resp_clean = re.sub(r"[,$]", "", resp_lower)
-                success = re.search(rf"(?<!\d){re.escape(expected_clean)}(?!\d)", resp_clean) is not None
-            else:
-                success = expected_answer in resp_lower
+            # Extract boxed answers if present \boxed{...}
+            boxed_matches = re.findall(r"\\boxed\{([^}]+)\}", response)
+            if boxed_matches:
+                boxed_clean = boxed_matches[-1].strip().lower().replace(",", "").replace("$", "")
+                if boxed_clean == expected_clean:
+                    success = True
+            
+            if not success:
+                if expected_clean and re.fullmatch(r"-?\d+(?:\.\d+)?", expected_clean):
+                    resp_clean = re.sub(r"[,$]", "", resp_lower)
+                    success = re.search(rf"(?<!\d){re.escape(expected_clean)}(?!\d)", resp_clean) is not None
+                else:
+                    success = expected_clean in resp_lower
+                    
+            if success and add_log_fn:
+                add_log_fn(f"[Worker {worker_id}] ✅ {problem['id']} passed! (Answer: {expected_answer[:30]})")
+            elif not success and add_log_fn:
+                add_log_fn(f"[Worker {worker_id}] ❌ {problem['id']} failed. Expected: {expected_answer[:40]}")
         else:
             lower_resp = response.lower()
             has_error = any(err in lower_resp for err in [

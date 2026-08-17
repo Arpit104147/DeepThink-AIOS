@@ -67,6 +67,15 @@ class CodingPipeline:
             "4. AUTOMATED SELF-TESTING MANDATE: Append a test suite at the bottom of the script using strict assertions."
         )
 
+        benchmark_coder_sys = (
+            "You are an expert computational programmer and algorithm engineer.\n"
+            "Your task is to write a complete, efficient, and bug-free Python solution implementing the plan.\n"
+            "STRICT RULES:\n"
+            "1. Output ONLY valid Python code inside ```python``` blocks.\n"
+            "2. Complete the requested function or class directly with all imports.\n"
+            "3. Do NOT generate example print statements, dummy calls, or top-level assertion tests."
+        )
+
         for reset in range(max_resets):
             max_rounds = 1 if (is_benchmark or reset > 0) else 2
             for rnd in range(max_rounds):
@@ -77,7 +86,7 @@ class CodingPipeline:
                 model_name = orchestrator._get_display_model_name(model_key)
 
                 if status_callback:
-                    lbl = f"🧠 {model_name} drafting logic (Attempt {rnd+1}/{max_rounds})..."
+                    lbl = f"🧠 {model_name} drafting logic..." if is_benchmark else f"🧠 {model_name} drafting logic (Attempt {rnd+1}/{max_rounds})..."
                     status_callback(lbl, "info", model_key, 20 + rnd*10)
 
                 ds_llm = orchestrator._get_model(model_key, required_ctx=ds_ctx)
@@ -87,10 +96,10 @@ class CodingPipeline:
                     plan_p += f"\n\nLESSONS FROM PREVIOUS FAILURES:\n{lessons[:800]}"
                 ds_draft = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, plan_p, gen_tokens, logic_temp, system_prompt=planner_sys))
 
-                # Phase 2: Reasoning Sandbox (Only for Python)
+                # Phase 2: Reasoning Sandbox (Only for Python interactive queries, skip for benchmarks)
                 orchestrator._check_cancelled("code:verify_logic")
                 active_router = orchestrator._get_model("router", required_ctx=1024)
-                use_logic_playground = (req_lang == "python") and TaskRouter.is_playground_applicable(orchestrator, active_router, prompt)
+                use_logic_playground = (not is_benchmark) and (req_lang == "python") and TaskRouter.is_playground_applicable(orchestrator, active_router, prompt)
                 verified = True
                 pg_out = ""
                 if use_logic_playground:
@@ -113,7 +122,10 @@ class CodingPipeline:
                 if status_callback:
                     status_callback(f"💻 {coder_display} writing code...", "info", "ornith", 50 + rnd*10)
 
-                if req_lang == "python":
+                if is_benchmark:
+                    code_p = f"Implement a complete, optimal Python solution for this task and plan:\n\nTask:\n{prompt}\n\nPlan:\n{compiled_plan}\n\nOutput ONLY python code in ```python```."
+                    sys_prompt = benchmark_coder_sys
+                elif req_lang == "python":
                     code_p = f"Write a complete Python script for this plan:\n{compiled_plan}\n\nWrap in ```python```."
                     sys_prompt = coder_sys
                 elif req_lang == "html":
@@ -146,6 +158,10 @@ class CodingPipeline:
                     code = raw_model_output if files_dict else Sandbox.extract_code(raw_model_output)
                 else:
                     code = Sandbox.extract_code(raw_model_output)
+
+                # For automated benchmark evaluation, return code immediately for official harness testing
+                if is_benchmark:
+                    return f"```python\n{code}\n```"
 
                 # Phase 4: Execution Sandbox
                 orchestrator._check_cancelled("code:execute_sandbox")

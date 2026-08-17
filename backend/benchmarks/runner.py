@@ -429,6 +429,7 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
     total_time = round(time.time() - start_time, 1)
     
     with STATE_LOCK:
+        BENCHMARK_STATE["active"] = False
         BENCHMARK_STATE["elapsed_seconds"] = total_time
         final_acc = BENCHMARK_STATE["accuracy"]
         BENCHMARK_STATE["history"][category] = {
@@ -441,8 +442,9 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
         for w in BENCHMARK_STATE["workers"]:
             w["status"] = "Idle"
             w["progress"] = 0
+            w["task"] = "Idle"
             
-    if BENCHMARK_STATE.get("active", False):
+    if not BENCHMARK_STATE.get("cancel_requested", False):
         add_log(f"🎉 Benchmark suite {category} completed in {total_time}s! Final Accuracy: {final_acc}%")
     else:
         add_log(f"⏹️ Benchmark suite {category} stopped by user at {total_time}s. Accuracy: {final_acc}%")
