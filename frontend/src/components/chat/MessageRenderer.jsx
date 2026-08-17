@@ -15,6 +15,30 @@ import ArtifactSandbox from "../visualizations/ArtifactSandbox";
  * - Predictive metrics cards
  * - Optional typewriter animation
  */
+const CodeBlock = ({ lang, code }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const displayLang = (lang || "code").toUpperCase();
+
+  return (
+    <div className="code-block-wrapper">
+      <div className="code-block-header">
+        <span className="code-lang-badge">{displayLang}</span>
+        <button className={`copy-btn ${copied ? "copied" : ""}`} onClick={handleCopy}>
+          {copied ? "Copied! ✓" : "Copy"}
+        </button>
+      </div>
+      <pre><code>{code}</code></pre>
+    </div>
+  );
+};
+
 const MessageRenderer = ({ text, animate = false }) => {
   // Subscribe to KaTeX load event for re-render on library availability
   useKatexReady();
@@ -100,17 +124,7 @@ const MessageRenderer = ({ text, animate = false }) => {
                 const lines = part.slice(3, -3).split("\n");
                 const lang = lines[0].trim().split(" ")[0];
                 const code = lines.slice(1).join("\n");
-                return (
-                  <div key={i} className="code-block-wrapper">
-                    <div className="code-block-header">
-                      <span>{lang || "code"}</span>
-                      <button className="copy-btn" onClick={() => navigator.clipboard.writeText(code)}>
-                        Copy
-                      </button>
-                    </div>
-                    <pre><code>{code}</code></pre>
-                  </div>
-                );
+                return <CodeBlock key={i} lang={lang} code={code} />;
               }
               return (
                 <div key={i} className="md-content">

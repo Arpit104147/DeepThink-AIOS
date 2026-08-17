@@ -424,10 +424,11 @@ def vulkan_diagnostics():
     return get_vulkan_gpu_diagnostics()
 
 @app.post("/api/vulkan/update")
-def update_vulkan():
-    """Trigger background download and update of pre-compiled Vulkan llama-server engine."""
-    started = start_vulkan_update_background()
-    return {"status": "started" if started else "already_running"}
+@app.post("/api/gpu/setup")
+def update_vulkan(engine: str = "auto"):
+    """Trigger background setup of chosen GPU acceleration engine (cuda, vulkan, metal)."""
+    started = start_vulkan_update_background(engine_target=engine)
+    return {"status": "started" if started else "already_running", "engine": engine}
 
 @app.get("/api/models/roles")
 def get_model_roles():

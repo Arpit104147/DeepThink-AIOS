@@ -1,14 +1,28 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ThinkingBlock from "./ThinkingBlock";
 import UserMessage from "./UserMessage";
 import MessageRenderer from "./MessageRenderer";
 
 const MessageList = ({ history, isGenerating, currentLogs, currentStream, displayText }) => {
   const bottomRef = useRef(null);
+  const containerRef = useRef(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [history, currentStream, currentLogs]);
+
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    const isUp = scrollHeight - scrollTop - clientHeight > 150;
+    setShowScrollBottom(isUp);
+  };
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    setShowScrollBottom(false);
+  };
 
   if (history.length === 0) {
     return (
@@ -22,7 +36,7 @@ const MessageList = ({ history, isGenerating, currentLogs, currentStream, displa
   }
 
   return (
-    <div className="chat-messages">
+    <div className="chat-messages" ref={containerRef} onScroll={handleScroll}>
       {history.map((msg, i) => (
         <div key={i} className={`msg-row ${msg.type}`}>
           <div className={`msg-avatar ${msg.type}`}>
@@ -49,6 +63,12 @@ const MessageList = ({ history, isGenerating, currentLogs, currentStream, displa
             {currentStream && <MessageRenderer text={currentStream} />}
           </div>
         </div>
+      )}
+
+      {showScrollBottom && (
+        <button className="scroll-bottom-btn" onClick={scrollToBottom} title="Scroll to bottom">
+          ↓
+        </button>
       )}
 
       <div ref={bottomRef} />

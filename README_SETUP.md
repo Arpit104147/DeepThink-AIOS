@@ -89,15 +89,18 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### ⚙️ Hardware GPU Acceleration (Zero-Compilation Pre-Compiled Vulkan Engine)
+### ⚙️ Hardware Acceleration Engines (3-Choice Auto-Detected Setup)
 
-DeepThink AIOS includes a **1-Click Pre-Compiled Vulkan GPU Engine**. You do **NOT** need to install C++ compilers, `libvulkan-dev`, `glslc`, or `spirv-headers`.
+DeepThink AIOS includes **3 Dedicated GPU Hardware Engines** built directly into the UI. The system automatically detects your hardware architecture and highlights the optimal GPU driver:
 
 #### 1-Click Setup via Web UI (Recommended):
 1. Start the system: `python backend/app.py` and `npm run dev` in frontend.
-2. Open **Settings (⚙️)** in the sidebar and click the **⚡ Vulkan GPU Status** tab.
-3. Click **`⚡ Download Vulkan Engine`**.
-4. The system automatically downloads the official pre-compiled C++ Vulkan binary from GitHub Releases (`ggml-org/llama.cpp`) into `bin/vulkan/` and activates **100% GPU acceleration** on Intel iGPU / Intel Arc, NVIDIA, and AMD GPUs instantly!
+2. Open **Settings (⚙️)** in the sidebar and click the **⚡ Hardware GPU Engine** tab.
+3. The UI automatically **detects and highlights your active hardware platform**:
+   - 🟢 **NVIDIA CUDA Engine** (Highlighted on NVIDIA GPUs — installs CUDA wheel / `cu122`).
+   - 🔵 **Intel / AMD Vulkan Engine** (Highlighted on Intel UHD/Iris Xe/Arc & AMD Radeon — downloads pre-compiled Vulkan binary).
+   - 🍎 **Apple Silicon Metal Engine** (Highlighted on Mac M1/M2/M3/M4 — compiles Metal Performance Shaders backend).
+4. Click your desired GPU setup button to compile or download the backend driver for 100% GPU offloading instantly!
 
 ---
 

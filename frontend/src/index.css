@@ -688,8 +688,62 @@ html, body {
 }
 
 .send-btn.stop {
-  background: var(--error);
+  background: #ef4444 !important;
+  color: white !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+  animation: stopPulse 1.8s infinite;
+}
+
+@keyframes stopPulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: 25px;
+  right: 25px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-tertiary, #1f1f2e);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  color: #60a5fa;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+  z-index: 40;
+}
+
+.scroll-bottom-btn:hover {
+  transform: translateY(-2px) scale(1.1);
+  background: #2563eb;
   color: white;
+  border-color: #3b82f6;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+}
+
+.code-lang-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: 0.05em;
+  background: rgba(96, 165, 250, 0.12);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+}
+
+.copy-btn.copied {
+  color: #10b981 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
 }
 
 /* ═══════════════════════════════════════════════════
