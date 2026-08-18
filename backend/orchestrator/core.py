@@ -480,20 +480,22 @@ class AgentOrchestrator:
     def process_query(self, prompt, mode="auto", selected_models=None, status_callback=None):
         self._check_cancelled("start_query")
 
-        # 1. Determine search mode setting (off, simple/search, extreme)
+        # 1. Determine search mode setting (off, simple/search, prediction, extreme)
         search_mode = str(getattr(self, "search_mode", "off")).lower()
 
-        # If search_mode is set to extreme, force EXTREME_WEBSEARCH
-        if search_mode in ["extreme", "ext..."]:
+        if search_mode in ["extreme", "ext..."] or (isinstance(mode, str) and mode.upper() == "EXTREME_WEBSEARCH"):
             task_type = "EXTREME_WEBSEARCH"
-        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
-            task_type = mode.upper()
+        elif search_mode in ["prediction", "pre..."] or (isinstance(mode, str) and mode.upper() == "PREDICTION"):
+            task_type = "PREDICTION"
         elif search_mode in ["simple", "search", "se..."]:
-            # In Simple Web Search mode, default directly to SIMPLE for live grounded QA
             task_type = "SIMPLE"
+        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "CHIP_DESIGN"]:
+            task_type = mode.upper()
         else:
             router_llm = self._get_model("router", required_ctx=2048)
             task_type = TaskRouter.classify_task(self, router_llm, prompt)
+            if task_type == "EXTREME_WEBSEARCH":
+                task_type = "SIMPLE"
 
         if status_callback:
             status_callback(f"Task classified as: {task_type}", "info", "router", 12)

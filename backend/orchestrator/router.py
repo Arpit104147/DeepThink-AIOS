@@ -20,20 +20,19 @@ class TaskRouter:
             return "PREDICTION"
 
         p = (
-            "Classify this user request into ONE of the following 6 categories:\n"
-            "1. CODING: Request for writing, modifying, debugging, or optimizing code (Python, C, C++, Verilog, Web, etc.).\n"
-            "2. REASONING: Step-by-step logic, math proofs, physics derivations, or complex multi-step reasoning.\n"
-            "3. PREDICTION: Data science forecasting, machine learning regression, or predictive statistical models.\n"
-            "4. EXTREME_WEBSEARCH: Requests explicitly asking for deep internet research, recent news, or live web data.\n"
-            "5. CHIP_DESIGN: Verilog HDL module design, SPICE circuit simulation, or semiconductor chip layouts.\n"
-            "6. SIMPLE: General questions, direct answers, summaries, image/document explanations, or conversation.\n\n"
-            "Reply ONLY with ONE category word (CODING, REASONING, PREDICTION, EXTREME_WEBSEARCH, CHIP_DESIGN, or SIMPLE).\n\n"
+            "Classify this user request into ONE of the following 5 categories:\n"
+            "1. CODING: Request for writing, modifying, debugging, or optimizing code (Python, C, C++, Verilog, HTML/JS, etc.).\n"
+            "2. REASONING: Step-by-step logic proofs, math derivations, physics proofs, or complex multi-step deductions.\n"
+            "3. PREDICTION: Explicit data science forecasting, statistical regression modeling, or machine learning prediction.\n"
+            "4. CHIP_DESIGN: Verilog HDL hardware design, SPICE analog simulation, or circuit netlists.\n"
+            "5. SIMPLE: General knowledge, weather, facts, conversational QA, summaries, or direct questions.\n\n"
+            "Reply ONLY with ONE category word (CODING, REASONING, PREDICTION, CHIP_DESIGN, or SIMPLE).\n\n"
             f"User Request: {prompt[:500]}"
         )
         try:
             res = orchestrator._call_model(router_llm, p, max_tokens=15, temperature=0.1).strip().upper()
             res = orchestrator._strip_thinking(res)
-            for cat in ["CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN", "SIMPLE"]:
+            for cat in ["CODING", "REASONING", "PREDICTION", "CHIP_DESIGN", "SIMPLE"]:
                 if cat in res:
                     return cat
         except Exception:
