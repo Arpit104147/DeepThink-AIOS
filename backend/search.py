@@ -38,21 +38,43 @@ class WebSearch:
 
     def search(self, query, max_results=5):
         """
-        Search the web. Priority: Google API -> SearXNG -> DuckDuckGo.
+        Search the web with robust multi-tier failover:
+        1. Google Custom Search (if API keys set)
+        2. DuckDuckGo API (ddgs / duckduckgo_search library)
+        3. DuckDuckGo Lite & HTML direct form parser
+        4. Public SearXNG instances (with fast timeout)
+        5. Wikipedia Search API (factual information fallback)
         """
         if self.google_api_key and self.google_cx:
-            print(f"Searching Google for: '{query}'")
-            return self._google_search(query, max_results)
-        elif self.searxng_url:
-            print(f"Searching SearXNG ({self.searxng_url}) for: '{query}'")
-            return self._searxng_search(query, max_results)
-        else:
-            print(f"Searching DuckDuckGo (free fallback) for: '{query}'")
-            return self._ddg_search_api(query, max_results)
+            res = self._google_search(query, max_results)
+            if res:
+                return res
+
+        # 2. Try DuckDuckGo API library
+        res = self._ddg_search_api(query, max_results)
+        if res:
+            return res
+
+        # 3. Try DuckDuckGo Lite/HTML direct scraper
+        res = self._ddg_html_scraper(query, max_results)
+        if res:
+            return res
+
+        # 4. Try SearXNG fallback instances
+        if self.searxng_url:
+            res = self._searxng_search(query, max_results)
+            if res:
+                return res
+
+        # 5. Try Wikipedia encyclopedic fallback
+        res = self._wikipedia_search(query, max_results)
+        if res:
+            return res
+
+        return []
 
     def _searxng_search(self, query, max_results=5):
         """Search using SearXNG JSON API with multiple instance fallbacks."""
-        # Try multiple public SearXNG instances in case one is down
         instances = [
             self.searxng_url,
             "https://search.ononoki.org",
@@ -62,14 +84,14 @@ class WebSearch:
         safe_query = urllib.parse.quote(query)
         
         for instance_url in instances:
+            if not instance_url:
+                continue
             try:
                 url = f"{instance_url.rstrip('/')}/search?q={safe_query}&format=json"
-                response = self._session.get(url, timeout=5.0)
+                response = self._session.get(url, timeout=2.5)
                 
-                # Skip if we got HTML instead of JSON (captcha/error page)
                 content_type = response.headers.get('content-type', '')
                 if 'json' not in content_type and not response.text.strip().startswith('{'):
-                    print(f"SearXNG {instance_url} returned non-JSON. Trying next...")
                     continue
                     
                 data = response.json()
@@ -83,12 +105,10 @@ class WebSearch:
                         })
                 if results:
                     return results
-            except Exception as e:
-                print(f"SearXNG {instance_url} failed: {str(e)}. Trying next...")
+            except Exception:
                 continue
         
-        print("All SearXNG instances failed. Falling back to DuckDuckGo...")
-        return self._ddg_search_api(query, max_results)
+        return []
 
     def _google_search(self, query, max_results=5):
         """Search using Google Custom Search JSON API."""
@@ -96,7 +116,7 @@ class WebSearch:
             safe_query = urllib.parse.quote(query)
             url = f"https://www.googleapis.com/customsearch/v1?key={self.google_api_key}&cx={self.google_cx}&q={safe_query}&num={max_results}"
             
-            response = self._session.get(url, timeout=5)
+            response = self._session.get(url, timeout=4.0)
             data = response.json()
                 
             results = []
@@ -108,20 +128,15 @@ class WebSearch:
                         "snippet": item.get("snippet", "")
                     })
             return results
-        except Exception as e:
-            print(f"Google search API failed: {str(e)}. Falling back to DuckDuckGo...")
-            return self._ddg_search_api(query, max_results)
+        except Exception:
+            return []
 
     def _ddg_search_api(self, query, max_results=5):
-        """
-        Search using duckduckgo_search library if available,
-        or fall back to a light web request scraper if not.
-        """
+        """Search using duckduckgo_search library if available."""
         try:
             import warnings
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                # Try new package name first, fall back to old one
                 try:
                     from ddgs import DDGS
                 except ImportError:
@@ -136,95 +151,121 @@ class WebSearch:
                     })
                 if results:
                     return results
-                else:
-                    print("DuckDuckGo search library returned 0 results. Trying HTML scraper...")
-                    return self._ddg_html_scraper(query, max_results)
-        except ImportError:
-            # Fallback to direct HTML search scraping or HTML API
-            return self._ddg_html_scraper(query, max_results)
-        except Exception as e:
-            print(f"DuckDuckGo search failed: {str(e)}")
-            return self._ddg_html_scraper(query, max_results)
+        except Exception:
+            pass
+        return []
 
     def _ddg_html_scraper(self, query, max_results=5):
-        """Scrape DuckDuckGo HTML search page as a robust fallback without library dependencies."""
+        """Scrape DuckDuckGo Lite & HTML search as lightweight dependency-free fallback."""
+        # 1. Try DuckDuckGo Lite via POST (most reliable)
         try:
-            # DuckDuckGo HTML version is lightweight and scrapeable
-            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-            
-            response = self._session.get(url, timeout=5.0)
-            html = response.content
-                
-            soup = BeautifulSoup(html, "html.parser")
-            results = []
-            
-            # Find search result divs on ddg html page
-            for result_div in soup.find_all("div", class_="result"):
-                if len(results) >= max_results:
-                    break
-                    
-                title_elem = result_div.find("a", class_="result__a")
-                snippet_elem = result_div.find("a", class_="result__snippet")
-                
-                if title_elem:
-                    title = title_elem.text.strip()
-                    link = title_elem.get("href", "")
-                    
-                    # Handle redirect link mapping
-                    if "uddg=" in link or link.startswith("//"):
-                        if link.startswith("//"):
-                            full_url = "https:" + link
-                        else:
-                            full_url = link
-                        parsed = urllib.parse.urlparse(full_url)
-                        qs = urllib.parse.parse_qs(parsed.query)
+            url = "https://lite.duckduckgo.com/lite/"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://lite.duckduckgo.com/",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+            response = self._session.post(url, data={"q": query, "kl": "wt-wt"}, headers=headers, timeout=4.0)
+            if response.status_code == 200 and b"result-link" in response.content:
+                soup = BeautifulSoup(response.content, "html.parser")
+                results = []
+                link_tags = soup.find_all("a", class_="result-link")
+                snippet_tags = soup.find_all("td", class_="result-snippet")
+
+                for i, link_elem in enumerate(link_tags):
+                    if len(results) >= max_results:
+                        break
+                    title = link_elem.text.strip()
+                    link = link_elem.get("href", "")
+                    if "uddg=" in link:
+                        qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
                         if "uddg" in qs:
                             link = qs["uddg"][0]
-                            
-                    snippet = snippet_elem.text.strip() if snippet_elem else ""
-                    
-                    if link:
-                        results.append({
-                            "title": title,
-                            "link": link,
-                            "snippet": snippet
-                        })
-            return results
-        except Exception as e:
-            print(f"HTML scraper fallback failed: {str(e)}")
-            return []
+
+                    snippet = snippet_tags[i].text.strip() if i < len(snippet_tags) else ""
+                    if title and link:
+                        results.append({"title": title, "link": link, "snippet": snippet})
+                if results:
+                    return results
+        except Exception:
+            pass
+
+        # 2. Try DuckDuckGo HTML GET fallback
+        try:
+            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"}
+            response = self._session.get(url, headers=headers, timeout=4.0)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+                results = []
+                for result_div in soup.find_all("div", class_="result"):
+                    if len(results) >= max_results:
+                        break
+                    title_elem = result_div.find("a", class_="result__a")
+                    snippet_elem = result_div.find("a", class_="result__snippet")
+                    if title_elem:
+                        title = title_elem.text.strip()
+                        link = title_elem.get("href", "")
+                        if "uddg=" in link:
+                            qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+                            if "uddg" in qs:
+                                link = qs["uddg"][0]
+                        snippet = snippet_elem.text.strip() if snippet_elem else ""
+                        if link:
+                            results.append({"title": title, "link": link, "snippet": snippet})
+                if results:
+                    return results
+        except Exception:
+            pass
+
+        return []
+
+    def _wikipedia_search(self, query, max_results=4):
+        """Query Wikipedia Search API for factual, scientific, historical, or geographical queries."""
+        try:
+            url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json&utf8=1&srlimit={max_results}"
+            response = self._session.get(url, timeout=3.5)
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get("query", {}).get("search", [])
+                results = []
+                for it in items:
+                    title = it.get("title", "")
+                    raw_snippet = it.get("snippet", "")
+                    clean_snippet = re.sub(r'<[^>]+>', '', raw_snippet).strip()
+                    link = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}"
+                    results.append({"title": title, "link": link, "snippet": clean_snippet})
+                return results
+        except Exception:
+            pass
+        return []
 
     def scrape_url(self, url):
         """Deep scrape the full text of a webpage."""
         try:
-            print(f"Deep scraping: {url}")
-            response = self._session.get(url, timeout=8.0)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            response = self._session.get(url, headers=headers, timeout=6.0)
             if response.status_code != 200:
-                print(f"Failed to scrape {url} (Status: {response.status_code})")
                 return ""
             
-            # Check for common bot-protection/blocking pages
             lower_text = response.text.lower()
             block_markers = ["cloudflare", "captcha", "attention required", "access denied", "checking your browser", "ddos protection", "robot check"]
             if any(marker in lower_text for marker in block_markers):
-                print(f"Scrape block detected (Cloudflare/Captcha/Access Denied) for {url}")
                 return ""
 
             soup = BeautifulSoup(response.content, "html.parser")
-            
-            # Remove junk elements
-            for el in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            for el in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
                 el.decompose()
                 
             text = soup.get_text(separator="\n")
-            # Clean up excessive whitespace
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             cleaned_text = "\n".join(lines)
-            
-            # Cap at 15000 characters to prevent context overflow
-            return cleaned_text[:15000]
-        except Exception as e:
-            print(f"Failed to deep scrape {url}: {str(e)}")
+            return cleaned_text[:12000]
+        except Exception:
             return ""
 
     # ────────────────────────────────────────────────────────────────────
@@ -382,31 +423,37 @@ class WebSearch:
         for idx, r in enumerate(deduped, start=1):
             link = r.get("link", "")
             title = r.get("title", "")
+            snippet = (r.get("snippet") or "").strip()
             try:
-                netloc = urllib.parse.urlparse(link).netloc.lower() or "unknown"
+                netloc = urllib.parse.urlparse(link).netloc.lower() or "web"
             except Exception:
-                netloc = "unknown"
+                netloc = "web"
 
             raw_text = self.scrape_url(link) if link else ""
-            if not raw_text or len(raw_text) < MIN_USEFUL_TEXT_CHARS:
-                # Blocked / captcha / too-short redirect page.
-                sources_blocked += 1
-                continue
+            extracted_text = ""
 
-            filtered = self._relevance_filter(raw_text, keywords)
-            if not filtered or len(filtered) < MIN_USEFUL_TEXT_CHARS // 2:
-                sources_blocked += 1
-                continue
+            if raw_text and len(raw_text) >= MIN_USEFUL_TEXT_CHARS:
+                filtered = self._relevance_filter(raw_text, keywords)
+                if filtered and len(filtered) >= MIN_USEFUL_TEXT_CHARS // 2:
+                    extracted_text = filtered
+
+            # Snippet fallback if scraping was blocked or empty
+            if not extracted_text:
+                if snippet and len(snippet) > 10:
+                    extracted_text = f"Summary: {snippet}"
+                else:
+                    sources_blocked += 1
+                    continue
 
             sources_scraped += 1
             parts.append(
-                f"[SOURCE {sources_scraped}: {netloc}] {title}\n{filtered}"
+                f"[SOURCE {sources_scraped}: {netloc}] {title} ({link})\n{extracted_text}"
             )
             sources_meta.append({
                 "title": title,
                 "link": link,
                 "netloc": netloc,
-                "chars": len(filtered),
+                "chars": len(extracted_text),
             })
 
         context = "\n\n---\n\n".join(parts)
