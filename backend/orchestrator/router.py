@@ -9,10 +9,11 @@ class TaskRouter:
         """Classify user query into task types using Phi-3.5 or prompt heuristics."""
         prompt_lower = prompt.lower()
         
-        # Explicit prediction check
-        is_explicit_prediction = any(kw in prompt_lower for kw in [
-            "predict ", "predict\n", "prediction", "forecast", "regression model",
-            "run prediction", "predictive model", "build prediction"
+        # Explicit prediction check (exclude live weather and current condition lookups)
+        is_weather = any(w in prompt_lower for w in ["weather", "temperature", "rain", "forecast today", "weather condition", "climate now", "weather forecast"])
+        is_explicit_prediction = (not is_weather) and any(kw in prompt_lower for kw in [
+            "predict ", "predict\n", "prediction", "regression model",
+            "run prediction", "predictive model", "build prediction", "time series forecast", "sales forecast", "stock forecast"
         ]) and not ("transcribed image" in prompt_lower or "pdf document" in prompt_lower)
 
         if is_explicit_prediction:

@@ -455,12 +455,12 @@ class AgentOrchestrator:
             task_type = "EXTREME_WEBSEARCH"
         elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "PREDICTION", "EXTREME_WEBSEARCH", "CHIP_DESIGN"]:
             task_type = mode.upper()
+        elif search_mode in ["simple", "search", "se..."]:
+            # In Simple Web Search mode, default directly to SIMPLE for live grounded QA
+            task_type = "SIMPLE"
         else:
             router_llm = self._get_model("router", required_ctx=2048)
             task_type = TaskRouter.classify_task(self, router_llm, prompt)
-            # If search_mode is simple search, do NOT allow auto-classification to jump to EXTREME_WEBSEARCH
-            if search_mode in ["simple", "search", "se..."] and task_type == "EXTREME_WEBSEARCH" and mode.upper() != "EXTREME_WEBSEARCH":
-                task_type = "SIMPLE"
 
         if status_callback:
             status_callback(f"Task classified as: {task_type}", "info", "router", 12)
