@@ -82,7 +82,7 @@ class PredictionPipeline:
         if status_callback:
             status_callback("🔮 Executing ML Tournament in High-Performance Sandbox...", "info", "system", 75)
 
-        ok, output = orchestrator.sandbox.execute(code, language="python")
+        ok, output = orchestrator.sandbox.execute(code, language="python", timeout=60)
 
         metrics_json = None
         for line in output.split("\n"):

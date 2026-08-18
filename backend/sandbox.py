@@ -190,15 +190,14 @@ _REAL_EXEC = exec
 # ── Step 1: Set Resource Limits (Linux only) ─────────────────────────────
 try:
     import resource
-    # Max 2 GB RAM (enough for numpy/pandas heavy workloads and complex physics/biology simulation solvers)
-    resource.setrlimit(resource.RLIMIT_AS, (2 * 1024 * 1024 * 1024, 2 * 1024 * 1024 * 1024))
-    # Max 30 seconds of CPU time to aggressively kill infinite loops
-    # Increased to 300 seconds for heavier simulations
+    # Max 8 GB RAM (enough for large data science, numpy/pandas heavy workloads, and multi-model ML tournaments)
+    resource.setrlimit(resource.RLIMIT_AS, (8 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024))
+    # Max 300 seconds of CPU time to allow deep convergence and simulation loops
     resource.setrlimit(resource.RLIMIT_CPU, (300, 300))
-    # Max 200 child processes (allows multiprocessing but blocks fork bombs)
+    # Max 200 child processes / threads (allows OpenMP/BLAS multi-threading while preventing fork bombs)
     resource.setrlimit(resource.RLIMIT_NPROC, (200, 200))
-    # Max 100 MB file writes (allows data output but prevents disk flooding)
-    resource.setrlimit(resource.RLIMIT_FSIZE, (100 * 1024 * 1024, 100 * 1024 * 1024))
+    # Max 200 MB file writes (allows data output but prevents disk flooding)
+    resource.setrlimit(resource.RLIMIT_FSIZE, (200 * 1024 * 1024, 200 * 1024 * 1024))
 except Exception:
     pass  # Non-Linux systems skip resource limits
 
@@ -462,7 +461,7 @@ print(json.dumps(result))
 
 
 class Sandbox:
-    def __init__(self, timeout=15):
+    def __init__(self, timeout=45):
         self.timeout = timeout
         self.active_workspaces = set()
         self.os_type = platform.system().lower()  # 'linux', 'windows', 'darwin'
@@ -577,20 +576,17 @@ class Sandbox:
             return None  # Graceful degradation on non-POSIX platforms
         def _apply():
             try:
-                # Prevent fork bombs — limit child processes on Linux, allow reasonable count on macOS
-                if sys.platform != 'darwin':
-                    resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
-                else:
-                    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+                # Allow reasonable thread/process spawning for OpenMP / scikit-learn / joblib
+                resource.setrlimit(resource.RLIMIT_NPROC, (128, 128))
                 # Limit open file descriptors (prevent FD exhaustion)
-                resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
+                resource.setrlimit(resource.RLIMIT_NOFILE, (512, 512))
                 # No core dumps (prevent disk filling)
                 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-                # Limit virtual memory to 2GB
-                mem_limit = 2 * 1024 * 1024 * 1024
+                # Limit virtual memory to 8GB (large data science & ML headroom)
+                mem_limit = 8 * 1024 * 1024 * 1024
                 resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
-                # Limit CPU time to 120 seconds
-                resource.setrlimit(resource.RLIMIT_CPU, (120, 120))
+                # Limit CPU time to 300 seconds
+                resource.setrlimit(resource.RLIMIT_CPU, (300, 300))
             except (ValueError, Exception):
                 pass  # Graceful degradation if limits can't be set
         return _apply
