@@ -6,33 +6,20 @@ class TaskRouter:
 
     @staticmethod
     def classify_task(orchestrator, router_llm, prompt):
-        """Classify user query into task types using Phi-3.5 or prompt heuristics."""
-        prompt_lower = prompt.lower()
-        
-        # Explicit prediction check (exclude live weather and current condition lookups)
-        is_weather = any(w in prompt_lower for w in ["weather", "temperature", "rain", "forecast today", "weather condition", "climate now", "weather forecast"])
-        is_explicit_prediction = (not is_weather) and any(kw in prompt_lower for kw in [
-            "predict ", "predict\n", "prediction", "regression model",
-            "run prediction", "predictive model", "build prediction", "time series forecast", "sales forecast", "stock forecast"
-        ]) and not ("transcribed image" in prompt_lower or "pdf document" in prompt_lower)
-
-        if is_explicit_prediction:
-            return "PREDICTION"
-
+        """Classify user query into task types (CODING, REASONING, CHIP_DESIGN, SIMPLE)."""
         p = (
-            "Classify this user request into ONE of the following 5 categories:\n"
+            "Classify this user request into ONE of the following 4 categories:\n"
             "1. CODING: Request for writing, modifying, debugging, or optimizing code (Python, C, C++, Verilog, HTML/JS, etc.).\n"
             "2. REASONING: Step-by-step logic proofs, math derivations, physics proofs, or complex multi-step deductions.\n"
-            "3. PREDICTION: Explicit data science forecasting, statistical regression modeling, or machine learning prediction.\n"
-            "4. CHIP_DESIGN: Verilog HDL hardware design, SPICE analog simulation, or circuit netlists.\n"
-            "5. SIMPLE: General knowledge, weather, facts, conversational QA, summaries, or direct questions.\n\n"
-            "Reply ONLY with ONE category word (CODING, REASONING, PREDICTION, CHIP_DESIGN, or SIMPLE).\n\n"
+            "3. CHIP_DESIGN: Verilog HDL hardware design, SPICE analog simulation, or circuit netlists.\n"
+            "4. SIMPLE: General knowledge, weather, facts, conversational QA, summaries, or direct questions.\n\n"
+            "Reply ONLY with ONE category word (CODING, REASONING, CHIP_DESIGN, or SIMPLE).\n\n"
             f"User Request: {prompt[:500]}"
         )
         try:
             res = orchestrator._call_model(router_llm, p, max_tokens=15, temperature=0.1).strip().upper()
             res = orchestrator._strip_thinking(res)
-            for cat in ["CODING", "REASONING", "PREDICTION", "CHIP_DESIGN", "SIMPLE"]:
+            for cat in ["CODING", "REASONING", "CHIP_DESIGN", "SIMPLE"]:
                 if cat in res:
                     return cat
         except Exception:

@@ -494,7 +494,7 @@ class AgentOrchestrator:
         else:
             router_llm = self._get_model("router", required_ctx=2048)
             task_type = TaskRouter.classify_task(self, router_llm, prompt)
-            if task_type == "EXTREME_WEBSEARCH":
+            if task_type in ["EXTREME_WEBSEARCH", "PREDICTION"]:
                 task_type = "SIMPLE"
 
         if status_callback:
