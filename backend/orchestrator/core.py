@@ -471,30 +471,43 @@ class AgentOrchestrator:
             if status_callback:
                 status_callback("🔍 Simple WebSearch: Scraping live web sources...", "info", "system", 25)
             try:
-                search_res = self.web_search.search(prompt)
-                if isinstance(search_res, list) and search_res:
-                    formatted = []
-                    for idx, item in enumerate(search_res[:5]):
-                        title = item.get("title", f"Source {idx+1}")
-                        url = item.get("url", "")
-                        snippet = item.get("snippet", "")
-                        formatted.append(f"[{idx+1}] {title} ({url}): {snippet}")
-                    web_context = "\n".join(formatted)
-                elif isinstance(search_res, str):
-                    web_context = search_res
+                # Try deep search and scrape first for rich content
+                scrape_res = self.web_search.search_and_scrape(prompt, max_results=5, max_scrapes=3)
+                if isinstance(scrape_res, dict) and not scrape_res.get("empty", True):
+                    web_context = scrape_res.get("context", "")
+                else:
+                    search_res = self.web_search.search(prompt, max_results=6)
+                    if isinstance(search_res, list) and search_res:
+                        formatted = []
+                        for idx, item in enumerate(search_res[:6]):
+                            title = item.get("title", f"Source {idx+1}")
+                            url = item.get("link", item.get("url", ""))
+                            snippet = item.get("snippet", item.get("content", ""))
+                            if snippet:
+                                formatted.append(f"[{idx+1}] {title} ({url}):\n{snippet}")
+                        web_context = "\n\n".join(formatted)
+                    elif isinstance(search_res, str):
+                        web_context = search_res
             except Exception:
                 pass
 
         if task_type == "SIMPLE":
-            router_llm = self._get_model("router", required_ctx=2048)
+            ans_model = "vibethinker" if self._is_model_valid(self._get_model("vibethinker", required_ctx=2048)) else "router"
+            llm = self._get_model(ans_model, required_ctx=2048)
             final_p = prompt
+            sys_prompt = None
             if web_context:
-                final_p = (
-                    f"Live Web Search Context:\n{web_context}\n\n"
-                    f"User Prompt: {prompt}\n\n"
-                    f"Answer the user's question accurately using the live web search context provided."
+                sys_prompt = (
+                    "You are a helpful, knowledgeable AI assistant with live internet search access.\n"
+                    "Provide a thorough, comprehensive, and accurate response to the user's inquiry based on the live search context.\n"
+                    "Extract and highlight all relevant live details (current conditions, exact numbers, temperatures, metrics, dates, and explanations) clearly."
                 )
-            res = self._call_model(router_llm, final_p, max_tokens=self.max_tokens, temperature=self.temperature)
+                final_p = (
+                    f"LIVE WEB SEARCH DATA:\n{web_context}\n\n"
+                    f"USER QUESTION: {prompt}\n\n"
+                    f"Please provide a complete, detailed, and directly helpful answer based on the real-time search context above."
+                )
+            res = self._strip_thinking(self._call_model(llm, final_p, max_tokens=max(1024, self.max_tokens), temperature=0.3, system_prompt=sys_prompt))
             return self._clean_cutoff_notes(res)
 
         elif task_type == "CODING":
