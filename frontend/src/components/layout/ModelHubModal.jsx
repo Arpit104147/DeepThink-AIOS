@@ -265,6 +265,27 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
     }
   };
 
+  const handleDeleteModelFile = async (modelKey) => {
+    if (!window.confirm(`Are you sure you want to delete the downloaded GGUF file(s) for "${modelKey}" from disk?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${serverUrl}/api/models/delete/${modelKey}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActionMessage(`🗑️ Deleted model files for ${modelKey} (freed ${data.freed_mb || 0} MB)`);
+        fetchStatus();
+      } else {
+        const d = await res.json();
+        setActionMessage(`Cannot delete: ${d.detail || "Error"}`);
+      }
+    } catch (e) {
+      setActionMessage(`Delete error: ${e.message}`);
+    }
+  };
+
   const handleDeleteCustomModel = async (modelKey) => {
     try {
       const res = await fetch(`${serverUrl}/api/models/custom/${modelKey}`, {
@@ -667,7 +688,16 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
 
                         <div style={{ fontSize: "0.78rem", display: "flex", alignItems: "center", gap: "8px" }}>
                           {info.downloaded ? (
-                            <span style={{ color: "#34d399", fontWeight: "600" }}>✅ Downloaded {info.size ? `(${info.size})` : ""}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ color: "#34d399", fontWeight: "600" }}>✅ Downloaded {info.size ? `(${info.size})` : ""}</span>
+                              <button
+                                onClick={() => handleDeleteModelFile(key)}
+                                style={{ padding: "4px 9px", borderRadius: "5px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", cursor: "pointer", fontSize: "0.74rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "4px", transition: "background 0.2s" }}
+                                title="Delete downloaded GGUF model files from disk to free storage"
+                              >
+                                🗑️ Delete File
+                              </button>
+                            </div>
                           ) : info.progress && info.progress.status === "downloading" ? (
                             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                               <span style={{ color: "#818cf8", fontWeight: "600" }}>🚀 Downloading {info.progress.percent}%</span>
@@ -679,17 +709,18 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                               </button>
                             </div>
                           ) : (
-                            <span style={{ color: "#fbbf24", fontWeight: "600" }}>⏳ Not Downloaded</span>
-                          )}
-
-                          {info.is_custom && (
-                            <button
-                              onClick={() => handleDeleteCustomModel(key)}
-                              style={{ padding: "3px 8px", borderRadius: "4px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", cursor: "pointer", fontSize: "0.72rem" }}
-                              title="Delete custom model entry"
-                            >
-                              🗑️ Remove
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ color: "#fbbf24", fontWeight: "600" }}>⏳ Not Downloaded</span>
+                              {info.is_custom && (
+                                <button
+                                  onClick={() => handleDeleteCustomModel(key)}
+                                  style={{ padding: "3px 8px", borderRadius: "4px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", cursor: "pointer", fontSize: "0.72rem" }}
+                                  title="Remove custom model definition"
+                                >
+                                  🗑️ Remove
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>

@@ -158,6 +158,63 @@ def remove_custom_model(model_key):
         return True
     return False
 
+def delete_downloaded_model_files(model_key):
+    """
+    Physically removes the .gguf file(s) and partial downloads from disk
+    for the specified model_key. If it's a custom model, also removes its definition.
+    """
+    deleted_files = []
+    freed_bytes = 0
+
+    if model_key not in MODEL_DEFINITIONS:
+        auto_discover_local_gguf_models(force=True)
+        if model_key not in MODEL_DEFINITIONS:
+            return {"success": False, "error": f"Model key '{model_key}' not found"}
+
+    defn = MODEL_DEFINITIONS[model_key]
+    target_filenames = get_model_filenames(defn)
+
+    auto_discover_local_gguf_models(force=True)
+    files_map = _DISCOVERY_CACHE.get("files_map", {})
+
+    for fname in target_filenames:
+        fname_lower = fname.lower()
+        filepath = files_map.get(fname_lower)
+        if filepath and os.path.exists(filepath):
+            try:
+                sz = os.path.getsize(filepath)
+                os.remove(filepath)
+                freed_bytes += sz
+                deleted_files.append(filepath)
+            except Exception as e:
+                print(f"Error removing {filepath}: {e}")
+
+        # Also clean up any .incomplete or .part files
+        for ext in [".incomplete", ".tmp", ".part"]:
+            inc_path = os.path.join(MODELS_DIR, fname + ext)
+            if os.path.exists(inc_path):
+                try:
+                    os.remove(inc_path)
+                except Exception:
+                    pass
+
+    # If it's a custom model, also remove the entry from MODEL_DEFINITIONS
+    if model_key not in DEFAULT_MODEL_DEFINITIONS:
+        remove_custom_model(model_key)
+
+    # Force refresh the discovery cache
+    _DISCOVERY_CACHE["timestamp"] = 0
+    _DISCOVERY_CACHE["files_map"] = {}
+    auto_discover_local_gguf_models(force=True)
+
+    mb_freed = round(freed_bytes / (1024 * 1024), 1)
+    return {
+        "success": True,
+        "model_key": model_key,
+        "deleted_files": deleted_files,
+        "freed_mb": mb_freed
+    }
+
 # Initialize custom models and role assignments on load
 load_custom_models()
 load_role_assignments()

@@ -84,7 +84,8 @@ from fastapi.responses import HTMLResponse
 from backend.memory import Memory
 from backend.downloader import (
     check_models_status, download_model, MODEL_DEFINITIONS,
-    add_custom_model, remove_custom_model, ROLE_ASSIGNMENTS, save_role_assignments, cancel_model_download
+    add_custom_model, remove_custom_model, delete_downloaded_model_files,
+    ROLE_ASSIGNMENTS, save_role_assignments, cancel_model_download
 )
 from backend.orchestrator import AgentOrchestrator
 from backend.benchmarks.runner import BENCHMARK_STATE, run_benchmark_suite, stop_benchmark, STATE_LOCK
@@ -297,6 +298,23 @@ def api_remove_custom_model(model_key: str):
     if not success:
         raise HTTPException(status_code=400, detail="Cannot remove default system model or key not found")
     return {"status": "success", "removed": model_key}
+
+@app.delete("/api/models/delete/{model_key}")
+def api_delete_downloaded_model(model_key: str):
+    """Physically deletes downloaded .gguf file(s) for a model to free disk storage."""
+    # Unload model from active memory cache if loaded
+    try:
+        if orchestrator and hasattr(orchestrator, "models_cache"):
+            if model_key in orchestrator.models_cache:
+                del orchestrator.models_cache[model_key]
+                gc.collect()
+    except Exception:
+        pass
+
+    result = delete_downloaded_model_files(model_key)
+    if not result.get("success", False):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to delete model files"))
+    return {"status": "success", **result}
 
 @app.get("/api/models/hf_scan")
 def scan_hf_repo(repo_id: str):
