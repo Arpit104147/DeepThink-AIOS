@@ -314,6 +314,9 @@ class AgentOrchestrator:
         cleaned = text
         for pat in patterns:
             cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Compact extra blank lines between markdown table rows
+        cleaned = re.sub(r'(\|[^\n]+\|)\n\s*\n+(\|[^\n]+\|)', r'\1\n\2', cleaned)
         return cleaned.strip()
 
     def _compute_headroom(self):

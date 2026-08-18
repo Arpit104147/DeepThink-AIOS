@@ -1339,6 +1339,55 @@ html, body {
   width: 100%;
 }
 
+/* ───────────────────────────────────────────────────
+   Markdown Table Styles
+   ─────────────────────────────────────────────────── */
+.md-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 16px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  text-align: left;
+}
+
+.md-table thead tr {
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.md-table th {
+  padding: 10px 16px;
+  font-weight: 700;
+  color: #a5b4fc;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.md-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  line-height: 1.5;
+}
+
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.md-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .math-inline-fallback {
   font-style: italic;
   font-family: 'Georgia', serif;
