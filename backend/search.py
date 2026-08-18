@@ -367,7 +367,13 @@ class WebSearch:
         parts = []
         sources_meta = []
         sources_scraped = 0
-        # Check for real-time financial market quotes first
+        # 1. Check for real-time meteorological weather report first
+        weather_table = self.fetch_live_weather(query)
+        if weather_table:
+            parts.append(weather_table)
+            sources_scraped += 1
+
+        # 2. Check for real-time financial market quotes
         financial_table = self.fetch_financial_quote(query)
         if financial_table:
             parts.append(financial_table)
@@ -411,6 +417,114 @@ class WebSearch:
             "context": context,
             "sources": sources_meta,
         }
+
+    def fetch_live_weather(self, query: str):
+        """
+        Extracts location from weather inquiry and fetches live real-time
+        meteorological conditions from Open-Meteo and wttr.in.
+        """
+        query_lower = query.lower()
+        weather_keywords = ["weather", "temperature", "rain", "climate", "forecast", "humidity", "wind", "temp"]
+        if not any(kw in query_lower for kw in weather_keywords):
+            return None
+
+        # Extract target city/location name
+        city = None
+        match = re.search(r'(?:weather|temperature|forecast|rain|climate|humidity|temp)\s+(?:in|at|of|for)?\s*([a-zA-Z\s]+?)(?:\s+now|\s+today|\s+currently|\s*\?|$)', query, re.IGNORECASE)
+        if match:
+            city = match.group(1).strip()
+        else:
+            cleaned = re.sub(r'(how is the|what is the|tell me the|current|weather|condition|temperature|today|now|in|at|of|for|\?)', '', query, flags=re.IGNORECASE).strip()
+            if cleaned and len(cleaned) >= 3:
+                city = cleaned
+
+        if not city:
+            return None
+
+        # 1. Try Open-Meteo (Global Open Meteorological Network)
+        try:
+            geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(city)}&count=1&language=en&format=json"
+            geo_res = self._session.get(geo_url, timeout=3.5)
+            if geo_res.ok:
+                geo_data = geo_res.json()
+                if "results" in geo_data and len(geo_data["results"]) > 0:
+                    loc = geo_data["results"][0]
+                    lat = loc.get("latitude")
+                    lon = loc.get("longitude")
+                    loc_name = f"{loc.get('name', city.title())}, {loc.get('admin1', '')} ({loc.get('country', '')})".replace(",  (", " (")
+
+                    fc_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto"
+                    fc_res = self._session.get(fc_url, timeout=3.5)
+                    if fc_res.ok:
+                        fc_data = fc_res.json()
+                        curr = fc_data.get("current", {})
+                        daily = fc_data.get("daily", {})
+
+                        wmo_codes = {
+                            0: "Clear Sky ☀️", 1: "Mainly Clear 🌤️", 2: "Partly Cloudy ⛅", 3: "Overcast ☁️",
+                            45: "Foggy 🌫️", 48: "Depositing Rime Fog 🌫️", 51: "Light Drizzle 🌦️", 53: "Moderate Drizzle 🌦️",
+                            55: "Dense Drizzle 🌧️", 61: "Slight Rain 🌧️", 63: "Moderate Rain 🌧️", 65: "Heavy Rain 🌧️",
+                            71: "Slight Snow ❄️", 73: "Moderate Snow ❄️", 75: "Heavy Snow ❄️",
+                            80: "Slight Rain Showers 🌦️", 81: "Moderate Rain Showers 🌧️", 82: "Violent Rain Showers ⛈️",
+                            95: "Thunderstorm ⛈️", 96: "Thunderstorm with Hail ⛈️"
+                        }
+                        w_desc = wmo_codes.get(curr.get("weather_code", 0), "Partly Cloudy ⛅")
+                        temp_c = curr.get("temperature_2m", "N/A")
+                        feels_c = curr.get("apparent_temperature", "N/A")
+                        hum = curr.get("relative_humidity_2m", "N/A")
+                        wind = curr.get("wind_speed_10m", "N/A")
+                        precip = curr.get("precipitation", 0.0)
+
+                        min_t = daily.get("temperature_2m_min", ["N/A"])[0]
+                        max_t = daily.get("temperature_2m_max", ["N/A"])[0]
+                        sunrise = str(daily.get("sunrise", ["N/A"])[0]).split("T")[-1]
+                        sunset = str(daily.get("sunset", ["N/A"])[0]).split("T")[-1]
+
+                        return (
+                            f"### ⛅ Real-Time Meteorological Data: {loc_name}\n\n"
+                            f"| Metric / Parameter | Live Value |\n"
+                            f"| :--- | :--- |\n"
+                            f"| **Current Condition** | {w_desc} |\n"
+                            f"| **Temperature** | **{temp_c}°C** (Feels like: {feels_c}°C) |\n"
+                            f"| **Today's Forecast Range** | Low: {min_t}°C / High: {max_t}°C |\n"
+                            f"| **Relative Humidity** | {hum}% |\n"
+                            f"| **Wind Speed** | {wind} km/h |\n"
+                            f"| **Precipitation** | {precip} mm |\n"
+                            f"| **Sunrise / Sunset** | 🌅 {sunrise} / 🌇 {sunset} |\n"
+                        )
+        except Exception as e:
+            print(f"Open-Meteo weather fetch notice: {e}")
+
+        # 2. Try wttr.in fallback
+        try:
+            w_url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1"
+            w_res = self._session.get(w_url, timeout=3.5)
+            if w_res.ok:
+                w_data = w_res.json()
+                curr = w_data.get("current_condition", [{}])[0]
+                today = w_data.get("weather", [{}])[0]
+                desc = curr.get("weatherDesc", [{}])[0].get("value", "Clear")
+                temp_c = curr.get("temp_C", "N/A")
+                feels_c = curr.get("FeelsLikeC", "N/A")
+                hum = curr.get("humidity", "N/A")
+                wind = curr.get("windspeedKmph", "N/A")
+                min_t = today.get("mintempC", "N/A")
+                max_t = today.get("maxtempC", "N/A")
+
+                return (
+                    f"### ⛅ Real-Time Weather Data: {city.title()}\n\n"
+                    f"| Parameter | Live Reading |\n"
+                    f"| :--- | :--- |\n"
+                    f"| **Current Condition** | {desc} |\n"
+                    f"| **Temperature** | **{temp_c}°C** (Feels like: {feels_c}°C) |\n"
+                    f"| **Temperature Range** | Min: {min_t}°C / Max: {max_t}°C |\n"
+                    f"| **Relative Humidity** | {hum}% |\n"
+                    f"| **Wind Speed** | {wind} km/h |\n"
+                )
+        except Exception as e:
+            print(f"wttr.in weather fetch notice: {e}")
+
+        return None
 
     def fetch_financial_quote(self, query: str):
         """

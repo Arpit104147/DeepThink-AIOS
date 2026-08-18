@@ -533,16 +533,17 @@ class AgentOrchestrator:
             sys_prompt = None
             if web_context:
                 sys_prompt = (
-                    "You are a helpful, knowledgeable AI assistant with live internet search access.\n"
-                    "Provide a thorough, comprehensive, and accurate response to the user's inquiry based on the live search context.\n"
-                    "Extract and highlight all relevant live details (current conditions, exact numbers, temperatures, metrics, dates, and explanations) clearly."
+                    "You are a helpful, knowledgeable AI assistant with direct access to live real-time internet search and meteorological feeds.\n"
+                    "Provide a thorough, accurate, and helpful response to the user's inquiry based on the live data context.\n"
+                    "Always present the live metrics, current conditions, exact numbers, and temperatures directly.\n"
+                    "Never say 'I cannot provide real-time information' or tell the user to check external apps because live data is provided to you."
                 )
                 final_p = (
-                    f"LIVE WEB SEARCH DATA:\n{web_context}\n\n"
+                    f"LIVE REAL-TIME DATA CONTEXT:\n{web_context}\n\n"
                     f"USER QUESTION: {prompt}\n\n"
-                    f"Please provide a complete, detailed, and directly helpful answer based on the real-time search context above."
+                    f"Synthesize a clear, comprehensive, and directly informative answer incorporating all key facts and live metrics from the context above."
                 )
-            res = self._strip_thinking(self._call_model(llm, final_p, max_tokens=max(1024, self.max_tokens), temperature=0.3, system_prompt=sys_prompt))
+            res = self._strip_thinking(self._call_model(llm, final_p, max_tokens=max(1024, self.max_tokens), temperature=0.2, system_prompt=sys_prompt))
             return self._clean_cutoff_notes(res)
 
         elif task_type == "CODING":
