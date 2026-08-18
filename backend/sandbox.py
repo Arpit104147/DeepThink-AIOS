@@ -190,14 +190,14 @@ _REAL_EXEC = exec
 # ── Step 1: Set Resource Limits (Linux only) ─────────────────────────────
 try:
     import resource
-    # Max 8 GB RAM (enough for large data science, numpy/pandas heavy workloads, and multi-model ML tournaments)
-    resource.setrlimit(resource.RLIMIT_AS, (8 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024))
-    # Max 300 seconds of CPU time to allow deep convergence and simulation loops
-    resource.setrlimit(resource.RLIMIT_CPU, (300, 300))
-    # Max 200 child processes / threads (allows OpenMP/BLAS multi-threading while preventing fork bombs)
-    resource.setrlimit(resource.RLIMIT_NPROC, (200, 200))
-    # Max 200 MB file writes (allows data output but prevents disk flooding)
-    resource.setrlimit(resource.RLIMIT_FSIZE, (200 * 1024 * 1024, 200 * 1024 * 1024))
+    # Max 3.0 GB RAM (optimal sweet spot for 8GB consumer hardware: provides 5x-10x headroom for ML without risking host OOM)
+    resource.setrlimit(resource.RLIMIT_AS, (3 * 1024 * 1024 * 1024, 3 * 1024 * 1024 * 1024))
+    # Max 180 seconds of CPU time to allow deep convergence while catching infinite loops
+    resource.setrlimit(resource.RLIMIT_CPU, (180, 180))
+    # Max 128 child processes / threads (allows OpenMP/BLAS multi-threading while preventing fork bombs)
+    resource.setrlimit(resource.RLIMIT_NPROC, (128, 128))
+    # Max 100 MB file writes (allows data output but prevents disk flooding)
+    resource.setrlimit(resource.RLIMIT_FSIZE, (100 * 1024 * 1024, 100 * 1024 * 1024))
 except Exception:
     pass  # Non-Linux systems skip resource limits
 
@@ -582,11 +582,11 @@ class Sandbox:
                 resource.setrlimit(resource.RLIMIT_NOFILE, (512, 512))
                 # No core dumps (prevent disk filling)
                 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-                # Limit virtual memory to 8GB (large data science & ML headroom)
-                mem_limit = 8 * 1024 * 1024 * 1024
+                # Limit virtual memory to 3.0GB (tailored for 8GB consumer hardware safety)
+                mem_limit = 3 * 1024 * 1024 * 1024
                 resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
-                # Limit CPU time to 300 seconds
-                resource.setrlimit(resource.RLIMIT_CPU, (300, 300))
+                # Limit CPU time to 180 seconds
+                resource.setrlimit(resource.RLIMIT_CPU, (180, 180))
             except (ValueError, Exception):
                 pass  # Graceful degradation if limits can't be set
         return _apply
