@@ -27,10 +27,8 @@ PARAGRAPH_KEEP_TOP_N = 12
 MIN_USEFUL_TEXT_CHARS = 400
 
 class WebSearch:
-    def __init__(self, google_api_key=None, google_cx=None, searxng_url=None):
-        self.google_api_key = google_api_key or os.environ.get("GOOGLE_API_KEY")
-        self.google_cx = google_cx or os.environ.get("GOOGLE_CX")
-        # Default to a reliable public instance if not specified
+    def __init__(self, searxng_url=None):
+        # Default to reliable public SearXNG instance if specified
         self.searxng_url = searxng_url or os.environ.get("SEARXNG_URL", "https://searx.be")
         # Persistent session for TCP connection pooling (reuses SSL handshakes)
         self._session = requests.Session()
@@ -38,35 +36,29 @@ class WebSearch:
 
     def search(self, query, max_results=5):
         """
-        Search the web with robust multi-tier failover:
-        1. Google Custom Search (if API keys set)
-        2. DuckDuckGo API (ddgs / duckduckgo_search library)
-        3. DuckDuckGo Lite & HTML direct form parser
-        4. Public SearXNG instances (with fast timeout)
-        5. Wikipedia Search API (factual information fallback)
+        Search the web with robust 100% free, keyless multi-tier failover:
+        1. DuckDuckGo API (ddgs / duckduckgo_search library)
+        2. DuckDuckGo Lite & HTML direct form parser
+        3. Public SearXNG instances (with fast timeout)
+        4. Wikipedia Search API (factual information fallback)
         """
-        if self.google_api_key and self.google_cx:
-            res = self._google_search(query, max_results)
-            if res:
-                return res
-
-        # 2. Try DuckDuckGo API library
+        # 1. Try DuckDuckGo API library
         res = self._ddg_search_api(query, max_results)
         if res:
             return res
 
-        # 3. Try DuckDuckGo Lite/HTML direct scraper
+        # 2. Try DuckDuckGo Lite/HTML direct scraper
         res = self._ddg_html_scraper(query, max_results)
         if res:
             return res
 
-        # 4. Try SearXNG fallback instances
+        # 3. Try SearXNG fallback instances
         if self.searxng_url:
             res = self._searxng_search(query, max_results)
             if res:
                 return res
 
-        # 5. Try Wikipedia encyclopedic fallback
+        # 4. Try Wikipedia encyclopedic fallback
         res = self._wikipedia_search(query, max_results)
         if res:
             return res
@@ -109,27 +101,6 @@ class WebSearch:
                 continue
         
         return []
-
-    def _google_search(self, query, max_results=5):
-        """Search using Google Custom Search JSON API."""
-        try:
-            safe_query = urllib.parse.quote(query)
-            url = f"https://www.googleapis.com/customsearch/v1?key={self.google_api_key}&cx={self.google_cx}&q={safe_query}&num={max_results}"
-            
-            response = self._session.get(url, timeout=4.0)
-            data = response.json()
-                
-            results = []
-            if "items" in data:
-                for item in data["items"]:
-                    results.append({
-                        "title": item.get("title", ""),
-                        "link": item.get("link", ""),
-                        "snippet": item.get("snippet", "")
-                    })
-            return results
-        except Exception:
-            return []
 
     def _ddg_search_api(self, query, max_results=5):
         """Search using duckduckgo_search library if available."""
