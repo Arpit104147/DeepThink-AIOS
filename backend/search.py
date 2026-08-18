@@ -367,7 +367,11 @@ class WebSearch:
         parts = []
         sources_meta = []
         sources_scraped = 0
-        sources_blocked = 0
+        # Check for real-time financial market quotes first
+        financial_table = self.fetch_financial_quote(query)
+        if financial_table:
+            parts.append(financial_table)
+            sources_scraped += 1
 
         for idx, r in enumerate(deduped, start=1):
             link = r.get("link", "")
@@ -407,6 +411,128 @@ class WebSearch:
             "context": context,
             "sources": sources_meta,
         }
+
+    def fetch_financial_quote(self, query: str):
+        """
+        Detects stock, index, commodity, or crypto tickers and fetches
+        real-time 5-day historical OHLC data from Yahoo Finance API.
+        """
+        import datetime
+        q_lower = query.lower()
+
+        # Known mapping for common companies / commodities / cryptos
+        common_symbols = {
+            "reliance": "RELIANCE.NS",
+            "reliance industries": "RELIANCE.NS",
+            "tcs": "TCS.NS",
+            "tata consultancy": "TCS.NS",
+            "infosys": "INFY.NS",
+            "infy": "INFY.NS",
+            "hdfc": "HDFCBANK.NS",
+            "hdfc bank": "HDFCBANK.NS",
+            "icici": "ICICIBANK.NS",
+            "state bank of india": "SBIN.NS",
+            "sbi": "SBIN.NS",
+            "tata motors": "TATAMOTORS.NS",
+            "apple": "AAPL",
+            "aapl": "AAPL",
+            "microsoft": "MSFT",
+            "msft": "MSFT",
+            "nvidia": "NVDA",
+            "nvda": "NVDA",
+            "tesla": "TSLA",
+            "tsla": "TSLA",
+            "google": "GOOGL",
+            "alphabet": "GOOGL",
+            "amazon": "AMZN",
+            "meta": "META",
+            "bitcoin": "BTC-USD",
+            "btc": "BTC-USD",
+            "ethereum": "ETH-USD",
+            "eth": "ETH-USD",
+            "gold": "GC=F",
+            "silver": "SI=F",
+            "crude oil": "CL=F",
+            "nifty": "^NSEI",
+            "nifty 50": "^NSEI",
+            "sensex": "^BSESN",
+        }
+
+        matched_symbol = None
+        for name, sym in common_symbols.items():
+            if name in q_lower:
+                matched_symbol = sym
+                break
+
+        # If not in common symbols but query mentions "stock price" or "share price", try Yahoo search
+        if not matched_symbol and any(k in q_lower for k in ["stock price", "share price", "stock of", "shares of", "ticker"]):
+            clean = re.sub(r"(tell me the|what is the|stock price of|share price of|last \d+ days|lowest price in \d+ days|today|now|\?)", "", q_lower, flags=re.I).strip()
+            if clean:
+                try:
+                    search_url = f"https://query2.finance.yahoo.com/v1/finance/search?q={urllib.parse.quote(clean)}&quotesCount=1&newsCount=0"
+                    s_res = self._session.get(search_url, timeout=3.0)
+                    if s_res.status_code == 200:
+                        quotes = s_res.json().get("quotes", [])
+                        if quotes:
+                            matched_symbol = quotes[0].get("symbol")
+                except Exception:
+                    pass
+
+        if not matched_symbol:
+            return None
+
+        try:
+            chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{matched_symbol}?range=5d&interval=1d"
+            res = self._session.get(chart_url, timeout=4.0)
+            if res.status_code == 200:
+                data = res.json()
+                chart = data.get("chart", {}).get("result", [])
+                if chart:
+                    result = chart[0]
+                    meta = result.get("meta", {})
+                    symbol = meta.get("symbol", matched_symbol)
+                    currency = meta.get("currency", "INR")
+                    regular_price = meta.get("regularMarketPrice")
+                    timestamps = result.get("timestamp", [])
+                    quote = result.get("indicators", {}).get("quote", [{}])[0]
+                    opens = quote.get("open", [])
+                    highs = quote.get("high", [])
+                    lows = quote.get("low", [])
+                    closes = quote.get("close", [])
+
+                    rows = []
+                    valid_lows = []
+                    valid_highs = []
+                    valid_closes = []
+
+                    for t, o, h, l, c in zip(timestamps, opens, highs, lows, closes):
+                        if o is not None and c is not None and l is not None and h is not None:
+                            dt = datetime.datetime.fromtimestamp(t).strftime("%Y-%m-%d")
+                            rows.append(f"| {dt} | {o:.2f} | {h:.2f} | {l:.2f} | {c:.2f} |")
+                            valid_lows.append(l)
+                            valid_highs.append(h)
+                            valid_closes.append(c)
+
+                    if rows:
+                        recent_rows = rows[-3:] if len(rows) >= 3 else rows
+                        recent_lows = valid_lows[-3:] if len(valid_lows) >= 3 else valid_lows
+                        lowest_3d = min(recent_lows) if recent_lows else "N/A"
+                        highest_3d = max(valid_highs[-3:]) if valid_highs else "N/A"
+                        latest_close = valid_closes[-1] if valid_closes else regular_price
+
+                        table_md = (
+                            f"[LIVE FINANCIAL MARKET DATA: {symbol}]\n"
+                            f"Currency: {currency} | Latest Current Price: {latest_close:.2f} {currency}\n"
+                            f"Lowest Price (Last 3 Trading Days): {lowest_3d:.2f} {currency}\n"
+                            f"Highest Price (Last 3 Trading Days): {highest_3d:.2f} {currency}\n\n"
+                            f"| Date | Open ({currency}) | High ({currency}) | Low ({currency}) | Close ({currency}) |\n"
+                            f"| :--- | :--- | :--- | :--- | :--- |\n"
+                            + "\n".join(recent_rows)
+                        )
+                        return table_md
+        except Exception as e:
+            print(f"Financial quote fetch error for {matched_symbol}: {e}")
+        return None
 
 
 if __name__ == "__main__":

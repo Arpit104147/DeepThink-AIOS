@@ -397,18 +397,25 @@ class AgentOrchestrator:
         if status_callback:
             status_callback("🔬 Extreme WebSearch: Scraping live web sources...", "info", "system", 20)
         
-        search_res = self.web_search.search(prompt)
         web_context = ""
-        if isinstance(search_res, list) and search_res:
-            formatted_sources = []
-            for idx, item in enumerate(search_res[:5]):
-                title = item.get("title", f"Source {idx+1}")
-                url = item.get("url", "")
-                snippet = item.get("snippet", "")
-                formatted_sources.append(f"[{idx+1}] {title}\nURL: {url}\nSummary: {snippet}")
-            web_context = "\n\n".join(formatted_sources)
-        elif isinstance(search_res, str):
-            web_context = search_res
+        try:
+            scrape_res = self.web_search.search_and_scrape(prompt, max_results=6, max_scrapes=4)
+            if isinstance(scrape_res, dict) and not scrape_res.get("empty", True):
+                web_context = scrape_res.get("context", "")
+            else:
+                search_res = self.web_search.search(prompt)
+                if isinstance(search_res, list) and search_res:
+                    formatted_sources = []
+                    for idx, item in enumerate(search_res[:5]):
+                        title = item.get("title", f"Source {idx+1}")
+                        url = item.get("link", item.get("url", ""))
+                        snippet = item.get("snippet", item.get("content", ""))
+                        formatted_sources.append(f"[{idx+1}] {title}\nURL: {url}\nSummary: {snippet}")
+                    web_context = "\n\n".join(formatted_sources)
+                elif isinstance(search_res, str):
+                    web_context = search_res
+        except Exception:
+            pass
 
         if status_callback:
             status_callback("🔬 Synthesizing research paper with DeepSeek-R1...", "info", "deepseek_r1", 60)
