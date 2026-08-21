@@ -127,8 +127,40 @@ class WebSearch:
         return []
 
     def _ddg_html_scraper(self, query, max_results=5):
-        """Scrape DuckDuckGo Lite & HTML search as lightweight dependency-free fallback."""
-        # 1. Try DuckDuckGo Lite via POST (most reliable)
+        """Scrape DuckDuckGo HTML search via standard POST endpoints."""
+        # 1. Try DuckDuckGo Standard HTML via POST (most complete snippet parser)
+        try:
+            url = "https://html.duckduckgo.com/html/"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
+                "Referer": "https://html.duckduckgo.com/",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+            response = self._session.post(url, data={"q": query, "b": ""}, headers=headers, timeout=5.0)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, "html.parser")
+                results = []
+                for result_div in soup.find_all("div", class_="result"):
+                    if len(results) >= max_results:
+                        break
+                    title_elem = result_div.find("a", class_="result__a")
+                    snippet_elem = result_div.find("a", class_="result__snippet")
+                    if title_elem:
+                        title = title_elem.text.strip()
+                        link = title_elem.get("href", "")
+                        if "uddg=" in link:
+                            qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+                            if "uddg" in qs:
+                                link = qs["uddg"][0]
+                        snippet = snippet_elem.text.strip() if snippet_elem else ""
+                        if link:
+                            results.append({"title": title, "link": link, "snippet": snippet})
+                if results:
+                    return results
+        except Exception:
+            pass
+
+        # 2. Try DuckDuckGo Lite via POST fallback
         try:
             url = "https://lite.duckduckgo.com/lite/"
             headers = {
@@ -156,34 +188,6 @@ class WebSearch:
                     snippet = snippet_tags[i].text.strip() if i < len(snippet_tags) else ""
                     if title and link:
                         results.append({"title": title, "link": link, "snippet": snippet})
-                if results:
-                    return results
-        except Exception:
-            pass
-
-        # 2. Try DuckDuckGo HTML GET fallback
-        try:
-            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-            headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"}
-            response = self._session.get(url, headers=headers, timeout=4.0)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, "html.parser")
-                results = []
-                for result_div in soup.find_all("div", class_="result"):
-                    if len(results) >= max_results:
-                        break
-                    title_elem = result_div.find("a", class_="result__a")
-                    snippet_elem = result_div.find("a", class_="result__snippet")
-                    if title_elem:
-                        title = title_elem.text.strip()
-                        link = title_elem.get("href", "")
-                        if "uddg=" in link:
-                            qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
-                            if "uddg" in qs:
-                                link = qs["uddg"][0]
-                        snippet = snippet_elem.text.strip() if snippet_elem else ""
-                        if link:
-                            results.append({"title": title, "link": link, "snippet": snippet})
                 if results:
                     return results
         except Exception:
@@ -219,7 +223,7 @@ class WebSearch:
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
             }
-            response = self._session.get(url, headers=headers, timeout=6.0)
+            response = self._session.get(url, headers=headers, timeout=3.0)
             if response.status_code != 200:
                 return ""
             
@@ -379,6 +383,8 @@ class WebSearch:
         parts = []
         sources_meta = []
         sources_scraped = 0
+        sources_blocked = 0
+
         # 1. Check for real-time meteorological weather report first
         weather_table = self.fetch_live_weather(query)
         if weather_table:
@@ -442,19 +448,20 @@ class WebSearch:
         meteorological conditions from Open-Meteo and wttr.in.
         """
         query_lower = query.lower()
-        weather_keywords = ["weather", "temperature", "rain", "climate", "forecast", "humidity", "wind", "temp"]
+        weather_keywords = ["weather", "temperature", "rain", "climate", "forecast", "humidity", "wind", "temp", "theweather"]
         if not any(kw in query_lower for kw in weather_keywords):
             return None
 
-        # Extract target city/location name
-        city = None
-        match = re.search(r'(?:weather|temperature|forecast|rain|climate|humidity|temp)\s+(?:in|at|of|for)?\s*([a-zA-Z\s]+?)(?:\s+now|\s+today|\s+currently|\s*\?|$)', query, re.IGNORECASE)
-        if match:
-            city = match.group(1).strip()
-        else:
-            cleaned = re.sub(r'(how is the|what is the|tell me the|current|weather|condition|temperature|today|now|in|at|of|for|\?)', '', query, flags=re.IGNORECASE).strip()
-            if cleaned and len(cleaned) >= 3:
-                city = cleaned
+        # Extract target city/location name by filtering stop words
+        query_clean = re.sub(r'[^a-zA-Z\s]', ' ', query_lower)
+        stop_words = {
+            "what", "is", "the", "weather", "theweather", "condition", "conditions",
+            "in", "at", "of", "for", "near", "around", "today", "now", "currently",
+            "tell", "me", "how", "forecast", "temperature", "temp", "please", "right",
+            "like", "current", "show", "give", "check", "live"
+        }
+        tokens = [w for w in query_clean.split() if w not in stop_words and len(w) >= 2]
+        city = " ".join(tokens).strip() if tokens else None
 
         if not city:
             return None
