@@ -1,6 +1,7 @@
 import re
 import json
 from backend.sandbox import Sandbox
+from backend.downloader import resolve_model_key
 
 class PredictionPipeline:
     """Enterprise Machine Learning Predictive Modeling & High-Precision Forecast Engine."""
@@ -11,7 +12,13 @@ class PredictionPipeline:
             status_callback("🔮 Prediction Engine: Ingesting data & initializing ML tournament...", "info", "ornith", 20)
 
         ds_ctx, oc_ctx, router_ctx, gen_tokens, gen_temp = orchestrator._compute_headroom()
-        coder_llm = orchestrator._get_model("ornith", required_ctx=oc_ctx)
+        coder_key = resolve_model_key("coding") or "ornith"
+        try:
+            coder_llm = orchestrator._get_model(coder_key, required_ctx=oc_ctx)
+            if not orchestrator._is_model_valid(coder_llm):
+                coder_llm = orchestrator._get_model("router", required_ctx=oc_ctx)
+        except (FileNotFoundError, Exception):
+            coder_llm = orchestrator._get_model("router", required_ctx=oc_ctx)
 
         # 1. Check for real live financial / time-series data
         real_data_context = ""
@@ -85,14 +92,23 @@ class PredictionPipeline:
         ok, output = orchestrator.sandbox.execute(code, language="python", timeout=60)
 
         metrics_json = None
-        for line in output.split("\n"):
-            line = line.strip()
-            if line.startswith("{") and ("r2" in line or "champion_model" in line):
-                try:
-                    metrics_json = json.loads(line)
-                    break
-                except Exception:
-                    pass
+        # Robust multi-line JSON search
+        json_match = re.search(r'\{[\s\S]*?"(?:champion_model|r2|model_scores)"[\s\S]*?\}', output)
+        if json_match:
+            try:
+                metrics_json = json.loads(json_match.group(0))
+            except Exception:
+                pass
+
+        if not metrics_json:
+            for line in output.split("\n"):
+                line = line.strip()
+                if line.startswith("{") and ("r2" in line or "champion_model" in line):
+                    try:
+                        metrics_json = json.loads(line)
+                        break
+                    except Exception:
+                        pass
 
         metrics_md = ""
         if metrics_json:
@@ -120,6 +136,8 @@ class PredictionPipeline:
                     f"| :--- | :--- | :--- |\n"
                     f"{scores_rows}\n\n"
                 )
+        elif not ok and output:
+            metrics_md = f"\n\n> ⚠️ **Sandbox Notice:** Execution encountered an issue during model training:\n```\n{output[:500]}\n```\n"
 
         if status_callback:
             status_callback("🔮 Rendering Interactive Multi-Trace Forecast Surface...", "info", "system", 90)
@@ -239,4 +257,3 @@ class PredictionPipeline:
             "</html>\n"
             "<!--/ARTIFACT_HTML-->"
         )
-

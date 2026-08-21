@@ -2,6 +2,7 @@ import re
 import os
 import shutil
 from backend.sandbox import Sandbox
+from backend.downloader import resolve_model_key
 
 class ChipDesignPipeline:
     """Verilog HDL & SPICE EDA Simulation Pipeline with 3D Semiconductor Layout Rendering."""
@@ -32,7 +33,14 @@ class ChipDesignPipeline:
         if status_callback:
             status_callback("Stage 1: Architecture Decomposition...", "info", "deepseek_r1", 25)
 
-        ds_llm = orchestrator._get_model("deepseek_r1", required_ctx=ds_ctx)
+        reasoning_key = resolve_model_key("reasoning") or "deepseek_r1"
+        try:
+            ds_llm = orchestrator._get_model(reasoning_key, required_ctx=ds_ctx)
+            if not orchestrator._is_model_valid(ds_llm):
+                ds_llm = orchestrator._get_model("router", required_ctx=ds_ctx)
+        except (FileNotFoundError, Exception):
+            ds_llm = orchestrator._get_model("router", required_ctx=ds_ctx)
+
         arch_prompt = (
             f"You are a principal semiconductor architect.\n"
             f"Decompose the following hardware request into a detailed block specification:\n"
@@ -44,9 +52,16 @@ class ChipDesignPipeline:
 
         # Stage 2: HDL / SPICE Generation
         if status_callback:
-            status_callback("Stage 2: Generating HDL Code...", "info", "ornith", 45)
+            status_callback(f"Stage 2: Generating {req_lang.upper()} Code...", "info", "ornith", 45)
 
-        coder_llm = orchestrator._get_model("ornith", required_ctx=oc_ctx)
+        coder_key = resolve_model_key("coding") or "ornith"
+        try:
+            coder_llm = orchestrator._get_model(coder_key, required_ctx=oc_ctx)
+            if not orchestrator._is_model_valid(coder_llm):
+                coder_llm = orchestrator._get_model("router", required_ctx=oc_ctx)
+        except (FileNotFoundError, Exception):
+            coder_llm = orchestrator._get_model("router", required_ctx=oc_ctx)
+
         if is_spice:
             hdl_prompt = (
                 f"Write a complete, syntactically correct SPICE netlist for this specification:\n{arch_plan[:2000]}\n\n"
@@ -81,9 +96,13 @@ class ChipDesignPipeline:
             )
 
         hdl_resp = orchestrator._strip_thinking(orchestrator._call_model(coder_llm, hdl_prompt, gen_tokens, gen_temp))
-        hdl_clean = Sandbox.extract_code(hdl_resp)
-        if not hdl_clean:
-            hdl_clean = hdl_resp
+        
+        # Extract code blocks
+        code_blocks = re.findall(rf"```(?:{req_lang}|verilog|spice)?\s*([\s\S]*?)\s*```", hdl_resp, flags=re.I)
+        if code_blocks:
+            hdl_clean = "\n\n// --- Testbench / Additional Module ---\n\n".join(b.strip() for b in code_blocks if b.strip())
+        else:
+            hdl_clean = Sandbox.extract_code(hdl_resp) or hdl_resp
 
         # Stage 3: 3D Semiconductor Layout Rendering
         if status_callback:
@@ -109,7 +128,7 @@ class ChipDesignPipeline:
             "   - Metal 1 Traces: Cyan tracks (size: 0.4x0.15x9, y: 1.2)\n"
             "   - Via Interconnects: Yellow cylinders (radius: 0.15, height: 0.4, y: 1.5)\n"
             "   - Metal 2 Traces: Orange tracks (size: 9x0.15x0.4, y: 1.8)\n"
-            "5. GLASSMORPHIC HUD PANEL (top-right absolute overlay div): Show design title '4-Bit BCD Counter Chip Layout' and color legend for layers.\n"
+            "5. GLASSMORPHIC HUD PANEL (top-right absolute overlay div): Show design title and color legend for layers.\n"
             "6. RENDER LOOP: Implement animate() calling controls.update(), scene rotation, and renderer.render(scene, camera). RequestAnimationFrame(animate).\n"
             "7. RESIZE LISTENER: Add window.onresize handler updating camera aspect and renderer size.\n"
             "8. NO ES6 IMPORTS. Use global THREE and THREE.OrbitControls.\n"
@@ -132,7 +151,7 @@ class ChipDesignPipeline:
 
         output_parts = [
             f"### 🏗️ Stage 1: Architecture Decomposition\n\n{arch_plan}\n\n",
-            f"### ⚡ Stage 2: HDL Design\n\n```verilog\n{hdl_clean}\n```\n\n",
+            f"### ⚡ Stage 2: HDL Design\n\n```{req_lang}\n{hdl_clean}\n```\n\n",
             f"### 🔬 Stage 3: 3D Chip Architecture Visualization\n\n{viz_html}"
         ]
 

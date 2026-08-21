@@ -276,19 +276,51 @@ class AgentOrchestrator:
         try:
             if self.cancel_event and self.cancel_event.is_set():
                 raise RuntimeError("Generation cancelled by user.")
-            if hasattr(model, 'create_chat_completion'):
-                messages = []
-                if system_prompt:
-                    messages.append({"role": "system", "content": system_prompt})
-                messages.append({"role": "user", "content": prompt})
-                resp = model.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature)
-                return resp['choices'][0]['message']['content']
-            elif isinstance(model, TransformerWrapper):
-                return model(prompt, max_tokens=max_tokens, temperature=temperature, system_prompt=system_prompt)
-            elif callable(model):
-                return model(prompt, max_tokens=max_tokens, temperature=temperature)
-            else:
-                raise Exception("Unknown model callable signature.")
+
+            # Run inference in a sub-thread with a hard timeout to prevent
+            # infinite hangs when models silently fall back to CPU
+            result_container = [None]
+            error_container = [None]
+
+            def _inference():
+                try:
+                    if hasattr(model, 'create_chat_completion'):
+                        messages = []
+                        if system_prompt:
+                            messages.append({"role": "system", "content": system_prompt})
+                        messages.append({"role": "user", "content": prompt})
+                        resp = model.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature)
+                        result_container[0] = resp['choices'][0]['message']['content']
+                    elif isinstance(model, TransformerWrapper):
+                        result_container[0] = model(prompt, max_tokens=max_tokens, temperature=temperature, system_prompt=system_prompt)
+                    elif callable(model):
+                        result_container[0] = model(prompt, max_tokens=max_tokens, temperature=temperature)
+                    else:
+                        error_container[0] = Exception("Unknown model callable signature.")
+                except Exception as e:
+                    error_container[0] = e
+
+            inference_thread = threading.Thread(target=_inference, daemon=True)
+            inference_thread.start()
+
+            # Hard timeout: 180s default, scaled by token count
+            timeout_secs = min(300, max(120, max_tokens * 0.04))
+            inference_thread.join(timeout=timeout_secs)
+
+            if inference_thread.is_alive():
+                # Thread is still running — timed out
+                if self.cancel_event:
+                    self.cancel_event.set()  # Signal cancellation to stop the model
+                raise RuntimeError(
+                    f"Model inference timed out after {int(timeout_secs)}s "
+                    f"(max_tokens={max_tokens}). The model may be running on CPU. "
+                    f"Check GPU settings."
+                )
+
+            if error_container[0]:
+                raise error_container[0]
+
+            return result_container[0]
         finally:
             self.inference_lock.release()
 
@@ -316,14 +348,20 @@ class AgentOrchestrator:
                 parts = cleaned.split(open_tag, 1)
                 before_think = parts[0].strip()
                 after_think = parts[1].strip() if len(parts) > 1 else ""
-                if before_think:
-                    cleaned = before_think
-                elif "\n\n" in after_think:
+                # Filter out internal reasoning from after_think
+                if "\n\n" in after_think:
                     paragraphs = [p.strip() for p in after_think.split("\n\n") if p.strip()]
                     content_paragraphs = [p for p in paragraphs if not p.lower().startswith(("okay,", "so,", "i need to", "i should", "first, i", "let's see", "i'll start"))]
-                    cleaned = "\n\n".join(content_paragraphs) if content_paragraphs else after_think
+                    after_clean = "\n\n".join(content_paragraphs) if content_paragraphs else after_think
                 else:
-                    cleaned = after_think
+                    after_clean = after_think
+                # Keep both before and after content (don't drop after_think)
+                if before_think and after_clean:
+                    cleaned = before_think + "\n\n" + after_clean
+                elif before_think:
+                    cleaned = before_think
+                elif after_clean:
+                    cleaned = after_clean
 
         lines = cleaned.split("\n")
         dedup_lines = []
@@ -448,24 +486,28 @@ class AgentOrchestrator:
         except Exception:
             pass
 
-        # 2. Deep multi-source web scrape (Primary Query)
+        self._check_cancelled("extreme:web_scrape")
+
+        # 2. Deep multi-source web scrape (Primary Query) — reduced from 8/5 to 6/3
         try:
-            scrape_res = self.web_search.search_and_scrape(prompt, max_results=8, max_scrapes=5)
+            scrape_res = self.web_search.search_and_scrape(prompt, max_results=6, max_scrapes=3)
             if isinstance(scrape_res, dict) and not scrape_res.get("empty", True):
                 raw_contexts.append(scrape_res.get("context", ""))
             else:
-                search_res = self.web_search.search(prompt, max_results=8)
+                search_res = self.web_search.search(prompt, max_results=6)
                 if isinstance(search_res, list) and search_res:
-                    formatted = [f"[{i+1}] {item.get('title', '')} ({item.get('link', item.get('url', ''))}):\n{item.get('snippet', '')}" for i, item in enumerate(search_res[:6])]
+                    formatted = [f"[{i+1}] {item.get('title', '')} ({item.get('link', item.get('url', ''))}):\n{item.get('snippet', '')}" for i, item in enumerate(search_res[:5])]
                     raw_contexts.append("\n\n".join(formatted))
         except Exception:
             pass
 
-        # 3. Targeted Sub-Query Deep Scrape for comprehensive coverage
+        self._check_cancelled("extreme:sub_query")
+
+        # 3. Targeted Sub-Query snippet search (no deep scrape — just snippets)
         try:
             sub_query = re.sub(r"(tell me|explain|give me|what is|how to|a complete guide for)", "", prompt, flags=re.I).strip()
             if sub_query and len(sub_query) > 5 and sub_query.lower() != prompt.lower():
-                sub_res = self.web_search.search(f"{sub_query} latest analysis overview", max_results=4)
+                sub_res = self.web_search.search(f"{sub_query} latest analysis overview", max_results=3)
                 if isinstance(sub_res, list) and sub_res:
                     formatted_sub = [f"[Ref {i+1}] {item.get('title', '')} ({item.get('link', item.get('url', ''))}):\n{item.get('snippet', '')}" for i, item in enumerate(sub_res[:3])]
                     raw_contexts.append("\n\n".join(formatted_sub))
@@ -476,6 +518,8 @@ class AgentOrchestrator:
 
         if status_callback:
             status_callback("🔬 Extreme Research [Stage 2/3]: Cross-referencing empirical data & resolving facts...", "info", "vibethinker", 50)
+
+        self._check_cancelled("extreme:synthesis")
 
         # Stage 3: Deep Technical Synthesis with DeepSeek-R1
         if status_callback:
