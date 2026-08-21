@@ -93,6 +93,16 @@ class CodingPipeline:
                 ds_llm = orchestrator._get_model(model_key, required_ctx=ds_ctx)
                 ds_display = orchestrator._get_display_model_name(model_key)
                 plan_p = f"Create a step-by-step logic plan:\n{ds_safe}"
+                
+                # Recall past verified experiences from persistent memory
+                try:
+                    if hasattr(orchestrator, "memory") and orchestrator.memory and not is_benchmark:
+                        past_mem = orchestrator.memory.recall(prompt, n_results=1)
+                        if past_mem:
+                            plan_p += f"\n\n{past_mem}"
+                except Exception:
+                    pass
+
                 if lessons:
                     plan_p += f"\n\nLESSONS FROM PREVIOUS FAILURES:\n{lessons[:800]}"
                 ds_draft = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, plan_p, gen_tokens, logic_temp, system_prompt=planner_sys))
