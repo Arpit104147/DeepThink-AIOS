@@ -2,7 +2,6 @@ import os
 import re
 import gc
 import uuid
-import re
 import shutil
 from backend.sandbox import Sandbox
 from backend.orchestrator.router import TaskRouter
@@ -57,13 +56,14 @@ class CodingPipeline:
         )
 
         coder_sys = (
-            "You are an expert computational programmer and software engineer.\n"
-            "Your job is to translate the logic plan into a complete, clean, and immediately runnable Python script.\n\n"
-            "STRICT RULES:\n"
-            "1. Implement equations and data structures EXACTLY as requested.\n"
-            "2. Do NOT write placeholders, mock functions, or abbreviated loop bodies.\n"
-            "3. Handle edge cases: division by zero, array bounds, thread safety.\n"
-            "4. AUTOMATED SELF-TESTING MANDATE: Append a test suite at the bottom of the script using strict assertions."
+            f"You are an expert computational programmer and software engineer.\n"
+            f"Your job is to translate the logic plan into a complete, clean, and immediately runnable {lang_name} program.\n\n"
+            f"STRICT RULES:\n"
+            f"1. Implement equations and data structures EXACTLY as requested by the user.\n"
+            f"2. Do NOT write placeholders, mock functions, or abbreviated loop bodies.\n"
+            f"3. Handle edge cases: division by zero, array bounds, thread safety.\n"
+            f"4. AUTOMATED SELF-TESTING MANDATE: Append a test suite at the bottom of the script using strict assertions.\n"
+            f"5. Output ONLY valid {lang_name} code inside ```{req_lang}``` blocks."
         )
 
         benchmark_coder_sys = (
@@ -75,6 +75,11 @@ class CodingPipeline:
             "3. Do NOT add artificial type checking or raise unexpected ValueErrors.\n"
             "4. Do NOT generate example print statements, dummy calls, or top-level assertion tests."
         )
+
+        # Track the last code and output for fallback
+        code = ""
+        output = ""
+        compiled_plan = ""
 
         for reset in range(max_resets):
             max_rounds = 1 if (is_benchmark or reset > 0) else 2
@@ -182,6 +187,7 @@ class CodingPipeline:
                     ok, output_log, temp_dir = orchestrator.sandbox.execute_workspace(files_dict)
                     if ok:
                         return f"### 📂 Multi-File Workspace Generated successfully!\n\nBelow is the live simulation:\n\n{output_log}"
+                    output = output_log
                 else:
                     ok, output = orchestrator.sandbox.execute(code, language=req_lang)
                     if ok:

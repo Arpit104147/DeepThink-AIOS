@@ -5,6 +5,18 @@ from backend.orchestrator.router import TaskRouter
 class ReasoningPipeline:
     """Program-Aided Language (PAL) Reasoning Pipeline & SymPy Sandbox Verifier."""
 
+    LATEX_RULES = (
+        "MANDATORY LATEX FORMATTING RULES:\n"
+        "1. Wrap EVERY mathematical variable, function, or expression in single dollar signs. "
+        "Examples: $x$, $n$, $f(x)$, $\\ln n$, $n \\ge 2$, $p^2 - 1$.\n"
+        "2. Wrap ALL standalone equations, integrals, series, and limits in display double dollar signs on their own line. "
+        "Example:\n$$\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}$$\n"
+        "3. NEVER output raw unformatted math text like 'f(x)f(x)', 'lnn', or 'n>=2'. "
+        "Always use proper LaTeX: $f(x)$, $\\ln n$, $n \\ge 2$.\n"
+        "4. For fractions use $\\frac{a}{b}$, for square roots use $\\sqrt{x}$, "
+        "for summations use $\\sum$, for integrals use $\\int$.\n"
+    )
+
     @staticmethod
     def execute(orchestrator, prompt, mode="auto", selected_models=None, status_callback=None):
         ds_ctx, oc_ctx, router_ctx, gen_tokens, gen_temp = orchestrator._compute_headroom()
@@ -17,12 +29,9 @@ class ReasoningPipeline:
             ds_llm = orchestrator._get_model("deepseek_r1", required_ctx=ds_ctx)
             theory_p = (
                 "You are an expert theoretical mathematician and physicist.\n"
-                "Provide a rigorous, step-by-step academic derivation with complete LaTeX equations.\n\n"
-                "MANDATORY LATEX FORMATTING RULES:\n"
-                "1. Wrap EVERY single mathematical variable, function, or expression in standard single dollar signs ($x$, $n \\ge 2$, $\\ln n$, $f(x) = \\frac{1}{x (\\ln x)^2}$).\n"
-                "2. Wrap ALL major standalone equations, integrals, series, and limits in centered display double dollar signs ($$ ... $$).\n"
-                "3. NEVER output raw concatenated text (like 'lnnlnn' or 'f(x)f(x)'). Always use proper LaTeX notation ($f(x)$, $\\ln n$).\n\n"
-                f"Request: {prompt}"
+                "Provide a rigorous, step-by-step academic derivation.\n\n"
+                + ReasoningPipeline.LATEX_RULES +
+                f"\nRequest: {prompt}"
             )
             raw = orchestrator._call_model(ds_llm, theory_p, gen_tokens, gen_temp)
             cleaned = orchestrator._strip_thinking(raw)
@@ -43,11 +52,8 @@ class ReasoningPipeline:
         synth_p = (
             f"Original Request:\n{prompt}\n\n"
             f"Verified Solution Output:\n{pg_out[:2000]}\n\n"
-            "Provide a final, clear, step-by-step academic explanation.\n"
-            "MANDATORY LATEX RULES:\n"
-            "1. Wrap ALL inline variables and terms in single dollar signs ($x$, $n$, $\\ln n$).\n"
-            "2. Wrap ALL standalone formulas and integrals in centered display double dollar signs ($$ ... $$).\n"
-            "3. Format all math terms cleanly in LaTeX so KaTeX renders them perfectly."
+            "Provide a final, clear, step-by-step academic explanation.\n\n"
+            + ReasoningPipeline.LATEX_RULES
         )
         final_answer = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, synth_p, gen_tokens, gen_temp))
 

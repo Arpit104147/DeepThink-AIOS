@@ -135,14 +135,18 @@ export const renderMarkdownTable = (tableLines, tableKey) => {
  * block math, headings, tables, lists, horizontal rules, paragraphs.
  */
 export const parseAndRenderSegment = (segment) => {
-  // Split on block math \[ ... \] or $$ ... $$. Previous pattern was over-escaped.
-  const parts = segment.split(/(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)/g);
+  // Normalize: collapse $$ that are on their own line with content on the next line
+  // e.g. "$$\n\\sum_{n=1}...\n$$" → "$$\\sum_{n=1}...$$"
+  let normalized = segment.replace(/\$\$\s*\n\s*/g, "$$").replace(/\s*\n\s*\$\$/g, "$$");
+
+  // Split on block math \[ ... \] or $$ ... $$
+  const parts = normalized.split(/(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)/g);
   return parts.map((part, index) => {
     if (part.startsWith("\\[") && part.endsWith("\\]")) {
       const tex = part.slice(2, -2).trim();
       return <div key={index} className="math-block">{renderMath(tex, true)}</div>;
     }
-    if (part.startsWith("$$") && part.endsWith("$$")) {
+    if (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) {
       const tex = part.slice(2, -2).trim();
       return <div key={index} className="math-block">{renderMath(tex, true)}</div>;
     }
