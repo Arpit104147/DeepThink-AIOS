@@ -2,7 +2,7 @@
 
 # 🧠 DeepThink AIOS
 
-### Fully Local Multi-Agent AI Operating System
+### Fully Local Multi-Agent AI Operating System & Autonomous Research Fleet
 
 *An orchestrated fleet of specialized LLMs running on consumer hardware — zero cloud dependencies.*
 
@@ -15,10 +15,7 @@
 
 ---
 
-DeepThink AIOS is a **production-grade, fully offline multi-agent system** that routes user queries through specialized LLM pipelines for coding, reasoning, data science, 3D visualization, PDF document parsing, multimodal vision, and semiconductor chip design — all running locally with dynamic hardware scaling from Intel iGPUs to NVIDIA H100s.
-
-> [!CAUTION]
-> This project is in active development. The multi-sandbox architecture and Dynamic Memory Allocator push consumer hardware to its limits.
+DeepThink AIOS is a **production-grade, fully offline multi-agent system** that routes user queries through specialized LLM pipelines for coding, mathematical reasoning, machine learning forecasting, university-grade study curriculum synthesis, 3D semiconductor visualization, PDF document parsing, multimodal vision, and semiconductor chip design — all running locally with dynamic hardware scaling from Intel iGPUs to NVIDIA H100s.
 
 ---
 
@@ -33,25 +30,20 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 
 ---
 
-### ✨ Key Features
+### ✨ Key Features & Specialized Pipelines
 
-- **Universal Vulkan GPU Backend** — Universal acceleration on NVIDIA, AMD, and Intel GPUs via Vulkan compute.
-- **Model Hub** — Dynamic HuggingFace GGUF model downloader, card library, and custom model role mapping.
-- **Dynamic Vision & Multimodal Projector Engine** — Auto-discovers and pairs **ANY** Vision Language GGUF model (`Qwen2.5-VL`, `Qwen3-VL`, `Llava`, `Moondream`) with its corresponding `mmproj*.gguf` projector file.
-- **Native PDF Document Extraction for ALL LLMs** — Native page-by-page PDF parser allowing **EVERY MODEL** (both Vision & Non-Vision LLMs like `DeepSeek-R1`, `Ornith`, `VibeThinker`, `Phi-3.5`, `Gemma-4`) to read, analyze, and explain uploaded PDF documents.
-- **PIL RGB Pre-Processing Pipeline** — Automatically normalizes images (converts PNG/WEBP/RGBA to clean 3-channel RGB JPEG, max 1024x1024) to eliminate aspect-ratio and channel distortions in CLIP vision encoders.
-- **Multi-Turn Conversation Memory** — Preserves recent conversation history (`history`) in `/api/chat` payloads so follow-up prompts (*"give me C code for it"*, *"explain page 2"*) maintain full context without hallucinating.
-- **7-Way Intelligent Routing** — Intent-aware pipeline selection across coding, reasoning, prediction, search, 3D viz, PDF/vision, and chip design.
-- **Self-Scaffolding Code Generation** — Primary Coder LLM autonomously plans and writes code in a single unified trajectory.
-- **AST-Aware Self-Healing** — Surgical patching via Python AST extraction instead of fixed-line windows.
-- **Parallel Web Scraping** — ThreadPoolExecutor-based concurrent page fetching (`N×timeout → 1×timeout`).
-- **Dual Sandbox Verification** — Polyglot execution across 13 languages with kernel-level isolation.
-- **Chip Design EDA Pipeline** — Full Verilog/SPICE synthesis with SkyWater 130nm PDK mapping.
+- **🎓 Master Study Pipeline (`🎓 Study`)** — Deep pedagogical textbook synthesis powered exclusively by **DeepSeek-R1**. Generates exhaustive 10–20 page master reference chapters with centered display LaTeX formulas (`$$ ... $$`), multi-dimensional comparison tables, memory mnemonics, a **10-Problem Solved Question Bank** (Easy $\rightarrow$ Hard), and a **Standardized Mock Exam Blueprint**. Supports direct multi-page PDF ingestion (past 5-year exam papers & textbook notes).
+- **🔮 6-Algorithm ML Prediction Tournament (`🔮 Predict`)** — High-precision time-series forecasting engine competing `HistGradientBoosting`, `RandomForest`, `ExtraTrees`, `SupportVectorRegressor (SVR)`, `Polynomial Ridge`, and `Huber Regressor` inside the Linux sandbox, streaming an interactive **Plotly confidence curve** with 95% uncertainty intervals.
+- **🌐 100% Keyless Multi-Tier Web Search (`🌐 Search` & `🔬 Extreme`)** — Scrapes live financial tickers, real-time weather, and multi-source academic publications (arXiv, Wikipedia, technical documentation) without API keys or model refusals.
+- **💻 7-Phase Agentic Coding Pipeline** — Autonomous software architect drafting, logic verification, polyglot sandbox execution, self-testing testbenches, and AST linter self-healing.
+- **⚡ Dual-Mode Mathematical Reasoning (PAL & Theoretical)** — Solves complex calculus, number theory, and physics proofs with sandbox SymPy verification and formatted KaTeX typography.
+- **🔬 Chip Design & 3D Silicon EDA Engine** — Synthesizes synthesizable Verilog HDL, runs Icarus Verilog testbenches, and mounts an interactive **3D WebGL Silicon Layer Visualizer**.
+- **👁️ Dynamic Vision & Multimodal Projector Engine** — Pairs Vision Language GGUF models (`Qwen2.5-VL`, `Qwen3-VL`, `Llava`) with C++ `mmproj*.gguf` projectors for handwriting OCR, schematic diagram reasoning, and image QA.
 - **Dynamic Memory Allocator (DMA)** — LRU model swapping enabling 7B+ models on 8GB–16GB RAM systems.
 
 ---
 
-## 🤖 Default System Model Fleet
+## 🤖 System Model Fleet
 
 | System Role | Model Name | HuggingFace Repo ID | GGUF Filename & Projector | Quants |
 |---|---|---|---|---|
@@ -61,8 +53,6 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 | **Syntax Linter** | **VibeThinker 3B** | `prithivMLmods/VibeThinker-3B-GGUF` | `VibeThinker-3B.Q6_K.gguf` | Q6_K / Q4_K |
 | **Vision & OCR** | **Qwen-2.5-VL-7B** / **Qwen3-VL-2B** | `unsloth/Qwen2.5-VL-7B-Instruct-GGUF` | `Qwen2.5-VL-7B-Instruct-UD-Q6_K_XL.gguf` + `mmproj-BF16.gguf` | Q6_K / Q4_K / Q8_0 |
 
-*Note: Lightweight 1.5B–3B GGUF models (e.g. Qwen-2.5-1.5B, Qwen3-VL-2B, Llama-3.2-1B/3B) can be assigned to any system role for 8 GB RAM systems via Model Hub.*
-
 ---
 
 ## 🔀 Pipeline Architecture
@@ -70,68 +60,27 @@ DeepThink AIOS is a **production-grade, fully offline multi-agent system** that 
 ```mermaid
 flowchart TD
     %% ── TOP-LEVEL INGESTION ──
-    USER([User Prompt / Image / PDF]) --> ROUTER["Router: Phi-3.5 Mini"]
+    USER([User Prompt / Image / PDF]) --> MODE_CHECK{"Quick Mode Selected?"}
     
-    ROUTER -->|Search Query Triggered| OPT_QUERY["Phi 3.5 Mini: Generate optimized query"]
-    OPT_QUERY --> SCRAPE["Scrape Web Snippets & Live Data"]
-    SCRAPE --> CLASSIFY["Phi-3.5 Mini: Intent Classification"]
-    
-    ROUTER -->|No Search| CLASSIFY
+    MODE_CHECK -->|🎓 Study| STUDY_PIPE["Study Pipeline: DeepSeek-R1 Master Curriculum"]
+    MODE_CHECK -->|🔮 Predict| PREDICT_PIPE["Predict Pipeline: 6-Model ML Tournament"]
+    MODE_CHECK -->|🔬 Extreme| EXTREME_PIPE["Extreme WebSearch: Multi-Source Academic Survey"]
+    MODE_CHECK -->|🌐 Search| SEARCH_PIPE["Simple Search: Live Real-Time Web Data"]
+    MODE_CHECK -->|Off / Auto| ROUTER["Router: Phi-3.5 Mini Intent Classifier"]
 
     %% ── Intent Classification Branches ──
-    CLASSIFY --> PATH_SIMPLE["1. SIMPLE / DIRECT"]
-    CLASSIFY --> PATH_CODING["2. CODING"]
-    CLASSIFY --> PATH_REASONING["3. REASONING (PAL)"]
-    CLASSIFY --> PATH_PREDICT["4. PREDICTION"]
-    CLASSIFY --> PATH_VISION["5. VISION / PDF"]
-    CLASSIFY --> PATH_EXTREME["6. EXTREME WEBSEARCH"]
-    CLASSIFY --> PATH_CHIP["7. CHIP DESIGN"]
+    ROUTER --> PATH_SIMPLE["1. SIMPLE / DIRECT"]
+    ROUTER --> PATH_CODING["2. CODING"]
+    ROUTER --> PATH_REASONING["3. REASONING (PAL)"]
+    ROUTER --> PATH_VISION["4. VISION / PDF"]
+    ROUTER --> PATH_CHIP["5. CHIP DESIGN"]
 
-    %% ── 1. SIMPLE PATHWAY ──
-    PATH_SIMPLE --> SIMPLE_ANS["Phi-3.5 Mini: Answer directly with web/conversation context"]
-
-    %% ── 2. REASONING PATHWAY ──
-    PATH_REASONING --> REASON_BRANCH{"Playground Verifiable?"}
-    REASON_BRANCH -->|Yes| PAL_DRAFT["Ornith 9B: Write SymPy/Verification Script"]
-    PAL_DRAFT --> PAL_SB{"Execution Sandbox"}
-    
-    PAL_SB -->|Verified Success| DS_SYNTH["DeepSeek R1-7B: Pedagogical LaTeX Synthesis"]
-    DS_SYNTH --> REASON_PASS["Pass final verified math solution"]
-    
-    PAL_SB -->|Syntax/Linter Error| VT_LINT["VibeThinker 3B: Rapid Agent IDE patch"]
-    VT_LINT --> PAL_SB
-    
-    PAL_SB -->|Logic Error| DS_FIX["DeepSeek R1-7B: Adjust logic & retry"]
-    DS_FIX --> PAL_DRAFT
-
-    REASON_BRANCH -->|No| DS_THEORY["DeepSeek R1-7B: Direct detailed academic LaTeX derivation"]
-    DS_THEORY --> REASON_PASS
-
-    %% ── 3. CODING PATHWAY ──
-    PATH_CODING --> C_DRAFT["Ornith 9B: Self-Scaffold & Code Generation"]
-    C_DRAFT --> CODING_SB{"Execution Sandbox"}
-    
-    CODING_SB -->|Verified Success| CODE_PASS["Output final Verified Code Block"]
-    
-    CODING_SB -->|Syntax Error| VT_CODE_LINT["VibeThinker 3B: Agent IDE surgical patch"]
-    VT_CODE_LINT --> CODING_SB
-    
-    CODING_SB -->|Runtime Bug| C_FIX["Ornith 9B: Logic self-correction loop"]
-    C_FIX --> C_DRAFT
-
-    %% ── 4. PREDICTION PATHWAY ──
-    PATH_PREDICT --> P_DRAFT["Ornith 9B: ML Regression Script Generation"]
-    P_DRAFT --> P_SB{"Execution Sandbox"}
-    P_SB -->|Success| P_3D["3D Visualizer + Predictive Metrics"]
-    P_SB -->|Execution Error| P_DRAFT
-
-    %% ── 5. VISION & PDF PATHWAY ──
-    PATH_VISION --> V_CHECK{"Is PDF or Image?"}
-    V_CHECK -->|PDF Document| PDF_PARSE["Native PDF Page Text Extractor"]
-    PDF_PARSE --> ALL_LLM["Feed Page Text to ANY Selected LLM"]
-    V_CHECK -->|Image File| PIL_NORM["PIL RGB 1024x1024 Normalization"]
-    PIL_NORM --> VL_ENGINE["Qwen 2.5-VL / Qwen 3-VL + C++ mmproj Projector"]
-    VL_ENGINE --> ALL_LLM
+    %% ── Execution Pathways ──
+    STUDY_PIPE --> STUDY_OUT["Master Reference Book + 10 Solved Problems + Mock Exam"]
+    PREDICT_PIPE --> PREDICT_OUT["Sandbox ML Tournament + Interactive Plotly Confidence Curve"]
+    PATH_CODING --> CODE_SB{"Execution Sandbox"} --> CODE_PASS["Verified Working Polyglot Code"]
+    PATH_REASONING --> PAL_SB{"SymPy Sandbox"} --> PAL_PASS["Verified LaTeX Proof ($$ ... $$)"]
+    PATH_CHIP --> EDA_SB{"Icarus Verilog"} --> CHIP_OUT["Verilog Module + 3D WebGL Silicon Visualizer"]
 ```
 
 ---
@@ -144,7 +93,7 @@ flowchart TD
 git clone https://github.com/Arpit104147/DeepThink-AIOS.git
 cd DeepThink-AIOS
 
-# Launch servers (Backend on :8080, Web UI on :5173)
+# Launch servers (Backend on :8000, Web UI on :5173)
 ./start.sh
 ```
 
@@ -249,9 +198,9 @@ Copy the printed `https://xxxx.trycloudflare.com` URL, open **`http://localhost:
 
 ## 💻 Tech Stack
 
-- **Backend:** FastAPI, Uvicorn, Python 3.10+, PyTorch, Vulkan SDK, `llama-cpp-python`, ChromaDB, PyPDF
-- **Frontend:** React 18, Vite, Vanilla CSS (Glassmorphism), Google Fonts
-- **Hardware Support:** Vulkan Compute (NVIDIA, AMD, Intel iGPU/dGPU), CPU Fallback
+- **Backend:** FastAPI, Uvicorn, Python 3.10+, PyTorch, Vulkan SDK, `llama-cpp-python`, ChromaDB, PyPDF, Scikit-Learn, Icarus Verilog
+- **Frontend:** React 18, Vite, KaTeX Mathematical Typography, Plotly.js, Three.js / WebGL, Vanilla CSS (Glassmorphism)
+- **Hardware Acceleration:** Vulkan Compute (NVIDIA, AMD, Intel iGPU/dGPU), NVIDIA CUDA, Apple Metal, Multi-Core CPU Fallback
 
 ---
 
