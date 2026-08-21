@@ -47,23 +47,22 @@ class CodingPipeline:
         c_header_rule = ""
 
         planner_sys = (
-            "You are a world-class software architect and algorithm planner.\n"
-            "Your task is to draft a clean, step-by-step logic plan for the user's request.\n\n"
-            "MANDATORY ACCURACY RULES:\n"
-            "1. ADHERE TO USER SPECIFICATIONS: Pay strict attention to the target programming language, data structures, algorithms, and libraries requested by the user.\n"
-            "2. ALGORITHMIC & ARCHITECTURAL RIGOR: Outline the exact data structures, time/space complexity, function signatures, and step-by-step implementation logic.\n"
-            "3. LANGUAGE ACCURACY: Use standard idioms, built-in types, and standard library headers for the target language (e.g. <stdio.h>, <stdlib.h>, <pthread.h>, <stdatomic.h> for C).\n"
-            "4. OUTPUT FORMAT: Write a numbered list of steps explaining the logic, data structures, and edge cases.\n"
-            "5. THINKING CONSTRAINT: Keep your reasoning focused and proceed directly to the implementation plan."
+            f"You are a world-class software architect and algorithm planner.\n"
+            f"Your task is to draft a clean, step-by-step logic plan strictly in {lang_name}.\n\n"
+            f"MANDATORY ACCURACY RULES:\n"
+            f"1. TARGET LANGUAGE: Strictly plan the architecture for {lang_name}. Use standard {lang_name} idioms, built-in types, and standard libraries.\n"
+            f"2. ALGORITHMIC RIGOR: Outline the exact data structures, time/space complexity, function signatures, and step-by-step implementation logic.\n"
+            f"3. OUTPUT FORMAT: Write a numbered list of steps explaining the logic, data structures, and edge cases.\n"
+            f"4. THINKING CONSTRAINT: Keep your reasoning focused and proceed directly to the implementation plan."
         )
 
         coder_sys = (
             "You are an expert computational programmer and software engineer.\n"
             "Your job is to translate the logic plan into a complete, clean, and immediately runnable Python script.\n\n"
             "STRICT RULES:\n"
-            "1. Implement equations EXACTLY as described in the plan.\n"
+            "1. Implement equations and data structures EXACTLY as requested.\n"
             "2. Do NOT write placeholders, mock functions, or abbreviated loop bodies.\n"
-            "3. Handle edge cases: division by zero, array bounds, negative sqrt.\n"
+            "3. Handle edge cases: division by zero, array bounds, thread safety.\n"
             "4. AUTOMATED SELF-TESTING MANDATE: Append a test suite at the bottom of the script using strict assertions."
         )
 
@@ -92,7 +91,7 @@ class CodingPipeline:
 
                 ds_llm = orchestrator._get_model(model_key, required_ctx=ds_ctx)
                 ds_display = orchestrator._get_display_model_name(model_key)
-                plan_p = f"Create a step-by-step logic plan:\n{ds_safe}"
+                plan_p = f"TARGET PROGRAMMING LANGUAGE: {lang_name}\n\nUSER REQUEST: {ds_safe}\n\nCreate a step-by-step logic plan strictly for {lang_name}:"
                 
                 # Recall past verified experiences from persistent memory
                 try:
@@ -121,7 +120,7 @@ class CodingPipeline:
                 if not verified:
                     ds_llm = orchestrator._get_model("deepseek_r1", required_ctx=ds_ctx)
                     ds_display = orchestrator._get_display_model_name("deepseek_r1")
-                    fix_p = f"ORIGINAL REQUEST:\n{prompt}\n\nLogic plan FAILED verification.\nPlan:\n{ds_draft[:2000]}\nError:\n{pg_out[:1000]}\nRewrite a corrected logic plan."
+                    fix_p = f"ORIGINAL REQUEST ({lang_name}):\n{prompt}\n\nLogic plan FAILED verification.\nPlan:\n{ds_draft[:2000]}\nError:\n{pg_out[:1000]}\nRewrite a corrected logic plan strictly for {lang_name}."
                     ds_draft = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, fix_p, gen_tokens, logic_temp, system_prompt=planner_sys))
 
                 compiled_plan = ds_draft
@@ -137,7 +136,7 @@ class CodingPipeline:
                     code_p = f"Implement a complete, optimal Python solution for this task and plan:\n\nTask:\n{prompt}\n\nPlan:\n{compiled_plan}\n\nOutput ONLY python code in ```python```."
                     sys_prompt = benchmark_coder_sys
                 elif req_lang == "python":
-                    code_p = f"Write a complete Python script for this plan:\n{compiled_plan}\n\nWrap in ```python```."
+                    code_p = f"USER REQUEST: {prompt}\n\nPLAN:\n{compiled_plan}\n\nWrite a complete, robust Python script implementing this plan with self-testing assertions. Wrap in ```python```."
                     sys_prompt = coder_sys
                 elif req_lang == "html":
                     code_p = f"Implement a complete web application for this plan:\n{compiled_plan}\n\nWrap each file in <file path=\"...\">...</file> blocks."

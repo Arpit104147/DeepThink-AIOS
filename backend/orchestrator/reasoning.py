@@ -18,6 +18,10 @@ class ReasoningPipeline:
             theory_p = (
                 "You are an expert theoretical mathematician and physicist.\n"
                 "Provide a rigorous, step-by-step academic derivation with complete LaTeX equations.\n\n"
+                "MANDATORY LATEX FORMATTING RULES:\n"
+                "1. Wrap EVERY single mathematical variable, function, or expression in standard single dollar signs ($x$, $n \\ge 2$, $\\ln n$, $f(x) = \\frac{1}{x (\\ln x)^2}$).\n"
+                "2. Wrap ALL major standalone equations, integrals, series, and limits in centered display double dollar signs ($$ ... $$).\n"
+                "3. NEVER output raw concatenated text (like 'lnnlnn' or 'f(x)f(x)'). Always use proper LaTeX notation ($f(x)$, $\\ln n$).\n\n"
                 f"Request: {prompt}"
             )
             raw = orchestrator._call_model(ds_llm, theory_p, gen_tokens, gen_temp)
@@ -39,7 +43,11 @@ class ReasoningPipeline:
         synth_p = (
             f"Original Request:\n{prompt}\n\n"
             f"Verified Solution Output:\n{pg_out[:2000]}\n\n"
-            "Provide a final, clear, step-by-step academic explanation with LaTeX formulas."
+            "Provide a final, clear, step-by-step academic explanation.\n"
+            "MANDATORY LATEX RULES:\n"
+            "1. Wrap ALL inline variables and terms in single dollar signs ($x$, $n$, $\\ln n$).\n"
+            "2. Wrap ALL standalone formulas and integrals in centered display double dollar signs ($$ ... $$).\n"
+            "3. Format all math terms cleanly in LaTeX so KaTeX renders them perfectly."
         )
         final_answer = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, synth_p, gen_tokens, gen_temp))
 
