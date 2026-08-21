@@ -582,14 +582,25 @@ html, body {
   left: 0;
   right: 0;
   display: flex;
-  justify-content: center;
-  padding: 16px 24px 24px;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 24px 24px;
   background: linear-gradient(transparent, var(--bg-primary) 40%);
+  pointer-events: none;
 }
 
 .input-wrapper {
   width: 100%;
   max-width: 768px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.input-box-container {
+  width: 100%;
   position: relative;
 }
 
@@ -915,46 +926,46 @@ html, body {
    Quick Mode Pills (Always Visible Top Selector)
    ═══════════════════════════════════════════════════ */
 .quick-mode-bar {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-bottom: 8px;
-  width: 100%;
-  overflow-x: auto;
-  padding: 2px 4px;
+  margin-bottom: 10px;
+  padding: 4px 6px;
+  background: rgba(18, 18, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  max-width: 100%;
 }
 
 .quick-mode-pill {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  background: transparent;
   padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
+  border-radius: 18px;
+  font-size: 0.76rem;
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
 }
 
 .quick-mode-pill:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.07);
-  color: #e0e0e0;
-  border-color: rgba(255, 255, 255, 0.16);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9 !important;
 }
 
 .quick-mode-pill:active {
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 
 .quick-mode-pill.active {
   font-weight: 600;
-  transform: translateY(-1px);
 }
 
 /* Image preview badge */
