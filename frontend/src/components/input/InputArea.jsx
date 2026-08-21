@@ -68,6 +68,32 @@ const InputArea = ({
         onChange={handleFileUpload}
       />
 
+      {/* Direct Quick-Access Mode Selector Bar */}
+      <div className="quick-mode-bar">
+        {SEARCH_MODES.map((m) => {
+          const isActive = searchMode === m;
+          const color = SEARCH_MODE_COLORS[m];
+          return (
+            <button
+              key={m}
+              type="button"
+              className={`quick-mode-pill ${isActive ? "active" : ""}`}
+              onClick={() => setSearchMode(m)}
+              style={{
+                borderColor: isActive ? (color || "rgba(255,255,255,0.4)") : "rgba(255,255,255,0.08)",
+                background: isActive
+                  ? (color ? `${color}25` : "rgba(255,255,255,0.12)")
+                  : "rgba(255,255,255,0.03)",
+                color: isActive ? (color || "#ffffff") : "#8e8e93",
+                boxShadow: isActive && color ? `0 0 10px ${color}33, inset 0 0 8px ${color}22` : "none",
+              }}
+            >
+              {SEARCH_MODE_LABELS[m]}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="input-wrapper">
         {attachedImage && (
           <span className="image-badge">

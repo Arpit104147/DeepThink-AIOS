@@ -911,6 +911,52 @@ html, body {
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
 }
 
+/* ═══════════════════════════════════════════════════
+   Quick Mode Pills (Always Visible Top Selector)
+   ═══════════════════════════════════════════════════ */
+.quick-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 2px 4px;
+}
+
+.quick-mode-pill {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.quick-mode-pill:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.quick-mode-pill:active {
+  transform: scale(0.96);
+}
+
+.quick-mode-pill.active {
+  font-weight: 600;
+  transform: translateY(-1px);
+}
+
 /* Image preview badge */
 .image-badge {
   position: absolute;
