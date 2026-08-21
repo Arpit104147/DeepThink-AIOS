@@ -34,7 +34,7 @@ class CodingPipeline:
             if min_ctx - gen_tokens < 1500:
                 gen_tokens = max(2048, min_ctx - 1500)
 
-        logic_temp = 0.6
+        logic_temp = 0.5
         crunch_budget = max(1024, ds_ctx - gen_tokens - 1000)
         ds_safe = orchestrator._crunch_prompt(prompt, "deepseek_r1", crunch_budget, status_callback)
 
@@ -43,26 +43,24 @@ class CodingPipeline:
         lessons = ""
         initial_failed_code = ""
         initial_failed_error = ""
-        c_header_rule = ""
 
         planner_sys = (
-            f"You are a world-class software architect and algorithm planner.\n"
-            f"Your task is to draft a clean, step-by-step logic plan strictly in {lang_name}.\n\n"
-            f"MANDATORY ACCURACY RULES:\n"
-            f"1. TARGET LANGUAGE: Strictly plan the architecture for {lang_name}. Use standard {lang_name} idioms, built-in types, and standard libraries.\n"
-            f"2. ALGORITHMIC RIGOR: Outline the exact data structures, time/space complexity, function signatures, and step-by-step implementation logic.\n"
-            f"3. OUTPUT FORMAT: Write a numbered list of steps explaining the logic, data structures, and edge cases.\n"
-            f"4. THINKING CONSTRAINT: Keep your reasoning focused and proceed directly to the implementation plan."
+            f"You are a distinguished principal software architect.\n"
+            f"Your task is to draft a rigorous, step-by-step logic and algorithmic architecture plan for {lang_name}.\n\n"
+            f"MANDATORY ARCHITECTURAL RULES:\n"
+            f"1. ALGORITHMIC SPECIFICATION: Detail the exact data structures, concurrency primitives, memory management, time/space complexity, and edge cases.\n"
+            f"2. PROSE ONLY: Write clear structured English explanation steps. DO NOT write raw pseudo-code or syntactically incomplete code blocks.\n"
+            f"3. THOROUGHNESS: Clearly define all state transitions, lock-free pointer swaps, invariants, and unit test scenarios."
         )
 
         coder_sys = (
             f"You are an expert computational programmer and software engineer.\n"
             f"Your job is to translate the logic plan into a complete, clean, and immediately runnable {lang_name} program.\n\n"
             f"STRICT RULES:\n"
-            f"1. Implement equations and data structures EXACTLY as requested by the user.\n"
+            f"1. Implement all structures and algorithms EXACTLY as requested.\n"
             f"2. Do NOT write placeholders, mock functions, or abbreviated loop bodies.\n"
-            f"3. Handle edge cases: division by zero, array bounds, thread safety.\n"
-            f"4. AUTOMATED SELF-TESTING MANDATE: Append a test suite at the bottom of the script using strict assertions.\n"
+            f"3. Handle edge cases: bounds checking, thread safety, memory deallocation.\n"
+            f"4. AUTOMATED SELF-TESTING MANDATE: Append a complete self-testing test suite at the bottom with assertions.\n"
             f"5. Output ONLY valid {lang_name} code inside ```{req_lang}``` blocks."
         )
 
@@ -96,7 +94,7 @@ class CodingPipeline:
 
                 ds_llm = orchestrator._get_model(model_key, required_ctx=ds_ctx)
                 ds_display = orchestrator._get_display_model_name(model_key)
-                plan_p = f"TARGET PROGRAMMING LANGUAGE: {lang_name}\n\nUSER REQUEST: {ds_safe}\n\nCreate a step-by-step logic plan strictly for {lang_name}:"
+                plan_p = f"TARGET PROGRAMMING LANGUAGE: {lang_name}\n\nUSER REQUEST: {ds_safe}\n\nCreate a step-by-step logic and algorithmic architecture plan strictly for {lang_name}:"
                 
                 # Recall past verified experiences from persistent memory
                 try:
@@ -148,22 +146,31 @@ class CodingPipeline:
                     sys_prompt = "You are an expert full-stack web developer."
                 else:
                     c_header_rule = ""
-                    if req_lang == "c" or req_lang == "cpp":
+                    if req_lang == "cpp":
                         c_header_rule = (
-                            "STRICT C/C++ SYNTAX & ENTRYPOINT RULES:\n"
-                            "1. MANDATORY int main(): You MUST write a complete 'int main(void)' function with unit tests at the end of the code. Without main(), linking WILL FAIL with 'undefined reference to main'.\n"
-                            "2. HEADERS: Use standard C11 <stdatomic.h> and <pthread.h>. NEVER include <atomic.h>.\n"
-                            "3. ARRAY POINTER SYNTAX: queue->queue is 'int*'. Access elements as 'queue->queue[i] = val'. NEVER write '*queue->queue[i] = val' or '*queue->queue = (int*)0'.\n"
-                            "4. FUNCTION PROTOTYPES: Declare all function prototypes (or place function definitions) BEFORE main() and caller functions to prevent implicit declaration errors.\n"
-                            "5. LOCK-FREE ATOMICS: Use standard C11 atomic_compare_exchange_weak_explicit(&var, &expected, desired, memory_order_relaxed, memory_order_relaxed) or atomic_compare_exchange_strong.\n\n"
+                            "STRICT C++ SYNTAX & STRUCT RULES:\n"
+                            "1. HEADERS: Include all necessary standard headers: <iostream>, <atomic>, <memory>, <vector>, <thread>, <mutex>, <cassert>, <chrono>.\n"
+                            "2. STRUCT ORDERING: Define all node structs (e.g., `struct Node { ... };`) completely BEFORE any class or method references them. NEVER reference undeclared types.\n"
+                            "3. SIGNATURES: Use standard modern C++ syntax (e.g., `Node* push_back(const std::pair<int, std::string>& key)`). Never write invalid parameter casts.\n"
+                            "4. ATOMICS: Use `std::atomic<Node*> next;` with explicit memory orderings (`std::memory_order_acquire`, `std::memory_order_release`, `std::memory_order_relaxed`).\n"
+                            "5. ENTRYPOINT & UNIT TESTS: Write a complete `int main() { ... }` executing comprehensive unit test assertions.\n\n"
                         )
+                    elif req_lang == "c":
+                        c_header_rule = (
+                            "STRICT C11 SYNTAX & ENTRYPOINT RULES:\n"
+                            "1. HEADERS: Use standard C11 <stdatomic.h>, <pthread.h>, <stdio.h>, <stdlib.h>, <assert.h>. NEVER include <atomic.h>.\n"
+                            "2. STRUCTS: Define `typedef struct Node { ... } Node;` at the top before usage.\n"
+                            "3. ATOMICS: Use standard C11 `atomic_compare_exchange_weak_explicit(&var, &expected, desired, memory_order_relaxed, memory_order_relaxed)`.\n"
+                            "4. ENTRYPOINT: Write a complete `int main(void)` with working unit test assertions.\n\n"
+                        )
+
                     code_p = (
                         f"Write a complete, fully working, self-contained {lang_name} program for this request:\n{prompt}\n\n"
                         f"{c_header_rule}"
                         f"Plan:\n{compiled_plan}\n\n"
                         f"Write ONLY valid {lang_name} code inside ```{req_lang}``` blocks. Include main() with unit tests."
                     )
-                    sys_prompt = f"You are an expert {lang_name} systems engineer. Output ONLY code in ```{req_lang}``` blocks. {c_header_rule}"
+                    sys_prompt = f"You are an expert {lang_name} systems engineer. Output ONLY code in ```{req_lang}``` blocks.\n{c_header_rule}"
 
                 raw_model_output = orchestrator._strip_thinking(orchestrator._call_model(oc_llm, code_p, gen_tokens, gen_temp, system_prompt=sys_prompt))
                 
@@ -192,7 +199,7 @@ class CodingPipeline:
                     ok, output = orchestrator.sandbox.execute(code, language=req_lang)
                     if ok:
                         orchestrator.memory.save(prompt, code)
-                        return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
+                        return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang, execution_passed=True)
 
                 if not initial_failed_code:
                     initial_failed_code = code
@@ -200,15 +207,15 @@ class CodingPipeline:
 
                 # Agent IDE surgical patch / rewrite
                 oc_fix = orchestrator._get_model("ornith", required_ctx=oc_ctx)
-                fix_p = f"Fix the following {lang_name} code:\n\n{c_header_rule}CODE:\n{code[:2000]}\n\nERROR:\n{output[:800]}\n\nOutput complete script in ```{req_lang}```."
+                fix_p = f"Fix the following {lang_name} code to resolve the compilation/runtime errors:\n\nCODE:\n{code[:2000]}\n\nCOMPILER ERROR:\n{output[:800]}\n\nOutput complete fixed program in ```{req_lang}```."
                 code = Sandbox.extract_code(orchestrator._strip_thinking(orchestrator._call_model(oc_fix, fix_p, gen_tokens, gen_temp)))
                 ok, output = orchestrator.sandbox.execute(code, language=req_lang)
                 if ok:
                     orchestrator.memory.save(prompt, code)
-                    return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
+                    return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang, execution_passed=True)
 
         # Fallback output if all retries exhausted
-        return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang)
+        return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang, execution_passed=False)
 
     @staticmethod
     def _detect_target_language(prompt):

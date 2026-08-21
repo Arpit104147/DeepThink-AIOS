@@ -186,6 +186,14 @@ class AgentOrchestrator:
                     self.loaded_models.pop(model_key, None)
                     if model_key in self.model_access_order:
                         self.model_access_order.remove(model_key)
+                elif not is_cpu and not self._is_gpu_resident(model_obj):
+                    # Model was loaded on CPU (e.g. preloaded in RAM), but GPU is requested!
+                    # Evict from CPU cache and reload properly into GPU VRAM
+                    print(f"🔄 Promoting '{model_key}' from CPU RAM to GPU VRAM...")
+                    self.loaded_models.pop(model_key, None)
+                    if model_key in self.model_access_order:
+                        self.model_access_order.remove(model_key)
+                    self._close_model(model_obj, model_key)
                 else:
                     self._touch_model(model_key)
                     return model_obj
@@ -441,16 +449,15 @@ class AgentOrchestrator:
         ok, output = self.sandbox.execute(code, language="python")
         return ok, output, code
 
-    def _synthesize_coding_response(self, prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None, req_lang="python"):
-        if req_lang in ["c", "cpp"] and "main" not in code:
-            code += "\n\nint main(void) {\n    printf(\"Unit Test Execution Complete!\\n\");\n    return 0;\n}\n"
-            try:
-                _, new_output = self.sandbox.execute(code, language=req_lang)
-                if new_output:
-                    output = new_output
-            except Exception:
-                pass
-        return f"### 💡 Logic & Architectural Plan\n\n{compiled_plan}\n\n### ⚙️ Sandbox Execution Output\n```\n{output[:3000]}\n```\n\n### 💻 Verified Working Code\n\n```{req_lang}\n{code}\n```"
+    def _synthesize_coding_response(self, prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None, req_lang="python", execution_passed=True):
+        if execution_passed:
+            exec_header = "### ⚙️ Sandbox Execution Output (Passed ✅)"
+            code_header = "### 💻 Verified Working Code"
+        else:
+            exec_header = "### ⚙️ Sandbox Execution Diagnostic (Review Required ⚠️)"
+            code_header = "### 💻 Generated Implementation"
+
+        return f"### 💡 Logic & Architectural Plan\n\n{compiled_plan}\n\n{exec_header}\n```\n{output[:3000]}\n```\n\n{code_header}\n\n```{req_lang}\n{code}\n```"
 
     def _generate_3d_visualization(self, prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback=None):
         viz_prompt = (
