@@ -52,6 +52,7 @@ class AgentOrchestrator:
         self.dual_gpu_pipeline = False
         self.memory_mode = "normal"
         self.max_auto_ctx = 16384
+        self.kaggle_hotswap_mode = True
 
     @property
     def router(self):
