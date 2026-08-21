@@ -151,6 +151,27 @@ class AgentOrchestrator:
         gc.collect()
         self._empty_gpu_caches()
 
+    def _evict_lru_gpu_model(self, incoming_key):
+        """Evict the least-recently-used GPU-resident model to free VRAM for a new load."""
+        # Find GPU-resident models that aren't the one we're about to load
+        gpu_models = [
+            k for k in self.model_access_order
+            if k != incoming_key and k in self.loaded_models and self._is_gpu_resident(self.loaded_models[k])
+        ]
+        if not gpu_models:
+            return
+        # Check if we have enough free VRAM (need ~2GB minimum for a new model)
+        free_vram = self._get_vram_free_gb()
+        if free_vram is not None and free_vram > 2.0:
+            return  # Enough VRAM, no eviction needed
+        # Evict the oldest (least recently used) GPU model
+        evict_key = gpu_models[0]
+        print(f"♻️ DMA: Evicting '{evict_key}' from GPU to free VRAM for '{incoming_key}'...")
+        model_obj = self.loaded_models.pop(evict_key, None)
+        if evict_key in self.model_access_order:
+            self.model_access_order.remove(evict_key)
+        self._close_model(model_obj, evict_key)
+
     def _get_model(self, model_key, required_ctx=None, force_cpu=False):
         model_key = resolve_model_key(model_key)
         if required_ctx is None:
@@ -181,10 +202,23 @@ class AgentOrchestrator:
 
         if model_path.endswith('.gguf'):
             from llama_cpp import Llama
+
+            # Determine GPU layers: respect user setting, default to all layers (-1)
+            if self.device_mode == "cpu" or force_cpu:
+                gpu_layers = 0
+            elif self.gpu_layers is not None and self.gpu_layers >= 0:
+                gpu_layers = self.gpu_layers
+            else:
+                gpu_layers = -1
+
+            # VRAM-aware eviction: free stale GPU models before loading new one
+            if gpu_layers != 0:
+                self._evict_lru_gpu_model(model_key)
+
             kwargs = {
                 "model_path": model_path,
                 "n_ctx": required_ctx,
-                "n_gpu_layers": 0 if (self.device_mode == "cpu" or force_cpu) else -1,
+                "n_gpu_layers": gpu_layers,
                 "verbose": False
             }
 
@@ -293,14 +327,17 @@ class AgentOrchestrator:
 
         lines = cleaned.split("\n")
         dedup_lines = []
-        seen_counts = {}
+        prev_stripped = None
+        consec_count = 0
         for line in lines:
             stripped_line = line.strip()
-            if len(stripped_line) > 15:
-                count = seen_counts.get(stripped_line, 0)
-                if count >= 3:
-                    continue
-                seen_counts[stripped_line] = count + 1
+            if len(stripped_line) > 15 and stripped_line == prev_stripped:
+                consec_count += 1
+                if consec_count >= 3:
+                    continue  # Skip 4th+ consecutive identical line
+            else:
+                consec_count = 0
+            prev_stripped = stripped_line
             dedup_lines.append(line)
         return "\n".join(dedup_lines).strip()
 
@@ -534,7 +571,11 @@ class AgentOrchestrator:
                 pass
 
         if task_type == "SIMPLE":
-            ans_model = "vibethinker" if self._is_model_valid(self._get_model("vibethinker", required_ctx=2048)) else "router"
+            try:
+                vt = self._get_model("vibethinker", required_ctx=2048)
+                ans_model = "vibethinker" if self._is_model_valid(vt) else "router"
+            except (FileNotFoundError, Exception):
+                ans_model = "router"
             llm = self._get_model(ans_model, required_ctx=2048)
             final_p = prompt
             sys_prompt = None

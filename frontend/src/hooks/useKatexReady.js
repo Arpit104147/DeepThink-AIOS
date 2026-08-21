@@ -9,10 +9,22 @@ const useKatexReady = () => {
   const [ready, setReady] = useState(!!window.katex);
 
   useEffect(() => {
-    if (window.katex) return;
+    if (window.katex) {
+      setReady(true);
+      return;
+    }
     const onReady = () => setReady(true);
     window.addEventListener("katex-ready", onReady);
-    return () => window.removeEventListener("katex-ready", onReady);
+    const interval = setInterval(() => {
+      if (window.katex) {
+        setReady(true);
+        clearInterval(interval);
+      }
+    }, 200);
+    return () => {
+      window.removeEventListener("katex-ready", onReady);
+      clearInterval(interval);
+    };
   }, []);
 
   return ready;

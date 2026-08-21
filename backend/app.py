@@ -304,9 +304,11 @@ def api_delete_downloaded_model(model_key: str):
     """Physically deletes downloaded .gguf file(s) for a model to free disk storage."""
     # Unload model from active memory cache if loaded
     try:
-        if orchestrator and hasattr(orchestrator, "models_cache"):
-            if model_key in orchestrator.models_cache:
-                del orchestrator.models_cache[model_key]
+        if orchestrator and hasattr(orchestrator, "loaded_models"):
+            if model_key in orchestrator.loaded_models:
+                model_obj = orchestrator.loaded_models.pop(model_key, None)
+                if model_obj:
+                    orchestrator._close_model(model_obj, model_key)
                 gc.collect()
     except Exception:
         pass
@@ -505,10 +507,10 @@ async def offload_memory():
             if chat_lock.acquire(blocking=False):
                 chat_lock.release()
                 break
-            time.sleep(0.3)
+            await asyncio.sleep(0.3)
         
         # Small grace period to ensure all locks are fully released
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
         
         orchestrator.unload_all_models()
         generation_cancel.clear()
@@ -589,6 +591,7 @@ async def chat(request: ChatRequest):
 
     # 3. Stream generator
     async def response_generator():
+        owns_chat = False
         try:
             yield json.dumps({"type": "status", "message": "Initiating agent core...", "level": "info", "model": "coordinator", "progress": 0}) + "\n"
             
@@ -612,11 +615,13 @@ async def chat(request: ChatRequest):
                 q.put(payload)
 
             def run_orchestrator():
+                nonlocal owns_chat
                 # Acquire global lock to prevent state mixing between simultaneous requests
                 if not chat_lock.acquire(blocking=False):
                     q.put({"type": "error", "message": "The AI is currently processing another request. Please wait until it finishes."})
                     q.put(None)
                     return
+                owns_chat = True
                 try:
                     # Clear any stale cancel signal before starting
                     generation_cancel.clear()
@@ -703,7 +708,9 @@ async def chat(request: ChatRequest):
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         finally:
-            generation_cancel.set()
+            # Only cancel if this request actually owned the generation
+            if owns_chat:
+                generation_cancel.set()
             if 'thread' in locals() and thread.is_alive():
                 thread.join()
 

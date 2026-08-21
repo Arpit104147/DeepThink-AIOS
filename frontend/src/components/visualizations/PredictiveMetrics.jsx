@@ -39,13 +39,13 @@ const PredictiveMetricsCard = ({ jsonStr }) => {
         </div>
         <div className="predictive-stat-box">
           <div className="predictive-stat-label">Model Score</div>
-          <div className={`predictive-stat-value score ${typeof metric_value === "number" && metric_value > 0.8 ? "high" : "low"}`}>
-            {typeof metric_value === "number" ? metric_value.toFixed(4) : metric_value || "N/A"}
+          <div className={`predictive-stat-value score ${Number.isFinite(metric_value) && metric_value > 0.8 ? "high" : "low"}`}>
+            {Number.isFinite(metric_value) ? metric_value.toFixed(4) : metric_value || "N/A"}
           </div>
         </div>
       </div>
 
-      {forecast && forecast.length > 0 && (
+      {Array.isArray(forecast) && forecast.length > 0 && (
         <div className="predictive-forecast">
           <div className="predictive-forecast-label">Future Predictions:</div>
           <div className="predictive-table-wrap">
@@ -61,7 +61,7 @@ const PredictiveMetricsCard = ({ jsonStr }) => {
                   <tr key={idx} className={idx % 2 === 0 ? "even" : ""}>
                     <td>{dates && dates[idx] ? dates[idx] : `Step +${idx + 1}`}</td>
                     <td className="text-right forecast-value">
-                      {typeof val === "number"
+                      {Number.isFinite(val)
                         ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
                         : val}
                     </td>

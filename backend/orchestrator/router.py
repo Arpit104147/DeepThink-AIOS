@@ -17,11 +17,18 @@ class TaskRouter:
             f"User Request: {prompt[:500]}"
         )
         try:
-            res = orchestrator._call_model(router_llm, p, max_tokens=15, temperature=0.1).strip().upper()
-            res = orchestrator._strip_thinking(res)
+            raw = orchestrator._call_model(router_llm, p, max_tokens=64, temperature=0.1).strip()
+            res = orchestrator._strip_thinking(raw).strip().upper()
+            # Match the LAST occurrence of a category keyword to avoid
+            # false matches in reasoning text like "This is not CODING..."
+            last_match = None
             for cat in ["CODING", "REASONING", "CHIP_DESIGN", "SIMPLE"]:
-                if cat in res:
-                    return cat
+                idx = res.rfind(cat)
+                if idx != -1:
+                    if last_match is None or idx > last_match[1]:
+                        last_match = (cat, idx)
+            if last_match:
+                return last_match[0]
         except Exception:
             pass
 
@@ -49,8 +56,15 @@ class TaskRouter:
             "Reply ONLY 'YES' or 'NO'.\n\n"
             f"Query: {prompt[:500]}"
         )
-        result = orchestrator._call_model(router_llm, p, max_tokens=10, temperature=0.1)
-        return "YES" in str(result).upper()
+        result = orchestrator._call_model(router_llm, p, max_tokens=64, temperature=0.1)
+        cleaned = orchestrator._strip_thinking(str(result)).strip().upper()
+        # Use word boundary match to avoid false positive from "NO: ... YES ..."
+        if re.search(r'\bYES\b', cleaned):
+            # Make sure YES appears after any NO (last answer wins)
+            yes_pos = cleaned.rfind("YES")
+            no_pos = cleaned.rfind("NO")
+            return yes_pos > no_pos
+        return False
 
     @staticmethod
     def looks_numeric_problem(prompt):

@@ -5,7 +5,7 @@ import React, { useState } from "react";
  * Displays a collapsible DeepSeek-style thinking/status log panel.
  * Each log entry is color-coded based on the active pipeline stage.
  */
-const ThinkingBlock = ({ logs, isActive }) => {
+const ThinkingBlock = ({ logs = [], isActive }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const getLogStyle = (log) => {
@@ -37,7 +37,7 @@ const ThinkingBlock = ({ logs, isActive }) => {
         <div className="thinking-content">
           {logs.map((log, i) => {
             const style = getLogStyle(log);
-            const isClassification = log.toLowerCase().includes("classified as");
+            const isClassification = typeof log === "string" && log.toLowerCase().includes("classified as");
             return (
               <div key={i} className={`thinking-step ${isClassification ? "classification" : ""}`}>
                 <span className="thinking-step-icon" style={{ color: style.color }}>

@@ -16,6 +16,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
   // Listen for console messages from the sandboxed iframe
   useEffect(() => {
     const handleMessage = (e) => {
+      if (e.source !== iframeRef.current?.contentWindow) return;
       if (e.data && e.data.type) {
         if (e.data.type === "CONSOLE_LOG") {
           setConsoleLogs((prev) => [...prev, { type: "log", text: e.data.text }]);
@@ -175,8 +176,10 @@ const ArtifactSandbox = ({ htmlCode }) => {
           <button
             className="artifact-btn"
             onClick={() => {
-              const w = window.open("", "_blank");
-              if (w) { w.document.write(htmlCode); w.document.close(); }
+              const blob = new Blob([htmlCode], { type: "text/html" });
+              const url = URL.createObjectURL(blob);
+              window.open(url, "_blank", "noopener,noreferrer");
+              setTimeout(() => URL.revokeObjectURL(url), 10000);
             }}
             title="Open in new tab"
           >
@@ -197,6 +200,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
           ref={iframeRef}
           title="AI Artifact"
           className="artifact-iframe"
+          sandbox="allow-scripts allow-forms allow-popups allow-modals"
         />
 
         {/* Real-time console overlay */}

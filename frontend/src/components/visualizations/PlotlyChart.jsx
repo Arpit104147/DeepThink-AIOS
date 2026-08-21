@@ -19,7 +19,8 @@ const PlotlyChart = ({ jsonStr }) => {
   }, [jsonStr]);
 
   useEffect(() => {
-    if (!chartRef.current || !fig || !window.Plotly) return;
+    const currentElem = chartRef.current;
+    if (!currentElem || !fig || !window.Plotly) return;
 
     try {
       const layout = {
@@ -34,9 +35,9 @@ const PlotlyChart = ({ jsonStr }) => {
       delete layout.width;
       delete layout.height;
 
-      const data = Array.isArray(fig.data) ? fig.data : [fig.data];
+      const data = Array.isArray(fig) ? fig : (Array.isArray(fig?.data) ? fig.data : (fig?.data ? [fig.data] : []));
 
-      window.Plotly.react(chartRef.current, data, layout, {
+      window.Plotly.react(currentElem, data, layout, {
         responsive: true,
         displayModeBar: true,
         displaylogo: false,
@@ -46,8 +47,14 @@ const PlotlyChart = ({ jsonStr }) => {
         setDrawError(`Plotly drawing error: ${err.message}`);
       });
     } catch (err) {
-      console.error("Plotly render error:", err);
+      setDrawError(err.message || String(err));
     }
+    
+    return () => {
+      if (currentElem && window.Plotly) {
+        window.Plotly.purge(currentElem);
+      }
+    };
   }, [fig]);
 
   const plotlyMissing = fig && !window.Plotly ? "Plotly.js library failed to load from CDN." : null;
