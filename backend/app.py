@@ -623,7 +623,7 @@ async def chat(request: ChatRequest):
                     
                     # If an image was uploaded, run Qwen 2.5 VL vision parsing first
                     final_prompt = request.prompt
-                    if request.image:
+                    if request.image and not (request.search_mode == "study" and "application/pdf" in str(request.image)):
                         if generation_cancel.is_set():
                             q.put({"type": "error", "message": "Generation cancelled."})
                             return
