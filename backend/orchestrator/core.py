@@ -18,6 +18,7 @@ from backend.orchestrator.coding import CodingPipeline
 from backend.orchestrator.reasoning import ReasoningPipeline
 from backend.orchestrator.prediction import PredictionPipeline
 from backend.orchestrator.chip_design import ChipDesignPipeline
+from backend.orchestrator.study import StudyPipeline
 
 try:
     import torch
@@ -477,28 +478,34 @@ class AgentOrchestrator:
         return VisionEngine.transcribe_image(self, image_input, user_prompt, status_callback)
 
     # ── Main Entrypoint: Process User Query ────────────────────────────────
-    def process_query(self, prompt, mode="auto", selected_models=None, status_callback=None):
+    def process_query(self, prompt, mode="auto", selected_models=None, status_callback=None, attached_image=None):
         self._check_cancelled("start_query")
 
-        # 1. Determine search mode setting (off, simple/search, prediction, extreme)
+        # 1. Determine search mode setting (off, simple/search, prediction, extreme, study)
         search_mode = str(getattr(self, "search_mode", "off")).lower()
 
-        if search_mode in ["extreme", "ext..."] or (isinstance(mode, str) and mode.upper() == "EXTREME_WEBSEARCH"):
+        if search_mode in ["study", "stu..."] or (isinstance(mode, str) and mode.upper() == "STUDY"):
+            task_type = "STUDY"
+        elif search_mode in ["extreme", "ext..."] or (isinstance(mode, str) and mode.upper() == "EXTREME_WEBSEARCH"):
             task_type = "EXTREME_WEBSEARCH"
         elif search_mode in ["prediction", "pre..."] or (isinstance(mode, str) and mode.upper() == "PREDICTION"):
             task_type = "PREDICTION"
         elif search_mode in ["simple", "search", "se..."]:
             task_type = "SIMPLE"
-        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "CHIP_DESIGN"]:
+        elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "CHIP_DESIGN", "STUDY"]:
             task_type = mode.upper()
         else:
             router_llm = self._get_model("router", required_ctx=2048)
             task_type = TaskRouter.classify_task(self, router_llm, prompt)
-            if task_type in ["EXTREME_WEBSEARCH", "PREDICTION"]:
+            if task_type in ["EXTREME_WEBSEARCH", "PREDICTION", "STUDY"]:
                 task_type = "SIMPLE"
 
         if status_callback:
             status_callback(f"Task classified as: {task_type}", "info", "router", 12)
+
+        if task_type == "STUDY":
+            res = StudyPipeline.execute(self, prompt, mode, selected_models, status_callback, attached_image=attached_image)
+            return self._clean_cutoff_notes(res)
 
         # 2. Simple Web Search context retrieval if search_mode == simple/search
         web_context = ""

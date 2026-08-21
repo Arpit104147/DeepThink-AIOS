@@ -671,7 +671,8 @@ async def chat(request: ChatRequest):
                         final_prompt, 
                         request.mode, 
                         selected_models=request.selected_models,
-                        status_callback=thread_cb
+                        status_callback=thread_cb,
+                        attached_image=request.image
                     )
                     if not generation_cancel.is_set():
                         q.put({"type": "final_response", "text": res})

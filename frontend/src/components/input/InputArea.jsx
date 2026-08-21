@@ -115,7 +115,7 @@ const InputArea = ({
                 <div
                   className="segmented-slider-backdrop"
                   style={{
-                    width: "calc(25% - 3px)",
+                    width: `calc(${100 / SEARCH_MODES.length}% - 3px)`,
                     transform: `translateX(calc(${SEARCH_MODES.indexOf(searchMode)} * (100% + 3px)))`,
                     background: searchMode !== "off"
                       ? `linear-gradient(135deg, ${SEARCH_MODE_COLORS[searchMode]}cc, ${SEARCH_MODE_COLORS[searchMode]}88)`
@@ -132,7 +132,7 @@ const InputArea = ({
                     onClick={(e) => { e.stopPropagation(); setSearchMode(m); }}
                     style={{
                       color: searchMode === m ? "#ffffff" : "#777",
-                      fontSize: m === "off" ? "0.7rem" : "0.68rem",
+                      fontSize: m === "off" ? "0.68rem" : "0.65rem",
                     }}
                   >
                     {SEARCH_MODE_LABELS[m]}
@@ -158,7 +158,15 @@ const InputArea = ({
           ref={textareaRef}
           className="input-box"
           rows={1}
-          placeholder="Ask anything"
+          placeholder={
+            searchMode === "study"
+              ? "Enter study topic or attach PDF notes for comprehensive revision guide..."
+              : searchMode === "prediction"
+              ? "Enter topic or market symbol for predictive ML modeling..."
+              : searchMode === "extreme"
+              ? "Enter deep research query for multi-source academic survey..."
+              : "Ask anything"
+          }
           value={prompt}
           onChange={handleTextareaInput}
           onPaste={handlePaste}
