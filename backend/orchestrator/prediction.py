@@ -122,11 +122,9 @@ class PredictionPipeline:
                 )
 
         if status_callback:
-            status_callback("🔮 Rendering Interactive 3D/2D Forecast Surface...", "info", "system", 90)
+            status_callback("🔮 Rendering Interactive Multi-Trace Forecast Surface...", "info", "system", 90)
 
-        viz_html = orchestrator._generate_3d_visualization(prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback)
-        if not viz_html or "<!--ARTIFACT_HTML-->" not in viz_html:
-            viz_html = PredictionPipeline._build_plotly_forecast_chart(prompt, metrics_json)
+        viz_html = PredictionPipeline._build_plotly_forecast_chart(prompt, metrics_json)
 
         res_md = f"# 🔮 High-Precision Predictive Modeling & Machine Learning Forecast\n\n```python\n{code}\n```\n{metrics_md}\n\n{viz_html}"
         return res_md
@@ -239,6 +237,6 @@ class PredictionPipeline:
             "  </script>\n"
             "</body>\n"
             "</html>\n"
-            "<!--ARTIFACT_HTML-->"
+            "<!--/ARTIFACT_HTML-->"
         )
 

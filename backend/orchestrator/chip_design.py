@@ -216,5 +216,5 @@ class ChipDesignPipeline:
             "  </script>\n"
             "</body>\n"
             "</html>\n"
-            "<!--ARTIFACT_HTML-->"
+            "<!--/ARTIFACT_HTML-->"
         )
