@@ -34,20 +34,19 @@ export const renderMath = (tex, isBlock) => {
  * Handles both \\( ... \\) and $ ... $ math delimiters.
  */
 export const renderInlineElements = (text) => {
+  if (!text) return null;
   // Split on inline math (\( ... \) or $...$), bold (**...**), or inline code (`...`).
-  // Previous pattern was over-escaped and silently matched nothing.
   const inlineParts = text.split(/(\\\([\s\S]*?\\\)|\$[^$\n]+\$|\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
   return inlineParts.map((chunk, index) => {
     if (chunk == null || chunk === "") return null;
     if (chunk.startsWith("\\(") && chunk.endsWith("\\)")) {
       return <React.Fragment key={index}>{renderMath(chunk.slice(2, -2).trim(), false)}</React.Fragment>;
     }
-    if (chunk.startsWith("$") && chunk.endsWith("$") && chunk.length > 2) {
+    if (chunk.startsWith("$") && chunk.endsWith("$") && chunk.length >= 3) {
       const content = chunk.slice(1, -1).trim();
-      // Only treat as math if it contains at least one math-y token, and is not plain currency/prose.
-      const mathTokens = /[=+\-*/^_{}\\]|\\frac|\\sqrt|\\int|\\sum|\\alpha|\\beta|\\gamma|\\theta|\\pi|\\lambda|\\mu|\\sigma/;
-      const isCurrency = /^\d+(\.\d{1,2})?$/;
-      if (isCurrency.test(content) || !mathTokens.test(content)) {
+      // If it is just a plain currency number (e.g. $100, $5.99), leave as plain text
+      const isCurrency = /^\s*[\d,]+(\.\d{1,2})?\s*$/;
+      if (isCurrency.test(content)) {
         return chunk;
       }
       return <React.Fragment key={index}>{renderMath(content, false)}</React.Fragment>;
