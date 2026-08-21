@@ -9,6 +9,7 @@ const ThinkingBlock = ({ logs, isActive }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const getLogStyle = (log) => {
+    const l = (log || "").toLowerCase();
     if (l.includes("study") || l.includes("🎓")) return { color: "#10b981", icon: "🎓" };
     if (l.includes("prediction") || l.includes("🔮")) return { color: "#ab47bc", icon: "🔮" };
     if (l.includes("extreme") || l.includes("🔬")) return { color: "#ef5350", icon: "🔬" };
