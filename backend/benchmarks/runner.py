@@ -313,6 +313,12 @@ async def worker_task(worker_id: int, queue: asyncio.Queue, category: str, orche
         # Free GPU VRAM/RAM fragments left by model hot-swaps during the previous problem
         import gc
         gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
         print(f"🔄 [Worker {worker_id}] Finished {problem['id']} ({latency:.1f}s) — moving to next problem...", flush=True)
 
 ALL_BENCHMARK_SUITES = [

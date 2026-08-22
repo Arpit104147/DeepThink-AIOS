@@ -1,11 +1,12 @@
 """
 Evaluation and Verification Engines for AIOS Benchmarks.
-Includes sandbox unit test verification and regex math answer parsing.
+Includes sandbox unit test verification, stack-based balanced LaTeX boxed parser,
+scientific unit and percentage normalizer, and dual MCQ option matcher.
 """
 import re
 import asyncio
 import time
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 
 
 def _extract_last_python_block(text: str) -> str:
@@ -81,15 +82,47 @@ def _clean_pipeline_artifacts(code: str, entry_point: str = "") -> str:
     return '\n'.join(cleaned).rstrip()
 
 
-def _parse_math_candidate_answers(response: str) -> list:
+def _extract_balanced_boxed(text: str) -> List[str]:
+    """
+    Extracts contents inside LaTeX \\boxed{...} supporting arbitrary nested braces
+    e.g. \\boxed{\\frac{1}{2}} or \\boxed{\\sqrt{x^2 + 1}}.
+    """
+    results = []
+    idx = 0
+    target = "\\boxed{"
+    while True:
+        pos = text.find(target, idx)
+        if pos == -1:
+            break
+        start_brace = pos + len(target) - 1
+        depth = 0
+        end_brace = -1
+        for i in range(start_brace, len(text)):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    end_brace = i
+                    break
+        if end_brace != -1:
+            content = text[start_brace + 1:end_brace].strip()
+            if content:
+                results.append(content)
+            idx = end_brace + 1
+        else:
+            idx = pos + len(target)
+    return results
+
+
+def _parse_math_candidate_answers(response: str) -> List[str]:
     """Extracts potential candidate answers from a mathematical response."""
     candidates = []
     
-    # 1. LaTeX \boxed{...} matches
-    boxed_matches = re.findall(r"\\boxed\{([^{}]+)\}", response)
-    for b in boxed_matches:
-        candidates.append(b.strip())
-        
+    # 1. LaTeX \\boxed{...} with balanced nested braces
+    boxed_candidates = _extract_balanced_boxed(response)
+    candidates.extend(boxed_candidates)
+    
     # 2. Markdown **Final Answer:** or **Answer:**
     ans_matches = re.findall(r"\*\*(?:Final )?Answer(?:\*\*)?:?\s*([^\n\*\$]+)", response, re.IGNORECASE)
     for a in ans_matches:
@@ -103,15 +136,27 @@ def _parse_math_candidate_answers(response: str) -> list:
     return candidates
 
 
+def _normalize_answer(val: str) -> str:
+    """Normalizes answers by stripping LaTeX decorators, currency, percentage, and units."""
+    if not val:
+        return ""
+    clean = str(val).strip().lower()
+    clean = re.sub(r"[$%,\"\']", "", clean)
+    # Strip common units (e.g. 50 kg -> 50, 12 m/s -> 12)
+    clean = re.sub(r"\s*(?:m/s|kg|joules?|joule|j|ev|hz|watts?|watt|w|kelvin|k|degrees?|°c|°k|seconds?|sec|s|meters?|m)\b", "", clean, flags=re.IGNORECASE)
+    clean = clean.rstrip(".:; ")
+    return clean
+
+
 def _matches_expected_answer(candidate: str, expected: str) -> bool:
-    """Compares candidate answer against expected answer with numeric and string normalization."""
-    cand_clean = candidate.strip().lower().replace("$", "").replace(",", "").rstrip(".")
-    exp_clean = expected.strip().lower().replace("$", "").replace(",", "").rstrip(".")
+    """Compares candidate answer against expected answer with numeric, unit, and fraction normalization."""
+    cand_clean = _normalize_answer(candidate)
+    exp_clean = _normalize_answer(expected)
     
     if cand_clean == exp_clean:
         return True
         
-    # Numeric comparison
+    # Direct numeric comparison
     try:
         cand_num = float(cand_clean)
         exp_num = float(exp_clean)
@@ -120,7 +165,7 @@ def _matches_expected_answer(candidate: str, expected: str) -> bool:
     except ValueError:
         pass
         
-    # Fraction comparison
+    # Fraction vs Decimal comparison (e.g. 1/2 vs 0.5 or 0.5 vs 1/2)
     try:
         if "/" in cand_clean:
             num, den = cand_clean.split("/", 1)
@@ -128,8 +173,19 @@ def _matches_expected_answer(candidate: str, expected: str) -> bool:
             exp_val = float(exp_clean)
             if abs(cand_val - exp_val) < 1e-4:
                 return True
+        elif "/" in exp_clean:
+            num, den = exp_clean.split("/", 1)
+            exp_val = float(num) / float(den)
+            cand_val = float(cand_clean)
+            if abs(cand_val - exp_val) < 1e-4:
+                return True
     except Exception:
         pass
+
+    # Multiple-choice option letter check (e.g. "(C)" vs "C" or "(B)" vs "Grand Canonical")
+    mcq_match = re.search(r"\(?([A-E])\)?", candidate)
+    if mcq_match and mcq_match.group(1).lower() == exp_clean:
+        return True
         
     return exp_clean in cand_clean
 
