@@ -372,6 +372,24 @@ class AgentOrchestrator:
                 elif after_clean:
                     cleaned = after_clean
 
+        # Filter out untagged conversational rambling at the top of the output
+        if "\n\n" in cleaned:
+            paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
+            first_academic_idx = 0
+            for idx, p in enumerate(paragraphs):
+                p_lower = p.lower()
+                is_monologue = (
+                    p_lower.startswith(("first, let me", "let me recall", "let me think", "wait, ", "hmm, ", "okay, ", "so, maybe", "i think i might", "let's see", "did i mess up"))
+                    or "let me double-check" in p_lower
+                    or "let me compute" in p_lower
+                )
+                if is_monologue:
+                    first_academic_idx = idx + 1
+                else:
+                    break
+            if first_academic_idx > 0 and first_academic_idx < len(paragraphs):
+                cleaned = "\n\n".join(paragraphs[first_academic_idx:])
+
         lines = cleaned.split("\n")
         dedup_lines = []
         prev_stripped = None
