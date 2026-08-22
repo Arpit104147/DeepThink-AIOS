@@ -551,6 +551,17 @@ class WebSearch:
 
         return None
 
+    def fetch_asset_news(self, query: str, symbol: str = ""):
+        """
+        Fetches the latest real-time financial and domain news headlines,
+        earnings reports, and market catalysts.
+        """
+        search_term = f"{symbol} stock news latest analysis" if symbol else f"{query} news latest"
+        results = self.search(search_term, max_results=4)
+        if not results:
+            results = self.search(f"{query} forecast market analysis", max_results=3)
+        return results or []
+
     def fetch_financial_quote(self, query: str):
         """
         Detects stock, index, commodity, or crypto tickers and fetches
