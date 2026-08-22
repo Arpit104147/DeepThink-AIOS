@@ -185,12 +185,13 @@ class ChipDesignPipeline:
     @staticmethod
     def _clean_chip_title(prompt, chip_type, node):
         """Extracts a clean, non-truncated human-readable title from prompt."""
-        cleaned = re.sub(r"(design|implement|create|an|in|with|verilog|testbench|3d|layout|visualize|the|for|and|a)", " ", prompt, flags=re.I)
+        cleaned = re.sub(r"\b(design|implement|create|an|in|with|verilog|testbench|3d|layout|visualize|the|for|and|a)\b", " ", prompt, flags=re.I)
+        cleaned = re.sub(r"[^\w\s\(\)\-\.]", " ", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
-        words = [w.capitalize() for w in cleaned.split() if len(w) > 1]
+        words = [w for w in cleaned.split() if len(w) > 1]
         if len(words) >= 2:
             return " ".join(words[:6])
-        return f"{chip_type} ({node})"
+        return f"{chip_type}"
 
     @staticmethod
     def _build_3d_chip_visualization(prompt, chip_meta=None):
@@ -489,7 +490,7 @@ class ChipDesignPipeline:
         `;
 
         var subGroup = new THREE.Group();
-        subGroup.add(new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }}));
+        subGroup.add(new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }})));
         rootGroup.add(subGroup);
         layers.push({{ group: subGroup, baseY: 0, explodedY: 0 }});
 
@@ -531,7 +532,7 @@ class ChipDesignPipeline:
         `;
 
         var subGroup = new THREE.Group();
-        subGroup.add(new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }}));
+        subGroup.add(new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }})));
         rootGroup.add(subGroup);
         layers.push({{ group: subGroup, baseY: 0, explodedY: 0 }});
 
