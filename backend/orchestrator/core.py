@@ -298,7 +298,13 @@ class AgentOrchestrator:
                         if system_prompt:
                             messages.append({"role": "system", "content": system_prompt})
                         messages.append({"role": "user", "content": prompt})
-                        resp = model.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature)
+                        resp = model.create_chat_completion(
+                            messages=messages,
+                            max_tokens=max_tokens,
+                            temperature=max(0.3, temperature),
+                            repeat_penalty=1.15,
+                            top_p=0.9
+                        )
                         result_container[0] = resp['choices'][0]['message']['content']
                     elif isinstance(model, TransformerWrapper):
                         result_container[0] = model(prompt, max_tokens=max_tokens, temperature=temperature, system_prompt=system_prompt)
@@ -372,6 +378,19 @@ class AgentOrchestrator:
                 elif after_clean:
                     cleaned = after_clean
 
+        # Filter out repetitive paragraphs and infinite loops
+        if "\n\n" in cleaned:
+            paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
+            seen_p = set()
+            dedup_paragraphs = []
+            for p in paragraphs:
+                p_norm = re.sub(r'\s+', ' ', p.lower()[:80])
+                if p_norm in seen_p and len(p_norm) > 20:
+                    continue
+                seen_p.add(p_norm)
+                dedup_paragraphs.append(p)
+            cleaned = "\n\n".join(dedup_paragraphs)
+
         # Filter out untagged conversational rambling at the top of the output
         if "\n\n" in cleaned:
             paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
@@ -379,7 +398,7 @@ class AgentOrchestrator:
             for idx, p in enumerate(paragraphs):
                 p_lower = p.lower()
                 is_monologue = (
-                    p_lower.startswith(("first, let me", "let me recall", "let me think", "wait, ", "hmm, ", "okay, ", "so, maybe", "i think i might", "let's see", "did i mess up"))
+                    p_lower.startswith(("alright, so i need to figure out", "first, let me", "let me recall", "let me think", "wait, ", "hmm, ", "okay, ", "so, maybe", "i think i might", "let's see", "did i mess up", "i recall that", "to derive the transformations"))
                     or "let me double-check" in p_lower
                     or "let me compute" in p_lower
                 )

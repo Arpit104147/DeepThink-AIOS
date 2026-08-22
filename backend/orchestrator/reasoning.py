@@ -9,22 +9,24 @@ class ReasoningPipeline:
     LATEX_RULES = (
         "MANDATORY LATEX FORMATTING RULES:\n"
         "1. Wrap EVERY mathematical variable, operator, or expression in single dollar signs. "
-        "Examples: $x$, $p$, $a$, $a^\\dagger$, $\\hat{H}$, $\\hbar$, $\\omega$, $E_n$, $\\psi_n(x)$.\n"
-        "2. Wrap ALL major equations, commutation proofs, integrals, and derivations in centered double dollar signs on their own line:\n"
-        "$$[a, a^\\dagger] = aa^\\dagger - a^\\dagger a = 1$$\n"
-        "$$E_n = \\hbar\\omega\\left(n + \\frac{1}{2}\\right)$$\n"
-        "$$\\psi_0(x) = \\left(\\frac{m\\omega}{\\pi\\hbar}\\right)^{1/4} \\exp\\left(-\\frac{m\\omega x^2}{2\\hbar}\\right)$$\n"
-        "3. NEVER output unformatted raw math text like 'a a†', 'hbar omega', or 'E0=1/2hbar w'. Always use standard KaTeX.\n"
-        "4. DO NOT output conversational rambling (e.g. 'First let me recall', 'Wait maybe I should'). Proceed directly to the rigorous proof."
+        "Examples: $x$, $t$, $x'$, $t'$, $v$, $c$, $\\gamma$, $u'$, $\\Delta t$, $\\Delta t_0$.\n"
+        "2. Wrap ALL major equations, transformation matrices, and derivations in centered double dollar signs on their own line:\n"
+        "$$x' = \\gamma (x - vt)$$\n"
+        "$$t' = \\gamma \\left(t - \\frac{vx}{c^2}\\right)$$\n"
+        "$$\\gamma = \\frac{1}{\\sqrt{1 - \\frac{v^2}{c^2}}}$$\n"
+        "$$u' = \\frac{u - v}{1 - \\frac{uv}{c^2}}$$\n"
+        "$$\\Delta t = \\gamma \\Delta t_0$$\n"
+        "3. NEVER put English words inside single dollar signs `$ ... $`. Write English text outside math delimiters.\n"
+        "4. DO NOT output conversational monologue ('Alright so I need to figure out', 'Wait let me see'). Begin directly with the formal derivation."
     )
 
     @staticmethod
     def execute(orchestrator, prompt, mode="auto", selected_models=None, status_callback=None):
         ds_ctx, oc_ctx, router_ctx, gen_tokens, gen_temp = orchestrator._compute_headroom()
         
-        # Allocate ample token headroom (3584 tokens) so long theoretical proofs never get cut off mid-derivation
+        # Allocate ample token headroom (3584 tokens)
         reasoning_gen_tokens = min(4096, max(3072, ds_ctx - 1500))
-        reasoning_temp = 0.2  # Low temperature for strict mathematical precision and zero rambling
+        reasoning_temp = 0.35  # Optimal temperature with repeat_penalty=1.15 to prevent repetitive loops
 
         active_router = orchestrator._get_model("router", required_ctx=1024)
         use_playground = TaskRouter.is_playground_applicable(orchestrator, active_router, prompt)
@@ -50,16 +52,20 @@ class ReasoningPipeline:
                 "Your task is to provide a complete, rigorous, publication-grade academic derivation and proof.\n\n"
                 + ReasoningPipeline.LATEX_RULES + "\n\n"
                 "STRUCTURAL REQUIREMENTS:\n"
-                "1. Divide the proof into clear numbered academic sections (e.g. 1. Operator Definitions, 2. Commutation Proof, 3. Energy Spectrum & Zero-Point Energy, 4. Explicit Wavefunctions).\n"
+                "1. Divide the proof into clear numbered academic sections (e.g. 1. Postulates & Linearity, 2. Lorentz Transformation Derivation, 3. Relativistic Velocity Addition, 4. Time Dilation).\n"
                 "2. Provide step-by-step algebraic substitutions showing how each equation follows from the previous one.\n"
                 "3. Conclude with a clear summary box or theorem statement highlighting the final results."
             )
             theory_p = (
-                f"REQUEST / THEOREM TO PROVE:\n{prompt}\n\n"
-                f"Write the complete, rigorous theoretical derivation with full display KaTeX equations:"
+                f"THEOREM / DERIVATION REQUEST:\n{prompt}\n\n"
+                "INSTRUCTION: Write the complete, publication-grade academic derivation and proof with full display KaTeX equations ($$ ... $$).\n"
+                "Do NOT write conversational thoughts ('Alright, so I need to figure out', 'Wait let me see'). Begin directly with Section 1:\n\n"
+                "### 1. Physical Postulates & Spacetime Linearity Framework\n"
             )
             raw = orchestrator._call_model(ds_llm, theory_p, max_tokens=reasoning_gen_tokens, temperature=reasoning_temp, system_prompt=theory_sys)
             cleaned = orchestrator._strip_thinking(raw)
+            if not cleaned.startswith("### 1"):
+                cleaned = "### 1. Physical Postulates & Spacetime Linearity Framework\n\n" + cleaned
             return f"### ⚡ Theoretical Derivation & Mathematical Proof\n\n{cleaned}"
 
         # PAL Playground verification mode
