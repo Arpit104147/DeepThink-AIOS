@@ -148,12 +148,16 @@ class CodingPipeline:
                     c_header_rule = ""
                     if req_lang == "cpp":
                         c_header_rule = (
-                            "STRICT C++ CONCURRENCY & DATA STRUCTURE RULES:\n"
-                            "1. CONCURRENCY: Use `std::atomic<size_t>` for head/tail positions with explicit `std::memory_order_acquire` and `std::memory_order_release`. NEVER use `std::mutex` or locks when a lock-free queue is requested.\n"
-                            "2. CACHELINE PADDING: Align separate atomic variables to 64 bytes (`alignas(64) std::atomic<size_t> head_{0}; alignas(64) std::atomic<size_t> tail_{0};`) to prevent false sharing.\n"
-                            "3. RING BUFFER LOGIC: For SPSC queue, use circular index wrapping `(head + 1) % Capacity` or power-of-two mask `(head + 1) & (Capacity - 1)`.\n"
-                            "4. COMPLETE TEMPLATE/CLASS: Provide full `push(const T&)` and `pop(T&)` methods with return bool for success.\n"
-                            "5. MANDATORY int main(): Write a multi-threaded unit test in `main()` with a producer thread and consumer thread passing 10,000+ items and asserting `assert(...)` that all items are received in exact FIFO order.\n\n"
+                            "STRICT MODERN C++17 CONCURRENCY & DATA STRUCTURE RULES:\n"
+                            "1. HEADERS: Use standard C++17 headers: <iostream>, <vector>, <unordered_map>, <mutex>, <shared_mutex>, <thread>, <cassert>, <atomic>, <memory>, <chrono>.\n"
+                            "   NEVER write '#include <lock_guard>' (not a header file; include <mutex> or <shared_mutex> instead).\n"
+                            "2. MUTEX & LOCK SCOPE: Store `std::mutex` or `mutable std::shared_mutex` as class member variables.\n"
+                            "   NEVER declare `std::lock_guard` or `std::unique_lock` as a struct/class field member. Instantiate `std::unique_lock<std::shared_mutex> lock(mutex_);` or `std::shared_lock<std::shared_mutex> lock(mutex_);` ONLY inside function bodies.\n"
+                            "3. LRU CACHE ARCHITECTURE: If building an LRU cache, implement a clean `LRUCache` class with `std::unordered_map` + custom doubly-linked list (`Node* head_, tail_`).\n"
+                            "   - `get(key, value)`: Finds node, moves it to head, returns true/false.\n"
+                            "   - `put(key, value)`: Updates node or inserts at head, evicting tail if size > capacity.\n"
+                            "4. SPSC LOCK-FREE QUEUE: If building a lock-free queue, use `alignas(64) std::atomic<size_t> head_{0}; alignas(64) std::atomic<size_t> tail_{0};` with `std::memory_order_acquire` and `std::memory_order_release`.\n"
+                            "5. MANDATORY UNIT TESTS IN main(): Write a complete `int main()` that spawns multiple threads to test concurrent operations and verifies state using `assert(...)`.\n\n"
                         )
                     elif req_lang == "c":
                         c_header_rule = (

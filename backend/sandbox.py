@@ -97,7 +97,7 @@ LANG_SIGNATURES = {
         'strong': [r'#include\s*<iostream>', r'#include\s*<vector>', r'#include\s*<string>',
                    r'std::', r'cout\s*<<', r'cin\s*>>', r'using\s+namespace\s+std'],
         'ext': '.cpp',
-        'compile': ['g++', '{src}', '-o', '{bin}', '-lm', '-lstdc++', '-pthread'],
+        'compile': ['g++', '-std=c++17', '{src}', '-o', '{bin}', '-lm', '-lstdc++', '-pthread'],
         'run': ['{bin}'],
     },
     'bash': {
