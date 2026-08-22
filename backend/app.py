@@ -695,13 +695,15 @@ async def chat(request: ChatRequest):
             
             while True:
                 try:
-                    item = q.get(timeout=0.1)
+                    item = q.get_nowait()
                     if item is None:
                         break
                     yield f"data: {json.dumps(item)}\n\n"
                 except queue.Empty:
+                    if not thread.is_alive() and q.empty():
+                        break
                     yield f"data: {json.dumps({'type': 'keep_alive'})}\n\n"
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.05)
                     
             thread.join()
 

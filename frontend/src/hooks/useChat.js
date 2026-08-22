@@ -187,7 +187,7 @@ export function useChat({
         setHistory((prev) => [...prev, { type: "ai", text: fullText || "Cancelled.", logs: currentLogsRef.current }]);
       } else if (err.message && (err.message.toLowerCase().includes("networkerror") || err.message.toLowerCase().includes("failed to fetch"))) {
         setHistory((prev) => [...prev, { type: "ai", text: `❌ **Cannot reach backend.**\n\nOpen a terminal and run:\n\`\`\`bash\n./venv/bin/python backend/app.py\n\`\`\`` }]);
-      } else {
+      } else if (!fullText) {
         setHistory((prev) => [...prev, { type: "ai", text: `Error: ${err.message}` }]);
       }
     } finally {
