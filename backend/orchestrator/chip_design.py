@@ -157,23 +157,26 @@ class ChipDesignPipeline:
             node = "2nm Gate-All-Around (GAA) Nanosheet"
             node_key = "gaafet"
 
-        # 2. Architecture Family Detection (Hierarchical: Heterogeneous SoC checked first)
-        if any(k in p_lower for k in ["soc", "apu", "mobile chip", "snapdragon", "apple silicon", "heterogeneous", "mobile apu", "system on chip", "system-on-chip"]):
+        def has_word(patterns, text):
+            return bool(re.search(r'\b(' + '|'.join(re.escape(p) for p in patterns) + r')\b', text, re.IGNORECASE))
+
+        # 2. Architecture Family Detection (Hierarchical & Word-Bounded to prevent 'output' -> 'tpu' false matches)
+        if has_word(["soc", "apu", "mobile chip", "snapdragon", "apple silicon", "heterogeneous", "system on chip", "system-on-chip"], p_lower):
             chip_type = "Heterogeneous Mobile / Laptop SoC (APU)"
             arch_key = "soc"
-        elif any(k in p_lower for k in ["tpu", "systolic", "tensor core", "tensor processing unit", "ai accelerator", "gemm", "matrix processor"]) or (("npu" in p_lower or "neural" in p_lower) and "soc" not in p_lower and "apu" not in p_lower):
-            chip_type = "AI TPU / Tensor Processing Engine"
-            arch_key = "tpu"
-        elif any(k in p_lower for k in ["hbm", "hbm3", "hbm4", "dram", "ddr4", "ddr5", "lpddr5", "memory controller", "high-bandwidth memory", "stacked dram"]):
-            chip_type = "High-Bandwidth Memory (HBM3/DRAM) Controller"
-            arch_key = "memory"
-        elif any(k in p_lower for k in ["gpu", "shader", "simt", "cuda", "compute unit", "rasterizer"]):
+        elif has_word(["gpu", "shader", "simt", "cuda", "streaming multiprocessor", "rasterizer"], p_lower):
             chip_type = "SIMT GPU Parallel Compute Unit"
             arch_key = "gpu"
-        elif any(k in p_lower for k in ["cpu", "risc-v", "rv64", "rv32", "arm", "out-of-order", "superscalar", "pipeline"]):
+        elif has_word(["tpu", "systolic", "tensor processing unit", "ai accelerator", "gemm", "matrix processor"], p_lower) or (has_word(["npu", "neural engine"], p_lower) and not has_word(["soc", "apu"], p_lower)) or (has_word(["tensor core"], p_lower) and not has_word(["gpu"], p_lower)):
+            chip_type = "AI TPU / Tensor Processing Engine"
+            arch_key = "tpu"
+        elif has_word(["hbm", "hbm3", "hbm4", "dram", "ddr4", "ddr5", "memory controller", "high-bandwidth memory", "stacked dram"], p_lower):
+            chip_type = "High-Bandwidth Memory (HBM3/DRAM) Controller"
+            arch_key = "memory"
+        elif has_word(["cpu", "risc-v", "rv64", "rv32", "arm", "out-of-order", "superscalar", "pipeline", "reorder buffer", "rob"], p_lower):
             chip_type = "High-Performance Out-of-Order CPU Core"
             arch_key = "cpu"
-        elif any(k in p_lower for k in ["spice", "opamp", "bandgap", "pll", "adc", "dac", "analog"]):
+        elif has_word(["spice", "opamp", "op-amp", "bandgap", "pll", "adc", "dac", "analog"], p_lower):
             chip_type = "Analog / Mixed-Signal Silicon Macro"
             arch_key = "analog"
         else:
