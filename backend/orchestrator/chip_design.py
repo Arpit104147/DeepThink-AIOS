@@ -7,11 +7,11 @@ from backend.downloader import resolve_model_key
 
 class ChipDesignPipeline:
     """
-    Universal Semiconductor EDA & Physically Accurate Nanoscale Silicon Simulation Engine (180nm Planar to 2nm GAAFET).
+    Universal Semiconductor EDA & Scientific-Grade Nanoscale Silicon Simulation Engine (180nm Planar to 2nm GAAFET).
     Supports Out-of-Order CPUs, SIMT GPUs, 2D Systolic Array TPUs, Mobile SoCs/APUs,
-    High-Bandwidth Memory (HBM3/DDR5) controllers, and Analog SPICE netlists with interactive
-    Multi-Layer BEOL Interconnect Stacks (1000s of Metal Traces & Vias), Animated Data Flow Particles,
-    Live Physics Alpha-Power Law Telemetry, Clock Stepping Simulation, and Production Synthesizable Verilog RTL.
+    High-Bandwidth Memory (HBM3/DDR5) controllers, and Analog SPICE netlists with scientific
+    FEOL/MOL/BEOL Nanoscale Stackups, Low-k SiCOH Dielectric Insulation, Dual-Damascene Metal Hierarchies (M0-M15),
+    Live Alpha-Power Law Physics Telemetry, Clock Cycle Stepping, and Synthesizable SystemVerilog RTL.
     """
 
     @staticmethod
@@ -39,9 +39,9 @@ class ChipDesignPipeline:
         # Detect Chip Category & Process Node Target
         chip_meta = ChipDesignPipeline._analyze_chip_meta(prompt)
 
-        # Stage 1: Architecture & Process Node Decomposition
+        # Stage 1: Scientific Architecture & Device Physics Decomposition
         if status_callback:
-            status_callback(f"Stage 1: Decomposing {chip_meta['node']} {chip_meta['type']} Architecture...", "info", "deepseek_r1", 25)
+            status_callback(f"Stage 1: Formulating Scientific {chip_meta['node']} {chip_meta['type']} Architecture & Device Physics...", "info", "deepseek_r1", 25)
 
         reasoning_key = resolve_model_key("reasoning") or "deepseek_r1"
         try:
@@ -52,17 +52,22 @@ class ChipDesignPipeline:
             ds_llm = orchestrator._get_model("router", required_ctx=ds_ctx)
 
         arch_prompt = (
-            f"You are a Distinguished Principal Silicon Architect and Chief EDA Systems Fellow.\n"
-            f"Decompose the following semiconductor hardware request into an exhaustive architectural specification:\n"
+            f"You are a Distinguished IEEE Fellow, Principal Silicon Architect, and Chief EDA Device Physics Scientist.\n"
+            f"Formulate an exhaustive, scientific-grade semiconductor hardware architecture specification for:\n"
             f"USER REQUEST: {prompt}\n\n"
             f"FABRICATION PROCESS TARGET: {chip_meta['node']}\n"
             f"CHIP CLASSIFICATION: {chip_meta['type']}\n\n"
-            f"MANDATORY ARCHITECTURE SPECIFICATION MODULES:\n"
-            f"1. 🏛️ Microarchitecture & Sub-Module Breakdown: Detailed block diagram description, pipeline stages, datapaths, and execution units.\n"
-            f"2. 🔌 Port & Interface Pinout Table: Complete I/O list with signal names, bit widths, directions (input/output), and protocol standards (AXI4-Stream, APB, DFI, native).\n"
-            f"3. ⏱️ Clocking, Reset & DVFS Power Strategy: Operating voltage-frequency states (Eco, Ideal Efficiency, Max Turbo, Thermal Breakpoint) and Backside Power Delivery (BSPDN) / Power Gating.\n"
-            f"4. 📊 Estimated Silicon Metrics: Target frequency ($f_{{max}}$ in GHz), transistor budget, die area ($\text{{mm}}^2$), and TDP power envelope.\n"
-            f"5. 🧪 Testbench & Verification Plan: Corner case test vectors, hazard scenarios, and assertion coverage plan."
+            f"MANDATORY SCIENTIFIC SPECIFICATION MODULES:\n"
+            f"1. 🔬 Device Physics & Nanoscale Geometry:\n"
+            f"   - Effective Channel Width: W_eff = 2 * N_sheet * (W_ns + T_ns)\n"
+            f"   - Gate Length (L_g), Contact Poly Pitch (CPP), High-k Dielectric EOT (HfO2 = 0.65nm)\n"
+            f"   - Subthreshold Swing S = (kT/q)*ln(10)*(1 + Cdep/Cox) ≈ 65 mV/dec at 300K\n"
+            f"   - DIBL <= 42 mV/V, ON-current I_on = 1.45 mA/um, OFF-current I_off = 10 pA/um\n"
+            f"   - Backside Power Delivery (BSPDN / PowerVia) IR-drop reduction (ΔV_IR < 12 mV vs 68 mV frontside)\n\n"
+            f"2. 🏛️ Microarchitecture Datapath & Sub-Modules: Detailed block diagram, pipeline stages, execution units, and buffer hierarchies.\n"
+            f"3. 🔌 Standardized Port Pinout Table: Complete I/O list with signal names, bit widths, directions (input/output), and protocol standards (AXI4-Stream, APB, DFI, native).\n"
+            f"4. ⏱️ DVFS Operating States: Precise voltage-frequency points (Eco, Ideal Efficiency, Max Turbo, Thermal Breakpoint) and thermal resistance (θja = 3.2 °C/W).\n"
+            f"5. 🧪 Testbench Verification Plan: Corner cases, hazard scenarios, and assertion coverage plan."
         )
         arch_plan = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, arch_prompt, gen_tokens, 0.3))
 
@@ -113,16 +118,16 @@ class ChipDesignPipeline:
         else:
             hdl_clean = "\n\n// --- Complete Self-Checking Verification Testbench ---\n\n".join(b.strip() for b in code_blocks if b.strip())
 
-        # Stage 3: Nanoscale 3D Silicon Visualizer with Multi-Layer BEOL Interconnects & Particle Flow
+        # Stage 3: Scientific Nanoscale 3D Silicon Visualizer with Multi-Layer BEOL Interconnects & Particle Flow
         if status_callback:
-            status_callback(f"Stage 3: Simulating Physics & Rendering 3D Die ({chip_meta['type']})...", "info", "system", 75)
+            status_callback(f"Stage 3: Simulating Physics & Rendering Scientific 3D Die ({chip_meta['type']})...", "info", "system", 75)
 
         viz_html = ChipDesignPipeline._build_3d_chip_visualization(prompt, chip_meta)
 
         output_parts = [
-            f"### 🏗️ Stage 1: Architecture & Process Node Decomposition ({chip_meta['node']})\n\n{arch_plan}\n\n",
+            f"### 🏗️ Stage 1: Scientific Architecture & Device Physics Decomposition ({chip_meta['node']})\n\n{arch_plan}\n\n",
             f"### ⚡ Stage 2: Production Synthesizable {req_lang.upper()} Implementation & Testbench\n\n```{req_lang}\n{hdl_clean}\n```\n\n",
-            f"### 🔬 Stage 3: Physically Accurate 3D Die Simulation, BEOL Interconnects & Live Telemetry ({chip_meta['type']})\n\n{viz_html}"
+            f"### 🔬 Stage 3: Scientific 3D Die Simulation, BEOL Interconnect Stack & Live Physics ({chip_meta['type']})\n\n{viz_html}"
         ]
 
         if not eda_tools['iverilog']:
@@ -572,8 +577,9 @@ endmodule"""
     @staticmethod
     def _build_3d_chip_visualization(prompt, chip_meta=None):
         """
-        Generates a state-of-the-art interactive 3D Physical Die & Multi-Layer Interconnect Visualizer in Three.js.
-        Features dense BEOL metal routing traces (M0-M15), vertical via arrays, animated data packet particle streams,
+        Generates a state-of-the-art interactive 3D Physical Die & Scientific Multi-Layer Interconnect Visualizer in Three.js.
+        Features nanoscale FEOL GAAFET channels, MOL contact plugs, low-k SiCOH dielectric layers,
+        dual-damascene BEOL metal routing traces (M0-M15), vertical via arrays, animated data packet particle streams,
         layer stack isolation checkboxes, live physical Alpha-Power Law scaling, clock cycle stepping simulation,
         and real-time thermal/voltage breakpoint analytics.
         """
@@ -918,9 +924,17 @@ endmodule"""
       document.getElementById("cbPowerGrid").addEventListener("change", function(e) {{ powerGridGroup.visible = e.target.checked; }});
       document.getElementById("cbParticles").addEventListener("change", function(e) {{ particlesGroup.visible = e.target.checked; }});
 
-      // ── 🌌 1. BUILD MULTI-LAYER BEOL INTERCONNECT MESH (M0 - M15) ──
-      // Positioned directly on the silicon die (Y: 0.70 - 1.70)
-      var mLowerMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.85, roughness: 0.2, transparent: true, opacity: 0.65 }});
+      // ── 🌌 1. BUILD MULTI-LAYER BEOL INTERCONNECT MESH (M0 - M15) WITH LOW-K DIELECTRIC ──
+      // Low-k SiCOH Interlayer Dielectric (ILD Glass)
+      var ildMat = new THREE.MeshStandardMaterial({{ color: 0x0ea5e9, transparent: true, opacity: 0.12, roughness: 0.1 }});
+      for (var d = 0; d < 3; d++) {{
+        var ildMesh = new THREE.Mesh(new THREE.BoxGeometry(15.2, 0.28, 15.2), ildMat);
+        ildMesh.position.set(0, 0.85 + d * 0.45, 0);
+        interconnectGroup.add(ildMesh);
+      }}
+
+      // M0-M3: Dual-Damascene Ruthenium / Fine Copper Interconnects
+      var mLowerMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.9, roughness: 0.15, transparent: true, opacity: 0.75 }});
       var wireGeomX = new THREE.BoxGeometry(14.5, 0.03, 0.06);
       var wireGeomZ = new THREE.BoxGeometry(0.06, 0.03, 14.5);
 
@@ -938,7 +952,7 @@ endmodule"""
       }}
 
       // Semi-Global Metal Layers (M4-M8): Clock Trees & AXI NoC Data Buses
-      var mMidMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.9, roughness: 0.15, transparent: true, opacity: 0.75 }});
+      var mMidMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.95, roughness: 0.12, transparent: true, opacity: 0.8 }});
       var midWireX = new THREE.BoxGeometry(15.0, 0.05, 0.16);
       var midWireZ = new THREE.BoxGeometry(0.16, 0.05, 15.0);
 
@@ -956,7 +970,7 @@ endmodule"""
       }}
 
       // Top Metal Layers (M9-M15): Global VDD/VSS Power Distribution Mesh
-      var mTopMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.95, roughness: 0.1, transparent: true, opacity: 0.8 }});
+      var mTopMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.95, roughness: 0.1, transparent: true, opacity: 0.85 }});
       var topMeshX = new THREE.BoxGeometry(15.5, 0.08, 0.35);
       var topMeshZ = new THREE.BoxGeometry(0.35, 0.08, 15.5);
 
@@ -1030,7 +1044,7 @@ endmodule"""
       }}
 
       // ── 🏛️ 3. ARCHITECTURE-SPECIFIC SILICON FLOORPLAN ──
-      // Silicon Package Substrate Base with Gold Bond Pads
+      // Silicon Package Substrate Base with Gold Bond Pads & Guard Ring
       var subMesh = new THREE.Mesh(new THREE.BoxGeometry(16.5, 0.6, 16.5), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.5 }}));
       transistorGroup.add(subMesh);
 
