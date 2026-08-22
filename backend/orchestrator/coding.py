@@ -34,7 +34,7 @@ class CodingPipeline:
             if min_ctx - gen_tokens < 1500:
                 gen_tokens = max(2048, min_ctx - 1500)
 
-        logic_temp = 0.5
+        logic_temp = 0.4
         crunch_budget = max(1024, ds_ctx - gen_tokens - 1000)
         ds_safe = orchestrator._crunch_prompt(prompt, "deepseek_r1", crunch_budget, status_callback)
 
@@ -48,9 +48,9 @@ class CodingPipeline:
             f"You are a distinguished principal software architect.\n"
             f"Your task is to draft a rigorous, step-by-step logic and algorithmic architecture plan for {lang_name}.\n\n"
             f"MANDATORY ARCHITECTURAL RULES:\n"
-            f"1. ALGORITHMIC SPECIFICATION: Detail the exact data structures, concurrency primitives, memory management, time/space complexity, and edge cases.\n"
-            f"2. PROSE ONLY: Write clear structured English explanation steps. DO NOT write raw pseudo-code or syntactically incomplete code blocks.\n"
-            f"3. THOROUGHNESS: Clearly define all state transitions, lock-free pointer swaps, invariants, and unit test scenarios."
+            f"1. ALGORITHMIC SPECIFICATION: Detail the exact data structures, memory alignment, concurrency primitives (atomics, memory orderings, cacheline padding), time/space complexity, and edge cases.\n"
+            f"2. PROSE ONLY — NO CODE BLOCKS: Write clear, numbered English steps. DO NOT write code blocks, triple backticks (```), or incomplete code snippets in the plan.\n"
+            f"3. THOROUGHNESS: Clearly define state transitions, lock-free pointer swaps, invariants, and multi-threaded self-testing assertions."
         )
 
         coder_sys = (
@@ -60,7 +60,7 @@ class CodingPipeline:
             f"1. Implement all structures and algorithms EXACTLY as requested.\n"
             f"2. Do NOT write placeholders, mock functions, or abbreviated loop bodies.\n"
             f"3. Handle edge cases: bounds checking, thread safety, memory deallocation.\n"
-            f"4. AUTOMATED SELF-TESTING MANDATE: Append a complete self-testing test suite at the bottom with assertions.\n"
+            f"4. AUTOMATED SELF-TESTING MANDATE: Append a complete self-testing test suite in main() with assertions.\n"
             f"5. Output ONLY valid {lang_name} code inside ```{req_lang}``` blocks."
         )
 
@@ -148,12 +148,12 @@ class CodingPipeline:
                     c_header_rule = ""
                     if req_lang == "cpp":
                         c_header_rule = (
-                            "STRICT C++ SYNTAX & STRUCT RULES:\n"
-                            "1. HEADERS: Include all necessary standard headers: <iostream>, <atomic>, <memory>, <vector>, <thread>, <mutex>, <cassert>, <chrono>.\n"
-                            "2. STRUCT ORDERING: Define all node structs (e.g., `struct Node { ... };`) completely BEFORE any class or method references them. NEVER reference undeclared types.\n"
-                            "3. SIGNATURES: Use standard modern C++ syntax (e.g., `Node* push_back(const std::pair<int, std::string>& key)`). Never write invalid parameter casts.\n"
-                            "4. ATOMICS: Use `std::atomic<Node*> next;` with explicit memory orderings (`std::memory_order_acquire`, `std::memory_order_release`, `std::memory_order_relaxed`).\n"
-                            "5. ENTRYPOINT & UNIT TESTS: Write a complete `int main() { ... }` executing comprehensive unit test assertions.\n\n"
+                            "STRICT C++ CONCURRENCY & DATA STRUCTURE RULES:\n"
+                            "1. CONCURRENCY: Use `std::atomic<size_t>` for head/tail positions with explicit `std::memory_order_acquire` and `std::memory_order_release`. NEVER use `std::mutex` or locks when a lock-free queue is requested.\n"
+                            "2. CACHELINE PADDING: Align separate atomic variables to 64 bytes (`alignas(64) std::atomic<size_t> head_{0}; alignas(64) std::atomic<size_t> tail_{0};`) to prevent false sharing.\n"
+                            "3. RING BUFFER LOGIC: For SPSC queue, use circular index wrapping `(head + 1) % Capacity` or power-of-two mask `(head + 1) & (Capacity - 1)`.\n"
+                            "4. COMPLETE TEMPLATE/CLASS: Provide full `push(const T&)` and `pop(T&)` methods with return bool for success.\n"
+                            "5. MANDATORY int main(): Write a multi-threaded unit test in `main()` with a producer thread and consumer thread passing 10,000+ items and asserting `assert(...)` that all items are received in exact FIFO order.\n\n"
                         )
                     elif req_lang == "c":
                         c_header_rule = (
@@ -168,9 +168,9 @@ class CodingPipeline:
                         f"Write a complete, fully working, self-contained {lang_name} program for this request:\n{prompt}\n\n"
                         f"{c_header_rule}"
                         f"Plan:\n{compiled_plan}\n\n"
-                        f"Write ONLY valid {lang_name} code inside ```{req_lang}``` blocks. Include main() with unit tests."
+                        f"Write ONLY valid {lang_name} code inside ```{req_lang}``` blocks. Include main() with complete unit tests."
                     )
-                    sys_prompt = f"You are an expert {lang_name} systems engineer. Output ONLY code in ```{req_lang}``` blocks.\n{c_header_rule}"
+                    sys_prompt = f"You are an expert {lang_name} systems engineer. Output ONLY complete, runnable code in ```{req_lang}``` blocks.\n{c_header_rule}"
 
                 raw_model_output = orchestrator._strip_thinking(orchestrator._call_model(oc_llm, code_p, gen_tokens, gen_temp, system_prompt=sys_prompt))
                 

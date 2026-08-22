@@ -469,6 +469,14 @@ class AgentOrchestrator:
         return ok, output, code
 
     def _synthesize_coding_response(self, prompt, compiled_plan, code, output, router_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback=None, req_lang="python", execution_passed=True):
+        # Ensure compiled_plan has balanced code fences to prevent markdown bleeding
+        plan_clean = compiled_plan.strip() if compiled_plan else ""
+        if plan_clean.count("```") % 2 != 0:
+            plan_clean += "\n```"
+
+        output_clean = output.strip() if output else ""
+        code_clean = code.strip() if code else ""
+
         if execution_passed:
             exec_header = "### ⚙️ Sandbox Execution Output (Passed ✅)"
             code_header = "### 💻 Verified Working Code"
@@ -476,7 +484,9 @@ class AgentOrchestrator:
             exec_header = "### ⚙️ Sandbox Execution Diagnostic (Review Required ⚠️)"
             code_header = "### 💻 Generated Implementation"
 
-        return f"### 💡 Logic & Architectural Plan\n\n{compiled_plan}\n\n{exec_header}\n```\n{output[:3000]}\n```\n\n{code_header}\n\n```{req_lang}\n{code}\n```"
+        output_section = f"\n\n{exec_header}\n```\n{output_clean[:3000]}\n```" if output_clean else ""
+
+        return f"### 💡 Logic & Architectural Plan\n\n{plan_clean}{output_section}\n\n{code_header}\n\n```{req_lang}\n{code_clean}\n```"
 
     def _generate_3d_visualization(self, prompt, coder_llm, oc_ctx, gen_tokens, gen_temp, status_callback=None):
         viz_prompt = (
