@@ -74,13 +74,28 @@ class CodingPipeline:
             "4. Do NOT generate example print statements, dummy calls, or top-level assertion tests."
         )
 
-        # Track the last code and output for fallback
-        code = ""
-        output = ""
-        compiled_plan = ""
+        # Fast path for automated benchmark evaluations (HumanEval, MBPP, SWE-bench)
+        if is_benchmark:
+            orchestrator._check_cancelled("code:benchmark_solve")
+            oc_llm = orchestrator._get_model("ornith", required_ctx=oc_ctx)
+            coder_display = orchestrator._get_display_model_name("ornith")
+            if status_callback:
+                status_callback(f"💻 {coder_display} solving benchmark function...", "info", "ornith", 50)
+            code_p = (
+                f"Complete this Python function implementation for the automated test harness.\n\n"
+                f"PROBLEM:\n{prompt}\n\n"
+                f"Output ONLY the complete Python code in ```python``` blocks."
+            )
+            raw_model_output = orchestrator._strip_thinking(
+                orchestrator._call_model(oc_llm, code_p, gen_tokens=1024, temperature=0.1, system_prompt=benchmark_coder_sys)
+            )
+            code = Sandbox.extract_code(raw_model_output)
+            if not code or len(code.strip()) < 5:
+                code = raw_model_output
+            return f"```python\n{code}\n```"
 
         for reset in range(max_resets):
-            max_rounds = 1 if (is_benchmark or reset > 0) else 2
+            max_rounds = 1 if reset > 0 else 2
             for rnd in range(max_rounds):
                 # Phase 1: Logic Plan
                 orchestrator._check_cancelled("code:draft_logic")

@@ -637,6 +637,8 @@ class AgentOrchestrator:
             task_type = "PREDICTION"
         elif search_mode in ["simple", "search", "se..."]:
             task_type = "SIMPLE"
+        elif isinstance(mode, str) and mode.upper() in ["BENCHMARK_CODING", "BENCHMARK"]:
+            task_type = "CODING"
         elif isinstance(mode, str) and mode.upper() in ["SIMPLE", "CODING", "REASONING", "CHIP_DESIGN", "STUDY"]:
             task_type = mode.upper()
         else:

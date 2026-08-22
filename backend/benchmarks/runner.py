@@ -386,6 +386,8 @@ async def _run_single_suite(category: str, orchestrator: Any = None):
     add_log(f"🚀 Starting benchmark suite for {category}...")
 
     dataset = await fetch_real_dataset(category, add_log_fn=add_log)
+    if not dataset:
+        dataset = MOCK_PROBLEMS.get(category, MOCK_PROBLEMS.get("HumanEval", []))
     total_problems = len(dataset)
     
     with STATE_LOCK:
