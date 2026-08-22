@@ -617,11 +617,24 @@ class WebSearch:
                 except Exception:
                     pass
 
+        # Extract ticker in parentheses like (NVDA), (AAPL), (BTC)
+        if not matched_symbol:
+            paren_match = re.search(r"\(([A-Z0-9\.\-=]{2,10})\)", query)
+            if paren_match:
+                matched_symbol = paren_match.group(1).upper()
+
+        if not matched_symbol:
+            ticker_words = re.findall(r"\b([A-Z]{2,6})\b", query)
+            for tw in ticker_words:
+                if tw.lower() in common_symbols:
+                    matched_symbol = common_symbols[tw.lower()]
+                    break
+
         if not matched_symbol:
             return None
 
         try:
-            chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{matched_symbol}?range=5d&interval=1d"
+            chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{matched_symbol}?range=1mo&interval=1d"
             res = self._session.get(chart_url, timeout=4.0)
             if res.status_code == 200:
                 data = res.json()
@@ -630,7 +643,7 @@ class WebSearch:
                     result = chart[0]
                     meta = result.get("meta", {})
                     symbol = meta.get("symbol", matched_symbol)
-                    currency = meta.get("currency", "INR")
+                    currency = meta.get("currency", "USD")
                     regular_price = meta.get("regularMarketPrice")
                     timestamps = result.get("timestamp", [])
                     quote = result.get("indicators", {}).get("quote", [{}])[0]
@@ -653,20 +666,18 @@ class WebSearch:
                             valid_closes.append(c)
 
                     if rows:
-                        recent_rows = rows[-3:] if len(rows) >= 3 else rows
-                        recent_lows = valid_lows[-3:] if len(valid_lows) >= 3 else valid_lows
-                        lowest_3d = min(recent_lows) if recent_lows else "N/A"
-                        highest_3d = max(valid_highs[-3:]) if valid_highs else "N/A"
+                        lowest_price = min(valid_lows) if valid_lows else "N/A"
+                        highest_price = max(valid_highs) if valid_highs else "N/A"
                         latest_close = valid_closes[-1] if valid_closes else regular_price
 
                         table_md = (
                             f"[LIVE FINANCIAL MARKET DATA: {symbol}]\n"
                             f"Currency: {currency} | Latest Current Price: {latest_close:.2f} {currency}\n"
-                            f"Lowest Price (Last 3 Trading Days): {lowest_3d:.2f} {currency}\n"
-                            f"Highest Price (Last 3 Trading Days): {highest_3d:.2f} {currency}\n\n"
+                            f"30-Day Lowest Price: {lowest_price:.2f} {currency}\n"
+                            f"30-Day Highest Price: {highest_price:.2f} {currency}\n\n"
                             f"| Date | Open ({currency}) | High ({currency}) | Low ({currency}) | Close ({currency}) |\n"
                             f"| :--- | :--- | :--- | :--- | :--- |\n"
-                            + "\n".join(recent_rows)
+                            + "\n".join(rows)
                         )
                         return table_md
         except Exception as e:
