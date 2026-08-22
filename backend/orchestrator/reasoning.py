@@ -113,18 +113,28 @@ class ReasoningPipeline:
 
         synth_sys = (
             "You are an expert theoretical mathematician.\n"
-            "Synthesize the verified computational proof into a publication-grade academic derivation.\n"
-            + ReasoningPipeline.LATEX_RULES
+            "Synthesize the verified computational proof into a publication-grade academic derivation.\n\n"
+            + ReasoningPipeline.LATEX_RULES + "\n\n"
+            "MANDATORY: State the final verified answer clearly in a prominent summary box with display KaTeX equations ($$ ... $$)."
         )
         synth_p = (
-            f"Original Request:\n{prompt}\n\n"
-            f"Verified Computational Output:\n{pg_out[:2000]}\n\n"
-            f"Provide the final, complete, step-by-step academic proof with centered display KaTeX equations ($$ ... $$):"
+            f"Original Mathematical Request:\n{prompt}\n\n"
+            f"Verified Computational Sandbox Output:\n{pg_out[:2000]}\n\n"
+            f"Write the complete, rigorous mathematical derivation with step-by-step display KaTeX equations ($$ ... $$):"
         )
         final_answer = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, synth_p, max_tokens=reasoning_gen_tokens, temperature=reasoning_temp, system_prompt=synth_sys))
         sanitized_final = ReasoningPipeline._sanitize_reasoning_latex(final_answer)
 
-        return f"### 🧠 Verified Mathematical Solution (PAL)\n\n{sanitized_final}"
+        parts = [
+            f"### 🧠 Verified Mathematical Solution (PAL)\n\n{sanitized_final}"
+        ]
+        if pg_code:
+            status_tag = "Passed ✅" if verified else "Diagnostic ⚠️"
+            parts.append(f"\n\n### ⚙️ Symbolic Sandbox Verification ({status_tag})\n```python\n{pg_code.strip()}\n```")
+            if pg_out and str(pg_out).strip():
+                parts.append(f"\n```\n{str(pg_out).strip()[:1500]}\n```")
+
+        return "".join(parts)
 
     @staticmethod
     def _sanitize_reasoning_latex(text: str) -> str:

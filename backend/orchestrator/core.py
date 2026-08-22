@@ -480,9 +480,19 @@ class AgentOrchestrator:
 
     def _run_playground(self, model, hypothesis, purpose="logic", status_callback=None, model_key=None, original_prompt=None):
         if status_callback:
-            status_callback("Reasoning Sandbox: Verifying logic...", "info", model_key, 35)
+            lbl = "Reasoning Sandbox: Executing symbolic verification (SymPy/SciPy)..." if purpose == "math" else "Reasoning Sandbox: Verifying logic..."
+            status_callback(lbl, "info", model_key, 35)
         coder_llm = self._get_model("ornith", required_ctx=4096)
-        script_p = f"Write a short Python validation script to verify this logic:\n{hypothesis}\n\nWrap script in ```python```."
+        if purpose == "math":
+            script_p = (
+                f"Write a self-contained Python computation script using sympy, numpy, or scipy to mathematically solve and verify:\n"
+                f"PROBLEM:\n{original_prompt or hypothesis}\n\n"
+                f"HYPOTHESIS:\n{hypothesis[:1500]}\n\n"
+                f"MANDATORY: Compute the exact analytical/numeric solutions and print the results with print(...).\n"
+                f"Wrap code in ```python``` blocks."
+            )
+        else:
+            script_p = f"Write a short Python validation script to verify this logic:\n{hypothesis}\n\nWrap script in ```python```."
         code = Sandbox.extract_code(self._strip_thinking(self._call_model(coder_llm, script_p, 1024, 0.2)))
         ok, output = self.sandbox.execute(code, language="python")
         return ok, output, code
