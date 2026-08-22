@@ -562,22 +562,31 @@ class AgentOrchestrator:
                 "3. Include a Markdown comparison table with columns: | Code Type | Space Dim | Threshold (%) | Physical Qubit Overhead | Transversal Gates | Decoder |.\n\n"
             )
 
+        research_sys = (
+            "You are a distinguished Principal Research Scientist, Academician, and Chief Technology Strategist.\n"
+            "Your task is to write a DEFINITIVE, EXHAUSTIVE, MULTI-PAGE ACADEMIC TECHNICAL RESEARCH SURVEY based on the ingested web corpus.\n\n"
+            "MANDATORY REPORT STRUCTURE & GUIDELINES:\n"
+            "1. 📑 EXECUTIVE SUMMARY: Detailed high-level overview, industrial context, key technological breakthroughs, and core empirical metrics.\n"
+            "2. 🔬 IN-DEPTH TECHNICAL ANALYSIS & ARCHITECTURAL BREAKDOWN:\n"
+            "   - Divide into at least 4 detailed subsections (e.g. 2.1, 2.2, 2.3, 2.4).\n"
+            "   - Write comprehensive, multi-paragraph explanations analyzing physics, semiconductor processes, governing equations, and internal mechanisms.\n"
+            "   - Include quantitative figures (e.g., energy efficiency in pJ/bit, footprint in μm², insertion loss in dB, bandwidth density in Tbps/mm²).\n"
+            "3. 📊 EMPIRICAL COMPARISON MATRIX: Construct a dense, multi-column Markdown comparison table contrasting key architectures, metrics, trade-offs, and foundry readiness.\n"
+            "4. ⚖️ TRADEOFFS & STRATEGIC INSIGHTS: Deep analysis of thermal management, packaging complexity (2.5D/3D integration), yield, testability, and commercial roadmap.\n"
+            "5. 📚 NUMBERED CITATIONS & REFERENCES: Include [1], [2], [3] matching the live sources in a dedicated References section.\n\n"
+            "WRITING MANDATE: Write full, rigorous, publication-grade academic prose without placeholders, bullet-only stubs, or brevity."
+        )
+
         research_prompt = (
-            "You are a distinguished principal research scientist and technical domain expert.\n"
-            "Synthesize an exhaustive, academic-grade technical research report/survey based on the raw multi-source web corpus below.\n\n"
             f"USER INQUIRY: {prompt}\n\n"
             f"RAW MULTI-SOURCE INGESTED RESEARCH DATA:\n{aggregated_web_corpus}\n\n"
             f"{domain_constraints}"
-            "MANDATORY REPORT STRUCTURE & GUIDELINES:\n"
-            "1. EXECUTIVE SUMMARY: High-level overview, key takeaways, and core metrics/findings.\n"
-            "2. IN-DEPTH TECHNICAL ANALYSIS: Detailed breakdown of underlying mechanisms, chronological events/data, statistics, and domain-specific principles.\n"
-            "3. EMPIRICAL COMPARISON TABLE: A structured Markdown comparison table contrasting key components, metrics, models, or entities.\n"
-            "4. TRADEOFFS & STRATEGIC INSIGHTS: Concrete pros/cons, best practices, or forward-looking projections.\n"
-            "5. NUMBERED CITATIONS & SOURCES: Include [1], [2], [3] matching the live sources in a dedicated References section.\n"
-            "6. ACCURACY: Rely strictly on real empirical figures from the context without placeholder variables."
+            "Write the complete, exhaustive academic research survey following all 5 modules in extensive detail:"
         )
 
-        res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=3072, temperature=0.25))
+        # Allocate 5120 tokens for an exhaustive multi-page academic survey
+        extreme_gen_tokens = min(6144, max(4096, 8192 - 2000))
+        res = self._strip_thinking(self._call_model(ds_llm, research_prompt, max_tokens=extreme_gen_tokens, temperature=0.25, system_prompt=research_sys))
         return f"# 🔬 Extreme Web Search & Academic Technical Survey\n\n{res}"
 
     # ── Multimodal Vision Engine Entrypoint ────────────────────────────────
