@@ -384,7 +384,7 @@ class ChipDesignPipeline:
           var bCore = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 3.2), bigCpuMat);
           bCore.position.set(-4.0 + c * 3.8, 0.55, -4.5);
           socGroup.add(bCore);
-          addInteractiveMesh(bCore, `Big Performance CPU Core ${c}`, "64-bit Out-of-Order superscalar core with 192KB L1 cache and 3.4GHz target.");
+          addInteractiveMesh(bCore, `Big Performance CPU Core ${{c}}`, "64-bit Out-of-Order superscalar core with 192KB L1 cache and 3.4GHz target.");
         }}
 
         // LITTLE Efficiency CPU Cores (Cyan)
@@ -393,7 +393,7 @@ class ChipDesignPipeline:
           var lCore = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.6), littleCpuMat);
           lCore.position.set(4.0 + (lc % 2) * 1.9, 0.55, -5.0 + Math.floor(lc / 2) * 1.9);
           socGroup.add(lCore);
-          addInteractiveMesh(lCore, `Efficiency CPU Core ${lc}`, "Ultra-low-power in-order core for background OS tasks and high battery life.");
+          addInteractiveMesh(lCore, `Efficiency CPU Core ${{lc}}`, "Ultra-low-power in-order core for background OS tasks and high battery life.");
         }}
 
         // GPU Compute Shader Array (Purple)
@@ -463,7 +463,7 @@ class ChipDesignPipeline:
           var dramDie = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.45, 10.5), dramMat);
           dramDie.position.y = 1.3 + d * 0.75;
           dramStackGroup.add(dramDie);
-          addInteractiveMesh(dramDie, `3D Stacked DRAM Die Layer ${d}`, `High-density DRAM cell arrays (16Gb per die) with micro-second refresh timing.`);
+          addInteractiveMesh(dramDie, `3D Stacked DRAM Die Layer ${{d}}`, `High-density DRAM cell arrays (16Gb per die) with micro-second refresh timing.`);
         }}
 
         // Through-Silicon Vias (TSVs) passing vertically through all DRAM layers
@@ -542,7 +542,7 @@ class ChipDesignPipeline:
           var smMesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.55, 3.2), smMat);
           smMesh.position.set(-4.0 + (s % 3) * 4.0, 0.65, -3.5 + Math.floor(s / 3) * 4.0);
           gpuGroup.add(smMesh);
-          addInteractiveMesh(smMesh, `Streaming Multiprocessor (SM ${s})`, "128 CUDA compute cores, SIMT warp scheduler, and Tensor Core matrix units.");
+          addInteractiveMesh(smMesh, `Streaming Multiprocessor (SM ${{s}})`, "128 CUDA compute cores, SIMT warp scheduler, and Tensor Core matrix units.");
         }}
 
         // L2 Cache (Cyan)
