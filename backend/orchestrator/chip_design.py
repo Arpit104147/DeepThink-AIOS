@@ -157,14 +157,14 @@ class ChipDesignPipeline:
             node = "2nm Gate-All-Around (GAA) Nanosheet"
             node_key = "gaafet"
 
-        # 2. Architecture Family Detection
-        if any(k in p_lower for k in ["tpu", "npu", "systolic", "tensor core", "ai accelerator", "gemm", "matrix"]):
-            chip_type = "AI TPU / Tensor Processing Engine"
-            arch_key = "tpu"
-        elif any(k in p_lower for k in ["soc", "apu", "mobile chip", "snapdragon", "apple silicon", "heterogeneous", "mobile apu"]):
+        # 2. Architecture Family Detection (Hierarchical: Heterogeneous SoC checked first)
+        if any(k in p_lower for k in ["soc", "apu", "mobile chip", "snapdragon", "apple silicon", "heterogeneous", "mobile apu", "system on chip", "system-on-chip"]):
             chip_type = "Heterogeneous Mobile / Laptop SoC (APU)"
             arch_key = "soc"
-        elif any(k in p_lower for k in ["dram", "ddr4", "ddr5", "lpddr5", "hbm", "hbm3", "hbm4", "sram", "memory controller", "high-bandwidth memory"]):
+        elif any(k in p_lower for k in ["tpu", "systolic", "tensor core", "tensor processing unit", "ai accelerator", "gemm", "matrix processor"]) or (("npu" in p_lower or "neural" in p_lower) and "soc" not in p_lower and "apu" not in p_lower):
+            chip_type = "AI TPU / Tensor Processing Engine"
+            arch_key = "tpu"
+        elif any(k in p_lower for k in ["hbm", "hbm3", "hbm4", "dram", "ddr4", "ddr5", "lpddr5", "memory controller", "high-bandwidth memory", "stacked dram"]):
             chip_type = "High-Bandwidth Memory (HBM3/DRAM) Controller"
             arch_key = "memory"
         elif any(k in p_lower for k in ["gpu", "shader", "simt", "cuda", "compute unit", "rasterizer"]):
