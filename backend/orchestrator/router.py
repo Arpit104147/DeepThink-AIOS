@@ -29,7 +29,9 @@ class TaskRouter:
         reasoning_keywords = [
             "derive", "proof of", "prove that", "eigenvalues and eigenfunctions",
             "lorentz transformations", "hamiltonian", "schrodinger", "dirac ladder",
-            "commutation relation", "time dilation", "special relativity"
+            "commutation relation", "time dilation", "special relativity",
+            "integral of", "exact integral", "differential equation", "taylor series",
+            "schwarzschild", "einstein field equations", "ricci tensor", "christoffel"
         ]
         if any(kw in p_lower for kw in reasoning_keywords) and not any(k in p_lower for k in ["python", "c++", "cpp", "javascript", "script"]):
             return "REASONING"

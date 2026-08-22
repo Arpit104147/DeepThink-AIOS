@@ -156,13 +156,9 @@ class ReasoningPipeline:
             return ""
 
         # 1. Fix single dollar signs that span across newlines (e.g. "$formula \n\n$Next")
-        text = re.sub(r"(?<!\$)\$([^\$\n]+)\n\n\$", r"$$\1$$\n\n", text)
+        text = re.sub(r"(?<!\$)\$([^\$]+?)\s*\n\n\$", r"$$\1$$\n\n", text)
         
         # 2. Fix cases where an opening $$ is on its own line and formula starts on next line
         text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
-
-        # 3. Clean trailing whitespace in display equation blocks
-        text = re.sub(r"\$\$\s+", "$$\n", text)
-        text = re.sub(r"\s+\$\$", "\n$$", text)
 
         return text
