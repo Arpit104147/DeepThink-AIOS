@@ -15,7 +15,12 @@ class TaskRouter:
             "chip design", "semiconductor layout", "eda tools", "iverilog", "yosys",
             "gdstk", "cla adder", "carry-lookahead", "binary counter", "up/down counter",
             "fsm in verilog", "flip-flop", "alu in verilog", "dumpfile", "dumpvars",
-            "3d semiconductor", "asic", "fpga"
+            "3d semiconductor", "asic", "fpga", "tpu", "npu", "gpu core", "cpu core",
+            "risc-v core", "rv32i", "rv64gc", "arm core", "systolic array", "tensor core",
+            "dram controller", "ddr4", "ddr5", "lpddr5", "hbm3", "hbm4", "gaafet",
+            "nanosheet", "finfet", "bspdn", "powervia", "chiplet", "cowos", "emib",
+            "soc in verilog", "apu in verilog", "mobile chip", "2nm chip", "3nm chip", "5nm chip",
+            "7nm chip", "14nm chip", "28nm chip", "2nm", "3nm", "5nm", "7nm", "14nm", "28nm", "65nm", "180nm"
         ]
         if any(kw in p_lower for kw in chip_keywords):
             return "CHIP_DESIGN"
