@@ -11,6 +11,7 @@ class StudyPipeline:
     Hierarchical Multi-Volume Master Curriculum & Pedagogical Synthesis Engine.
     Strictly powered by DeepSeek-R1 to author exhaustive, human-readable student study notes,
     comprehensive master textbook chapters with full display LaTeX derivations ($$ ... $$),
+    embedded Mermaid visual flowcharts, pedagogical alert callouts, 1-page formula cheat-sheets,
     dense comparative matrices, 10 fully solved numerical problems, and a complete mock exam paper.
     """
 
@@ -81,25 +82,30 @@ class StudyPipeline:
         aggregated_context = "\n\n---\n\n".join(raw_contexts)
         orchestrator._check_cancelled("study:web_scrape_done")
 
-        # ── Volume I: Theoretical Foundations, Architecture & Complete Formal Derivations ──
+        # ── Volume I: Theoretical Foundations, Architecture, Mermaid Diagram & Complete Formal Derivations ──
         if status_callback:
-            status_callback(f"🎓 Study Engine [Stage 2/4]: Authoring Volume I (Theorems, Deep Concepts & Derivations) with {reasoning_display}...", "info", reasoning_key, 35)
+            status_callback(f"🎓 Study Engine [Stage 2/4]: Authoring Volume I (Theorems, Mermaid Flowchart & Derivations) with {reasoning_display}...", "info", reasoning_key, 35)
 
         sys_prompt_vol1 = (
             "You are a Distinguished Chaired Professor, Academician, and Author of Graduate Reference Textbooks.\n"
             "Your task is to write VOLUME I of a definitive, publication-grade academic master reference textbook chapter.\n\n"
-            "MANDATORY LATEX & PROSE RULES:\n"
+            "MANDATORY LATEX, VISUAL & PROSE RULES:\n"
             "1. NO META-OUTLINES: Do NOT write outlines, bullet summaries of what you plan to do, or brief overviews. Write out the ENTIRE chapter in continuous, rich, human-readable textbook prose with full explanations.\n"
-            "2. DISPLAY LATEX EQUATIONS: Write EVERY major theorem, governing formula, and mathematical proof in centered display LaTeX (`$$ ... $$`) on its own dedicated line.\n"
-            "3. INLINE VARIABLES: Wrap individual mathematical symbols in single dollar signs ($x$, $\\beta_t$, $W_Q$, $d_k$, $\\mathcal{O}(N^2)$).\n"
-            "4. NO ENGLISH IN MATH DELIMITERS: NEVER put explanatory English words or sentences inside single dollar signs `$ ... $`. Write English text outside math delimiters.\n"
-            "5. FIRST-PRINCIPLES DEPTH: Explain physical/computational intuition, state transitions, step-by-step algebraic steps, variable definitions, and boundary behaviors.\n\n"
+            "2. MERMAID VISUAL FLOWCHART: In Module 2, you MUST include a clean, valid ```mermaid diagram (flowchart TD or sequenceDiagram) illustrating the core system architecture, data pipeline, or state transitions.\n"
+            "3. PEDAGOGICAL ALERT CALLOUTS: Embed GitHub-style callouts strategically:\n"
+            "   > [!TIP] Physical Intuition Check: Visual analogy explaining abstract mechanics.\n"
+            "   > [!IMPORTANT] Exam Trap: Tricky sign slips, boundary pitfalls, and student misconceptions.\n"
+            "   > [!NOTE] Historical & Industrial Context: Real-world engineering implementations.\n"
+            "4. DISPLAY LATEX EQUATIONS: Write EVERY major theorem, governing formula, and mathematical proof in centered display LaTeX (`$$ ... $$`) on its own dedicated line.\n"
+            "5. INLINE VARIABLES: Wrap individual mathematical symbols in single dollar signs ($x$, $\\beta_t$, $W_Q$, $d_k$, $\\mathcal{O}(N^2)$).\n"
+            "6. 1-PAGE FORMULA CHEAT-SHEET: In Module 4.5, include a compact Markdown summary table listing all governing equations, variables, constants, and SI units.\n\n"
             "REQUIRED VOLUME I STRUCTURE:\n"
             "### 1. 🎓 Executive Overview, Core Axioms & Physical Intuition\n"
             "- Foundational axioms, historical evolution, and mathematical motivation.\n"
             "- 2 vivid real-world analogies explaining non-obvious dynamics.\n"
             "- Core graduate competencies mastered.\n\n"
             "### 2. 📚 Exhaustive Conceptual Breakdown & Architectural Mechanics\n"
+            "- Valid ```mermaid flowchart diagram visually mapping the core system architecture/dataflow.\n"
             "- Divide into at least 4 detailed subsections (e.g. 2.1, 2.2, 2.3, 2.4).\n"
             "- Write multi-paragraph continuous explanations from first principles analyzing internal operations.\n\n"
             "### 3. 📐 The Complete Mathematical Framework & Rigorous Derivations\n"
@@ -108,14 +114,15 @@ class StudyPipeline:
             "- Define every variable, matrix dimension, tensor shape, and constant explicitly in bullet points.\n\n"
             "### 4. 🔬 Boundary Dynamics, Complexity Analysis & Engineering Constraints\n"
             "- Asymptotic limits, computational/memory complexity proofs (e.g. $\\mathcal{O}(\\cdot)$ in time and space).\n"
-            "- Hardware-level optimization, memory bandwidth bottlenecks, and modern production standards."
+            "- Hardware-level optimization, memory bandwidth bottlenecks, and modern production standards.\n"
+            "#### 4.5 📋 1-Page High-Yield Formula & Definition Cheat-Sheet (Summary Table for Rapid Revision)"
         )
 
         prompt_vol1 = (
             f"ACADEMIC RESEARCH CONTEXT:\n{aggregated_context[:10000] if aggregated_context else 'Comprehensive Academic Curriculum Base'}\n\n"
             f"TARGET TOPIC: {clean_title}\n"
             f"FULL USER INQUIRY: {prompt}\n\n"
-            f"Write the complete, exhaustive VOLUME I for '{clean_title}'. Follow all 4 modules with full continuous prose and complete display LaTeX equations ($$ ... $$):"
+            f"Write the complete, exhaustive VOLUME I for '{clean_title}'. Follow all modules with continuous prose, valid Mermaid flowchart, pedagogical callouts ([!TIP], [!IMPORTANT]), and complete display LaTeX equations ($$ ... $$):"
         )
 
         raw_vol1 = orchestrator._call_model(reasoning_llm, prompt_vol1, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol1)
@@ -190,28 +197,32 @@ class StudyPipeline:
 
         orchestrator._check_cancelled("study:doc_ingest")
 
-        # Volume I: Document-Grounded Theory & Mathematical Notes
+        # Volume I: Document-Grounded Theory, Mermaid Diagram & Mathematical Notes
         if status_callback:
-            status_callback(f"🎓 Study Engine [Stage 2/3]: Grounding Volume I (Theorems, Core Mechanisms & Formulas) with {reasoning_display}...", "info", reasoning_key, 45)
+            status_callback(f"🎓 Study Engine [Stage 2/3]: Grounding Volume I (Theorems, Mermaid Flowchart & Formulas) with {reasoning_display}...", "info", reasoning_key, 45)
 
         sys_prompt_vol1 = (
             "You are a Distinguished Professor and Master Educator.\n"
             "Your task is to transform the provided source document into VOLUME I of a comprehensive, human-readable master study guide and reference textbook.\n\n"
-            "MANDATORY GROUNDING & LATEX RULES:\n"
+            "MANDATORY GROUNDING, VISUAL & LATEX RULES:\n"
             "1. STRICT GROUNDING: Every concept, theorem, definition, and formula must be strictly grounded in the ingested source document.\n"
-            "2. DISPLAY LATEX: Write all mathematical formulas and equations in centered display LaTeX (`$$ ... $$`). Never put English sentences inside `$ ... $`.\n"
-            "3. CONTINUOUS TEXTBOOK PROSE: Write in-depth, multi-paragraph explanations explaining all dynamics from first principles. Do NOT write brief bullet outlines.\n\n"
+            "2. MERMAID VISUAL DIAGRAM: In Module 2, include a clean, valid ```mermaid flowchart illustrating the core architecture or process pipeline.\n"
+            "3. PEDAGOGICAL ALERTS: Embed strategic GitHub-style alert callouts (> [!TIP], > [!IMPORTANT], > [!NOTE]).\n"
+            "4. DISPLAY LATEX: Write all mathematical formulas and equations in centered display LaTeX (`$$ ... $$`). Never put English sentences inside `$ ... $`.\n"
+            "5. CONTINUOUS TEXTBOOK PROSE: Write in-depth, multi-paragraph explanations explaining all dynamics from first principles. Do NOT write brief bullet outlines.\n"
+            "6. 1-PAGE FORMULA CHEAT-SHEET: Include a compact summary table of all grounded formulas and definitions at the end of Volume I.\n\n"
             "REQUIRED STRUCTURE:\n"
             "### 1. 🎓 Executive Epistemological Summary & Foundational Definitions\n"
-            "### 2. 📚 Comprehensive In-Depth Conceptual Deconstruction (Subsections 2.1, 2.2, 2.3, 2.4)\n"
+            "### 2. 📚 Comprehensive In-Depth Conceptual Deconstruction (with Mermaid Diagram)\n"
             "### 3. 📐 Mathematical Formalisms, Governing Equations ($$ ... $$) & Rigorous Proofs\n"
-            "### 4. 🔬 Edge Cases, Boundary Conditions & Practical Domain Implementations"
+            "### 4. 🔬 Edge Cases, Boundary Conditions & Practical Domain Implementations\n"
+            "#### 4.5 📋 1-Page High-Yield Formula & Definition Cheat-Sheet Summary Table"
         )
 
         prompt_vol1 = (
             f"INGESTED SOURCE DOCUMENT CONTENT:\n\"\"\"\n{doc_text[:14000]}\n\"\"\"\n\n"
             f"FOCUS / USER QUERY: {prompt if prompt else clean_title}\n\n"
-            f"Write the complete, document-grounded VOLUME I with full display LaTeX equations ($$ ... $$):"
+            f"Write the complete, document-grounded VOLUME I with full display LaTeX equations ($$ ... $$), Mermaid flowchart, and pedagogical callouts:"
         )
 
         raw_vol1 = orchestrator._call_model(reasoning_llm, prompt_vol1, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol1)
