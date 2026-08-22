@@ -8,24 +8,17 @@ from backend.downloader import resolve_model_key
 
 class StudyPipeline:
     """
-    Hierarchical Multi-Volume Master Curriculum & Deep Pedagogical Synthesis Engine.
-    Strictly powered by the Reasoning LLM (DeepSeek-R1) to author exhaustive,
-    university-grade, publication-level 10-20 page master reference textbook chapters.
-    
-    Architecture:
-    - Volume I: Theoretical Foundations, Epistemology, First-Principles Architecture,
-      and Rigorous Mathematical Derivations ($$ ... $$) [Modules 1-4].
-    - Volume II: Comparative Taxonomy Matrices, Exam Traps & Mnemonics,
-      Complete 10-Problem Solved Question Bank, and Standardized Mock Exam Blueprint [Modules 5-8].
-    - Master Binding: Seamlessly unifies both volumes into an exhaustive 15-20 page textbook.
+    Hierarchical Multi-Volume Master Curriculum & Pedagogical Synthesis Engine.
+    Strictly powered by DeepSeek-R1 to author exhaustive, human-readable student study notes,
+    comprehensive master textbook chapters with full display LaTeX derivations ($$ ... $$),
+    dense comparative matrices, 10 fully solved numerical problems, and a complete mock exam paper.
     """
 
     @staticmethod
     def execute(orchestrator, prompt, mode="auto", selected_models=None, status_callback=None, attached_doc=None, attached_image=None):
         if status_callback:
-            status_callback("🎓 Study Engine: Initializing multi-volume pedagogical reasoning core...", "info", "deepseek_r1", 5)
+            status_callback("🎓 Study Engine: Initializing deep pedagogical reasoning core...", "info", "deepseek_r1", 5)
 
-        # 1. Strictly bind to the Reasoning LLM (DeepSeek-R1)
         ds_ctx, oc_ctx, router_ctx, gen_tokens, gen_temp = orchestrator._compute_headroom()
         reasoning_key = resolve_model_key("reasoning") or "deepseek_r1"
         try:
@@ -38,13 +31,16 @@ class StudyPipeline:
         reasoning_llm = orchestrator._get_model(reasoning_key, required_ctx=ds_ctx)
         reasoning_display = orchestrator._get_display_model_name(reasoning_key)
 
-        # Dedicated token budget per volume (~3500 tokens each = ~7000+ tokens total output)
-        vol_gen_tokens = min(3584, max(2560, (ds_ctx - 1500) // 2))
-        study_temp = 0.2  # Low temperature for strict mathematical and factual precision
+        # Dedicated token budget per volume (~3840 tokens each = ~7600+ tokens total output)
+        vol_gen_tokens = min(4096, max(3072, ds_ctx - 1500))
+        study_temp = 0.2  # Low temperature for strict mathematical precision and zero meta-rambling
 
         orchestrator._check_cancelled("study:init")
 
-        # 2. Check for uploaded Document payload (Sub-Mode B: Document-Grounded Notes)
+        # Extract clean title from prompt
+        clean_title = StudyPipeline._extract_clean_title(prompt)
+
+        # Check for uploaded Document payload (Sub-Mode B: Document-Grounded Notes)
         doc_payload = attached_doc or attached_image
         extracted_doc_text = ""
         if doc_payload:
@@ -52,35 +48,29 @@ class StudyPipeline:
 
         if extracted_doc_text and len(extracted_doc_text) > 100:
             return StudyPipeline._execute_doc_study(
-                orchestrator, prompt, extracted_doc_text, reasoning_llm, reasoning_key,
+                orchestrator, prompt, clean_title, extracted_doc_text, reasoning_llm, reasoning_key,
                 reasoning_display, vol_gen_tokens, study_temp, status_callback
             )
         else:
             return StudyPipeline._execute_web_study(
-                orchestrator, prompt, reasoning_llm, reasoning_key,
+                orchestrator, prompt, clean_title, reasoning_llm, reasoning_key,
                 reasoning_display, vol_gen_tokens, study_temp, status_callback
             )
 
     @staticmethod
-    def _execute_web_study(orchestrator, prompt, reasoning_llm, reasoning_key, reasoning_display, gen_tokens, gen_temp, status_callback):
-        """Sub-Mode A: Multi-Source Academic Web Ingestion & 2-Volume Master Textbook Authoring."""
+    def _execute_web_study(orchestrator, prompt, clean_title, reasoning_llm, reasoning_key, reasoning_display, gen_tokens, gen_temp, status_callback):
+        """Sub-Mode A: Multi-Source Academic Web Harvest & 2-Volume Exhaustive Master Textbook."""
         if status_callback:
             status_callback("🎓 Study Engine [Stage 1/4]: Ingesting academic curriculum & empirical research...", "info", "system", 15)
 
         raw_contexts = []
-        topic_clean = re.sub(r"(teach me|explain|create study notes for|notes on|give me notes for|study guide for|a complete guide on)", "", prompt, flags=re.I).strip()
-        if not topic_clean:
-            topic_clean = prompt
-
         if hasattr(orchestrator, "web_search") and orchestrator.web_search:
             try:
-                # 1. Primary deep scrape
-                primary_res = orchestrator.web_search.search_and_scrape(topic_clean, max_results=6, max_scrapes=3)
+                primary_res = orchestrator.web_search.search_and_scrape(clean_title, max_results=6, max_scrapes=3)
                 if isinstance(primary_res, dict) and not primary_res.get("empty", True):
                     raw_contexts.append(primary_res.get("context", ""))
 
-                # 2. Targeted sub-queries for equations and problems (fast snippet search)
-                sub_res = orchestrator.web_search.search(f"{topic_clean} equations derivations proofs practice problems", max_results=4)
+                sub_res = orchestrator.web_search.search(f"{clean_title} mathematical derivations formulas practice problems exam", max_results=4)
                 if isinstance(sub_res, list) and sub_res:
                     formatted = [f"[{item.get('title', 'Ref')}] ({item.get('link', '')}):\n{item.get('snippet', '')}" for item in sub_res[:3] if item.get('snippet')]
                     if formatted:
@@ -91,33 +81,82 @@ class StudyPipeline:
         aggregated_context = "\n\n---\n\n".join(raw_contexts)
         orchestrator._check_cancelled("study:web_scrape_done")
 
-        # ── Volume I: Theoretical Foundations, Architecture & Complete Derivations ──
+        # ── Volume I: Theoretical Foundations, Architecture & Complete Formal Derivations ──
         if status_callback:
             status_callback(f"🎓 Study Engine [Stage 2/4]: Authoring Volume I (Theorems, Deep Concepts & Derivations) with {reasoning_display}...", "info", reasoning_key, 35)
 
-        sys_prompt_vol1 = StudyPipeline._build_volume1_system_prompt()
+        sys_prompt_vol1 = (
+            "You are a Distinguished Chaired Professor, Academician, and Author of Graduate Reference Textbooks.\n"
+            "Your task is to write VOLUME I of a definitive, publication-grade academic master reference textbook chapter.\n\n"
+            "MANDATORY LATEX & PROSE RULES:\n"
+            "1. NO META-OUTLINES: Do NOT write outlines, bullet summaries of what you plan to do, or brief overviews. Write out the ENTIRE chapter in continuous, rich, human-readable textbook prose with full explanations.\n"
+            "2. DISPLAY LATEX EQUATIONS: Write EVERY major theorem, governing formula, and mathematical proof in centered display LaTeX (`$$ ... $$`).\n"
+            "3. INLINE VARIABLES: Wrap all inline mathematical symbols and parameters in single dollar signs ($x$, $W_Q$, $d_k$, $\\mathcal{O}(N^2)$).\n"
+            "4. FIRST-PRINCIPLES DEPTH: Explain the physical/computational intuition, state transitions, step-by-step algebraic steps, variable definitions, and boundary behaviors.\n\n"
+            "REQUIRED VOLUME I STRUCTURE:\n"
+            "### 1. 🎓 Executive Overview, Core Axioms & Physical Intuition\n"
+            "- Foundational axioms, historical evolution, and computational motivation.\n"
+            "- 2 vivid real-world analogies explaining non-obvious dynamics.\n"
+            "- Core graduate competencies mastered.\n\n"
+            "### 2. 📚 Exhaustive Conceptual Breakdown & Architectural Mechanics\n"
+            "- Divide into at least 4 detailed subsections (e.g. 2.1, 2.2, 2.3, 2.4).\n"
+            "- Write multi-paragraph continuous explanations from first principles analyzing internal operations.\n\n"
+            "### 3. 📐 The Complete Mathematical Framework & Rigorous Derivations\n"
+            "- State all governing equations in display LaTeX `$$ ... $$`.\n"
+            "- Provide complete line-by-line algebraic proofs showing every intermediate step.\n"
+            "- Define every variable, matrix dimension, tensor shape, and constant explicitly in bullet points.\n\n"
+            "### 4. 🔬 Boundary Dynamics, Complexity Analysis & Engineering Constraints\n"
+            "- Asymptotic limits, computational/memory complexity proofs (e.g. $\\mathcal{O}(\\cdot)$ in time and space).\n"
+            "- Hardware-level optimization, memory bandwidth bottlenecks, and modern production standards."
+        )
+
         prompt_vol1 = (
-            f"ACADEMIC KNOWLEDGE BASE & CURRICULUM CONTEXT:\n{aggregated_context[:10000] if aggregated_context else 'Comprehensive Academic Curriculum Base'}\n\n"
-            f"TARGET TOPIC: {topic_clean}\n\n"
-            f"TASK: Author VOLUME I of the Master Reference Textbook for '{topic_clean}'.\n"
-            f"Cover Modules 1, 2, 3, and 4 with exhaustive depth, multi-paragraph prose from first principles, and complete line-by-line LaTeX display derivations ($$ ... $$)."
+            f"ACADEMIC RESEARCH CONTEXT:\n{aggregated_context[:10000] if aggregated_context else 'Comprehensive Academic Curriculum Base'}\n\n"
+            f"TARGET TOPIC: {clean_title}\n"
+            f"FULL USER INQUIRY: {prompt}\n\n"
+            f"Write the complete, exhaustive VOLUME I for '{clean_title}'. Follow all 4 modules with full continuous prose and complete display LaTeX equations ($$ ... $$):"
         )
 
         raw_vol1 = orchestrator._call_model(reasoning_llm, prompt_vol1, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol1)
         cleaned_vol1 = orchestrator._strip_thinking(raw_vol1)
         orchestrator._check_cancelled("study:volume1_done")
 
-        # ── Volume II: Applied Taxonomy, Problem Bank & Standardized Mock Exam ──
+        # ── Volume II: Applied Taxonomy, 10-Problem Solved Question Bank & Standardized Mock Exam ──
         if status_callback:
             status_callback(f"🎓 Study Engine [Stage 3/4]: Authoring Volume II (10-Problem Solved Bank & Mock Exam Paper) with {reasoning_display}...", "info", reasoning_key, 70)
 
-        sys_prompt_vol2 = StudyPipeline._build_volume2_system_prompt()
+        sys_prompt_vol2 = (
+            "You are a Distinguished Chief Examiner and Professor for National Competitive & Graduate Examinations.\n"
+            "Your task is to write VOLUME II: Applied Taxonomy, Master Solved Question Bank, and Complete Standardized Mock Examination Paper.\n\n"
+            "CRITICAL MANDATE — NO SUMMARIES OR PROMISES:\n"
+            "- DO NOT write a syllabus outline or say 'In this section we will solve problems'.\n"
+            "- You MUST write out all 10 problems IN FULL with concrete numbers, parameter values, step-by-step algebraic substitutions, and final boxed answers.\n"
+            "- You MUST write out the complete Mock Exam paper with full questions, options A/B/C/D, answer keys, and marking rubrics.\n"
+            "- Render ALL math in display LaTeX (`$$ ... $$`).\n\n"
+            "REQUIRED VOLUME II STRUCTURE:\n"
+            "### 5. 📊 Master Multi-Dimensional Comparison & Classification Matrices\n"
+            "Construct a dense, multi-column Markdown comparison table contrasting key architectures, computational complexities, memory footprints, and trade-offs.\n\n"
+            "### 6. 💡 High-Yield Exam Traps, Conceptual Pitfalls & Memory Mnemonics\n"
+            "- Top 5 tricky pitfalls, sign/index errors, and frequent student misconceptions with correct explanations.\n"
+            "- High-yield memory mnemonics for rapid exam recall.\n"
+            "- 6 Rapid-Revision Q&A Flashcards.\n\n"
+            "### 7. 📝 10-Problem Master Solved Question Bank\n"
+            "Write out 10 distinct, fully solved problems graded by difficulty:\n"
+            "- **Problems 1-3 (Foundational / Direct Computation):** Direct formula applications with full arithmetic steps.\n"
+            "- **Problems 4-7 (Intermediate / Multi-Step Analysis):** Complex analytical problems with multi-step substitutions.\n"
+            "- **Problems 8-10 (Advanced / Rigorous Proofs & Optimization):** Tough GATE/Olympiad-level problems with complete proofs.\n"
+            "EVERY PROBLEM MUST INCLUDE: **Question**, **Given Parameters**, **Governing Formula ($$ ... $$)**, **Step-by-Step Derivation**, and **Final Boxed Answer**.\n\n"
+            "### 8. 🎯 Standardized University Mock Exam Blueprint & Scoring Rubric\n"
+            "- **Section A:** 5 Multiple Choice Questions (with options A, B, C, D, Answer Key & Detailed Rationale).\n"
+            "- **Section B:** 3 Short-Answer Numerical Questions with complete worked-out solutions.\n"
+            "- **Section C:** 2 Long-Form Comprehensive Derivation / System Design Questions with official step-by-step marking rubrics."
+        )
+
         prompt_vol2 = (
-            f"ACADEMIC KNOWLEDGE BASE & CURRICULUM CONTEXT:\n{aggregated_context[:8000] if aggregated_context else 'Comprehensive Academic Curriculum Base'}\n\n"
-            f"TARGET TOPIC: {topic_clean}\n\n"
-            f"VOLUME I SUMMARY/THEOREMS COVERED:\n{cleaned_vol1[:1500]}...\n\n"
-            f"TASK: Author VOLUME II of the Master Reference Textbook for '{topic_clean}'.\n"
-            f"Cover Modules 5, 6, 7, and 8 with exhaustive detail: complete comparative tables, exam traps/mnemonics/flashcards, the full 10 solved problems with complete derivations, and the full mock exam blueprint with scoring rubrics."
+            f"TARGET TOPIC: {clean_title}\n"
+            f"VOLUME I CONTEXT (Already authored):\n{cleaned_vol1[:1200]}...\n\n"
+            f"Write the complete, fully worked-out VOLUME II for '{clean_title}'. "
+            f"Write out EVERY SINGLE ONE of the 10 solved problems and all exam questions in full with complete derivations and LaTeX math ($$ ... $$):"
         )
 
         raw_vol2 = orchestrator._call_model(reasoning_llm, prompt_vol2, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol2)
@@ -129,8 +168,8 @@ class StudyPipeline:
 
         return (
             f"# 🎓 Master Reference Textbook & Comprehensive Pedagogical Treatise\n"
-            f"## 📖 Subject: {topic_clean.title()}\n\n"
-            f"> **Curriculum Standard:** University Graduate & Doctoral Reference Level | **Engine:** DeepSeek-R1 High-Precision Pedagogical Core\n\n"
+            f"## 📖 Subject: {clean_title.title()}\n\n"
+            f"> **Curriculum Standard:** University Graduate Reference Level | **Engine:** DeepSeek-R1 High-Precision Pedagogical Core\n\n"
             f"---\n\n"
             f"## 📚 Volume I: Theoretical Foundations, Architecture & Complete Formal Derivations\n\n"
             f"{cleaned_vol1}\n\n"
@@ -140,39 +179,63 @@ class StudyPipeline:
         )
 
     @staticmethod
-    def _execute_doc_study(orchestrator, prompt, doc_text, reasoning_llm, reasoning_key, reasoning_display, gen_tokens, gen_temp, status_callback):
+    def _execute_doc_study(orchestrator, prompt, clean_title, doc_text, reasoning_llm, reasoning_key, reasoning_display, gen_tokens, gen_temp, status_callback):
         """Sub-Mode B: Document-Grounded Multi-Volume Master Study Notes & Solved Exam Suite."""
         if status_callback:
             status_callback(f"🎓 Study Engine [Stage 1/3]: Ingesting uploaded document ({len(doc_text)} chars)...", "info", "system", 20)
 
         orchestrator._check_cancelled("study:doc_ingest")
 
-        # Volume I
+        # Volume I: Document-Grounded Theory & Mathematical Notes
         if status_callback:
             status_callback(f"🎓 Study Engine [Stage 2/3]: Grounding Volume I (Theorems, Core Mechanisms & Formulas) with {reasoning_display}...", "info", reasoning_key, 45)
 
-        sys_prompt_vol1 = StudyPipeline._build_volume1_system_prompt(is_doc_grounded=True)
+        sys_prompt_vol1 = (
+            "You are a Distinguished Professor and Master Educator.\n"
+            "Your task is to transform the provided source document into VOLUME I of a comprehensive, human-readable master study guide and reference textbook.\n\n"
+            "MANDATORY GROUNDING & LATEX RULES:\n"
+            "1. STRICT GROUNDING: Every concept, theorem, definition, and formula must be strictly grounded in the ingested source document.\n"
+            "2. DISPLAY LATEX: Write all mathematical formulas and equations in centered display LaTeX (`$$ ... $$`).\n"
+            "3. CONTINUOUS TEXTBOOK PROSE: Write in-depth, multi-paragraph explanations explaining all dynamics from first principles. Do NOT write brief bullet outlines.\n\n"
+            "REQUIRED STRUCTURE:\n"
+            "### 1. 🎓 Executive Epistemological Summary & Foundational Definitions\n"
+            "### 2. 📚 Comprehensive In-Depth Conceptual Deconstruction (Subsections 2.1, 2.2, 2.3, 2.4)\n"
+            "### 3. 📐 Mathematical Formalisms, Governing Equations ($$ ... $$) & Rigorous Proofs\n"
+            "### 4. 🔬 Edge Cases, Boundary Conditions & Practical Domain Implementations"
+        )
+
         prompt_vol1 = (
             f"INGESTED SOURCE DOCUMENT CONTENT:\n\"\"\"\n{doc_text[:14000]}\n\"\"\"\n\n"
-            f"STUDENT FOCUS / TOPIC: {prompt if prompt else 'Exhaustive master study treatise grounded in this document.'}\n\n"
-            f"TASK: Author VOLUME I of the Master Reference Textbook grounded strictly in the source document above.\n"
-            f"Cover Modules 1, 2, 3, and 4 with exhaustive depth, multi-paragraph conceptual breakdowns, and complete line-by-line display LaTeX derivations ($$ ... $$)."
+            f"FOCUS / USER QUERY: {prompt if prompt else clean_title}\n\n"
+            f"Write the complete, document-grounded VOLUME I with full display LaTeX equations ($$ ... $$):"
         )
 
         raw_vol1 = orchestrator._call_model(reasoning_llm, prompt_vol1, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol1)
         cleaned_vol1 = orchestrator._strip_thinking(raw_vol1)
         orchestrator._check_cancelled("study:doc_vol1_done")
 
-        # Volume II
+        # Volume II: Document-Grounded Practice Bank & Exam Suite
         if status_callback:
             status_callback(f"🎓 Study Engine [Stage 3/3]: Grounding Volume II (10-Problem Solved Bank & Mock Exam) with {reasoning_display}...", "info", reasoning_key, 75)
 
-        sys_prompt_vol2 = StudyPipeline._build_volume2_system_prompt(is_doc_grounded=True)
+        sys_prompt_vol2 = (
+            "You are a Chief Academic Examiner.\n"
+            "Your task is to author VOLUME II: Document-Grounded Comparative Matrices, 10 Fully Solved Practice Problems, and a Predicted Mock Exam Paper.\n\n"
+            "MANDATORY EXAM RULES:\n"
+            "1. NO PROMISES OR OUTLINES: Write out all 10 problems completely with full numbers, step-by-step worked solutions, and final boxed answers.\n"
+            "2. Ground all problems and exam questions directly in the formulas and concepts present in the ingested document.\n"
+            "3. Render all math in centered display LaTeX (`$$ ... $$`).\n\n"
+            "REQUIRED STRUCTURE:\n"
+            "### 5. 📊 Comparative Taxonomy & Classification Matrices\n"
+            "### 6. 💡 High-Yield Exam Traps, Common Misconceptions & Mnemonics\n"
+            "### 7. 📝 10-Problem Master Solved Question Bank (3 Foundational, 4 Intermediate, 3 Advanced with Full Derivations)\n"
+            "### 8. 🎯 Predicted Examination Paper (Section A: 5 MCQs with Explanations, Section B: 3 Numerical Questions, Section C: 2 Derivations with Rubrics)"
+        )
+
         prompt_vol2 = (
             f"INGESTED SOURCE DOCUMENT CONTENT:\n\"\"\"\n{doc_text[:10000]}\n\"\"\"\n\n"
-            f"VOLUME I COVERED:\n{cleaned_vol1[:1500]}...\n\n"
-            f"TASK: Author VOLUME II of the Document-Grounded Master Textbook.\n"
-            f"Cover Modules 5, 6, 7, and 8: comparative matrices, document-specific exam traps, 10 solved practice problems grounded directly in the document, and a full mock exam paper with scoring rubrics."
+            f"VOLUME I SUMMARY:\n{cleaned_vol1[:1200]}...\n\n"
+            f"Write the complete, document-grounded VOLUME II with all 10 solved problems and full mock exam paper written out in complete detail:"
         )
 
         raw_vol2 = orchestrator._call_model(reasoning_llm, prompt_vol2, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol2)
@@ -188,6 +251,30 @@ class StudyPipeline:
             f"## 📝 Volume II: Comparative Matrices, 10-Problem Solved Bank & Predicted Examination Paper\n\n"
             f"{cleaned_vol2}"
         )
+
+    @staticmethod
+    def _extract_clean_title(prompt):
+        """Extracts a concise, readable subject title from a user prompt."""
+        if not prompt:
+            return "Advanced Academic Subject Reference"
+        
+        # Strip common instruction prefixes
+        text = re.sub(
+            r"^(teach me|explain|create study notes for|notes on|give me notes for|study guide for|a complete guide on|write a textbook on|author an exhaustive graduate level reference textbook on|author an exhaustive reference textbook on|author a textbook on)\s+",
+            "", prompt, flags=re.I
+        ).strip()
+
+        # If prompt has multiple sentences, take the first core clause
+        if "." in text:
+            first_clause = text.split(".")[0].strip()
+            if len(first_clause) > 5 and len(first_clause) < 90:
+                text = first_clause
+
+        # Strip tail instruction clauses
+        text = re.sub(r"(author an exhaustive.*|covering mathematical derivations.*|with full derivations.*|create a 10.*|complete mock exam.*)", "", text, flags=re.I).strip()
+        text = text.rstrip(":,.- ")
+
+        return text[:80].strip() if text else "Advanced Academic Curriculum"
 
     @staticmethod
     def _extract_document_text(payload):
@@ -231,62 +318,3 @@ class StudyPipeline:
             print(f"Document extraction notice: {e}")
 
         return ""
-
-    @staticmethod
-    def _build_volume1_system_prompt(is_doc_grounded=False):
-        prompt = (
-            "You are a Distinguished Chaired Professor, Academician, and Principal Author of Graduate Reference Textbooks.\n"
-            "Your task is to write VOLUME I of a definitive, publication-grade 10-20 page master reference textbook chapter.\n\n"
-            "MANDATORY VOLUME I STRUCTURAL MODULES:\n\n"
-            "### 1. 🎓 Executive Epistemological Overview & Core Axioms\n"
-            "- Foundational axioms, historical evolution, and physical/computational intuition.\n"
-            "- 2 vivid, non-trivial real-world analogies explaining core dynamics.\n"
-            "- Bulleted list of graduate-level competencies the student will master.\n\n"
-            "### 2. 📚 Exhaustive Conceptual Breakdown & Sub-Topic Analysis\n"
-            "- Divide into at least 4 detailed sub-sections (e.g., 2.1, 2.2, 2.3, 2.4).\n"
-            "- Write in-depth, multi-paragraph explanations from first principles. Do not summarize or use bullet-only stubs.\n"
-            "- Analyze internal mechanisms, state transitions, and governing dynamics in full academic prose.\n\n"
-            "### 3. 📐 The Complete Mathematical Framework & Rigorous Derivations\n"
-            "- Write EVERY major equation in centered display LaTeX (`$$ ... $$`).\n"
-            "- Provide line-by-line algebraic proofs and step-by-step derivations from fundamental laws.\n"
-            "- Define every single variable, constant, tensor, and SI unit explicitly in bullet points.\n\n"
-            "### 4. 🔬 Advanced Boundary Conditions, Edge Cases & Modern Applications\n"
-            "- Limiting behavior (asymptotes, high/low-frequency limits, singularity handling).\n"
-            "- Real-world engineering implementations, hardware constraints, or modern industry standards.\n\n"
-            "STRICT FORMATTING RULES:\n"
-            "1. ALWAYS render all math in standard LaTeX ($$ ... $$ for display, $ ... $ for inline variables).\n"
-            "2. Never abbreviate or use placeholders. Write full, continuous, publication-grade academic prose."
-        )
-        if is_doc_grounded:
-            prompt += "\n3. STRICT GROUNDING: Ground every theorem, formula, and concept strictly in the ingested document."
-        return prompt
-
-    @staticmethod
-    def _build_volume2_system_prompt(is_doc_grounded=False):
-        prompt = (
-            "You are a Distinguished Chaired Professor, Academician, and Chief Examiner for National Competitive Examinations.\n"
-            "Your task is to write VOLUME II of a definitive, publication-grade master reference study guide and examination suite.\n\n"
-            "MANDATORY VOLUME II STRUCTURAL MODULES:\n\n"
-            "### 5. 📊 Master Multi-Dimensional Comparison & Classification Matrices\n"
-            "- Construct a dense, multi-column Markdown comparison table contrasting key mechanisms, complexities, trade-offs, and applications.\n\n"
-            "### 6. 💡 High-Yield Exam Pitfalls, Conceptual Traps & Memory Mnemonics\n"
-            "- Specific tricky traps, sign errors, and frequent student misconceptions with correct explanations.\n"
-            "- High-yield memory mnemonics and mental shortcuts for rapid recall.\n"
-            "- 6 to 8 Rapid-Revision Q&A Flashcards.\n\n"
-            "### 7. 📝 10-Problem Master Solved Question Bank\n"
-            "Provide 10 distinct, fully solved problems graded by difficulty:\n"
-            "- **Problems 1-3 (Foundational / Conceptual):** Direct formula and theorem applications with complete step-by-step solutions.\n"
-            "- **Problems 4-7 (Intermediate / Computational):** Complex numerical problems with multi-step substitutions and unit conversions.\n"
-            "- **Problems 8-10 (Advanced / Analytical & Proofs):** Tough Olympiad/GATE-level analytical problems with deep mathematical proofs.\n"
-            "- EVERY PROBLEM MUST INCLUDE: Question, Given Parameters, Formula Used, Step-by-Step Derivation, and Final Boxed Answer.\n\n"
-            "### 8. 🎯 Standardized Mock Exam Blueprint & Scoring Rubric\n"
-            "- **Section A:** 5 Multiple Choice / Conceptual Questions (with answer key & detailed explanations).\n"
-            "- **Section B:** 3 Short-Answer Numerical Questions with complete work.\n"
-            "- **Section C:** 2 Long-Form Comprehensive Proof / Derivation Questions with official step-by-step marking rubrics.\n\n"
-            "STRICT FORMATTING RULES:\n"
-            "1. ALWAYS render all math in standard LaTeX ($$ ... $$ for display, $ ... $ for inline variables).\n"
-            "2. Ensure all 10 problems are completely written out with full derivations — no abbreviations."
-        )
-        if is_doc_grounded:
-            prompt += "\n3. STRICT GROUNDING: Ground all practice problems and exam questions strictly in the ingested document."
-        return prompt
