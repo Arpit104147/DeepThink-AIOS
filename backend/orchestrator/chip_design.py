@@ -7,10 +7,11 @@ from backend.downloader import resolve_model_key
 
 class ChipDesignPipeline:
     """
-    Universal Semiconductor EDA & Multi-Tier Chip Architecture Engine (180nm Planar to 2nm GAAFET).
+    Universal Semiconductor EDA & Nanoscale Silicon Architecture Studio (180nm Planar to 2nm GAAFET).
     Supports Out-of-Order CPUs, SIMT GPUs, 2D Systolic Array TPUs, Mobile SoCs/APUs,
     High-Bandwidth Memory (HBM3/DDR5) controllers, and Analog SPICE netlists with interactive
-    3D Physical Die Visualizations, real-time DVFS Clock Speed Calculations, and Thermal Breakpoint Analysis.
+    Multi-Layer BEOL Interconnect Stacks (1000s of Metal Traces & Vias), Animated Data Flow Particles,
+    DVFS Real-Time Clock Telemetry, and Production-Grade Synthesizable Verilog RTL.
     """
 
     @staticmethod
@@ -58,16 +59,16 @@ class ChipDesignPipeline:
             f"CHIP CLASSIFICATION: {chip_meta['type']}\n\n"
             f"MANDATORY ARCHITECTURE SPECIFICATION MODULES:\n"
             f"1. 🏛️ Microarchitecture & Sub-Module Breakdown: Detailed block diagram description, pipeline stages, datapaths, and execution units.\n"
-            f"2. 🔌 Port & Interface Pinout Table: Complete I/O list with signal names, bit widths, directions (input/output), and protocol standards (AXI, APB, DFI, native).\n"
+            f"2. 🔌 Port & Interface Pinout Table: Complete I/O list with signal names, bit widths, directions (input/output), and protocol standards (AXI4-Stream, APB, DFI, native).\n"
             f"3. ⏱️ Clocking, Reset & DVFS Power Strategy: Operating voltage-frequency states (Eco, Ideal Efficiency, Max Turbo, Thermal Breakpoint) and Backside Power Delivery (BSPDN) / Power Gating.\n"
             f"4. 📊 Estimated Silicon Metrics: Target frequency ($f_{{max}}$ in GHz), transistor budget, die area ($\text{{mm}}^2$), and TDP power envelope.\n"
             f"5. 🧪 Testbench & Verification Plan: Corner case test vectors, hazard scenarios, and assertion coverage plan."
         )
         arch_plan = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, arch_prompt, gen_tokens, 0.3))
 
-        # Stage 2: HDL / SPICE Generation
+        # Stage 2: Production-Grade Synthesizable HDL / SPICE Generation
         if status_callback:
-            status_callback(f"Stage 2: Generating Synthesizable {req_lang.upper()} Core...", "info", "ornith", 50)
+            status_callback(f"Stage 2: Generating Production-Grade Synthesizable {req_lang.upper()} Core...", "info", "ornith", 50)
 
         coder_key = resolve_model_key("coding") or "ornith"
         try:
@@ -84,15 +85,18 @@ class ChipDesignPipeline:
             )
         else:
             hdl_prompt = (
-                f"Write production-grade, synthesizable IEEE 1364 / SystemVerilog code for this hardware design:\n{prompt}\n\n"
+                f"You are a Lead Principal ASIC/FPGA RTL Verification Fellow.\n"
+                f"Write PRODUCTION-GRADE, 100% SYNTHESIZABLE IEEE 1364 / SystemVerilog RTL code for this hardware design:\n"
+                f"REQUEST: {prompt}\n\n"
                 f"Architecture Plan:\n{arch_plan[:1600]}\n\n"
-                f"STRICT VERILOG RULES:\n"
-                f"1. Write standard synthesizable Verilog syntax with clean module declarations, registers, and wire assignments.\n"
-                f"2. Include complete logic implementations for all sub-modules without pseudo-code or placeholders.\n"
-                f"3. Separate modules cleanly one after another (NEVER nest modules).\n"
-                f"4. Output TWO distinct code blocks:\n"
-                f"   - Block 1: Design module(s) in ```verilog```\n"
-                f"   - Block 2: Complete self-checking testbench in ```verilog``` with $dumpfile(\"wave.vcd\"), $dumpvars(0, ...), stimulus vectors, and $finish."
+                f"STRICT PRODUCTION RTL RULES:\n"
+                f"1. Write complete, functional synthesizable SystemVerilog/Verilog logic with NO pseudo-code, omissions, or comments like '// implement logic here'.\n"
+                f"2. Use clean parameterization (e.g. parameter DATA_WIDTH = 16, ARRAY_SIZE = 8, ADDR_WIDTH = 32).\n"
+                f"3. Include explicit Control State Machines (FSMs) with state registers (IDLE, LOAD, COMPUTE, ACCUMULATE, VALID) and AXI4-Stream valid/ready handshaking.\n"
+                f"4. Separate all sub-modules cleanly (Top module, Processing Element MACs, FIFO/SRAM buffer controllers).\n"
+                f"5. Output TWO distinct code blocks:\n"
+                f"   - Block 1: Complete synthesizable design module(s) in ```verilog```\n"
+                f"   - Block 2: Complete self-checking testbench in ```verilog``` with $dumpfile(\"wave.vcd\"), $dumpvars(0, ...), deterministic stimulus vectors, clock generation, reset sequence, and automated assertion verification."
             )
 
         hdl_resp = orchestrator._strip_thinking(orchestrator._call_model(coder_llm, hdl_prompt, gen_tokens, gen_temp))
@@ -103,16 +107,16 @@ class ChipDesignPipeline:
         else:
             hdl_clean = Sandbox.extract_code(hdl_resp) or hdl_resp
 
-        # Stage 3: Architecture-Specific 3D Physical Die & DVFS Telemetry Visualizer
+        # Stage 3: Nanoscale 3D Silicon Visualizer with Multi-Layer BEOL Interconnects & Particle Flow
         if status_callback:
-            status_callback(f"Stage 3: Rendering 3D Physical Microarchitecture ({chip_meta['type']})...", "info", "system", 75)
+            status_callback(f"Stage 3: Rendering Multi-Layer Interconnects & 3D Die ({chip_meta['type']})...", "info", "system", 75)
 
         viz_html = ChipDesignPipeline._build_3d_chip_visualization(prompt, chip_meta)
 
         output_parts = [
             f"### 🏗️ Stage 1: Architecture & Process Node Decomposition ({chip_meta['node']})\n\n{arch_plan}\n\n",
-            f"### ⚡ Stage 2: Synthesizable {req_lang.upper()} Implementation & Testbench\n\n```{req_lang}\n{hdl_clean}\n```\n\n",
-            f"### 🔬 Stage 3: 3D Physical Semiconductor Die & DVFS Operating Telemetry ({chip_meta['type']})\n\n{viz_html}"
+            f"### ⚡ Stage 2: Production Synthesizable {req_lang.upper()} Implementation & Testbench\n\n```{req_lang}\n{hdl_clean}\n```\n\n",
+            f"### 🔬 Stage 3: 3D Nanoscale Die, Multi-Layer Interconnect Stack & DVFS Telemetry ({chip_meta['type']})\n\n{viz_html}"
         ]
 
         if not eda_tools['iverilog']:
@@ -199,9 +203,9 @@ class ChipDesignPipeline:
     @staticmethod
     def _build_3d_chip_visualization(prompt, chip_meta=None):
         """
-        Generates a state-of-the-art interactive 3D Physical Die & Microarchitecture Visualizer in Three.js.
-        Features interactive DVFS sliders, real-time clock speed calculations, ideal operating points,
-        and thermal/voltage breakpoint analytics.
+        Generates an interactive 3D Physical Die & Multi-Layer Interconnect Visualizer in Three.js.
+        Features thousands of BEOL metal routing traces (M0-M15), vertical via arrays, animated data packet particle streams,
+        layer stack isolation checkboxes, DVFS performance sliders, and thermal breakpoint analytics.
         """
         if not chip_meta:
             chip_meta = ChipDesignPipeline._analyze_chip_meta(prompt)
@@ -220,41 +224,48 @@ class ChipDesignPipeline:
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <style>
     html, body {{ margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #0a0d14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
-    #hud {{ position: absolute; top: 16px; right: 16px; background: rgba(15, 23, 42, 0.94); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.14); padding: 18px 20px; border-radius: 14px; color: #f8fafc; font-size: 0.8rem; box-shadow: 0 16px 40px rgba(0,0,0,0.75); z-index: 100; max-width: 380px; max-height: calc(100vh - 32px); overflow-y: auto; }}
-    #hud h3 {{ margin: 0 0 6px; font-size: 0.95rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
+    #hud {{ position: absolute; top: 16px; right: 16px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.15); padding: 16px 18px; border-radius: 14px; color: #f8fafc; font-size: 0.78rem; box-shadow: 0 16px 40px rgba(0,0,0,0.8); z-index: 100; max-width: 390px; max-height: calc(100vh - 32px); overflow-y: auto; }}
+    #hud h3 {{ margin: 0 0 4px; font-size: 0.94rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
     #hud .badge {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; padding: 2px 8px; border-radius: 6px; font-size: 0.68rem; font-weight: 600; display: inline-block; margin-bottom: 8px; }}
     
     /* DVFS Performance Slider Controls */
-    .dvfs-section {{ background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }}
-    .dvfs-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.74rem; font-weight: 700; }}
-    .dvfs-state-badge {{ padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }}
-    .slider-container {{ position: relative; margin: 8px 0; }}
-    .dvfs-slider {{ width: 100%; height: 6px; -webkit-appearance: none; background: #334155; border-radius: 4px; outline: none; }}
-    .dvfs-slider::-webkit-slider-thumb {{ -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #38bdf8; cursor: pointer; box-shadow: 0 0 10px #38bdf8; }}
-    .slider-labels {{ display: flex; justify-content: space-between; font-size: 0.64rem; color: #94a3b8; font-weight: 600; margin-top: 4px; }}
+    .dvfs-section {{ background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }}
+    .dvfs-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 0.72rem; font-weight: 700; }}
+    .dvfs-state-badge {{ padding: 2px 6px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; }}
+    .slider-container {{ position: relative; margin: 6px 0; }}
+    .dvfs-slider {{ width: 100%; height: 5px; -webkit-appearance: none; background: #334155; border-radius: 4px; outline: none; }}
+    .dvfs-slider::-webkit-slider-thumb {{ -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #38bdf8; cursor: pointer; box-shadow: 0 0 10px #38bdf8; }}
+    .slider-labels {{ display: flex; justify-content: space-between; font-size: 0.62rem; color: #94a3b8; font-weight: 600; margin-top: 2px; }}
+    
+    /* Layer Stack Visibility Filters */
+    .layers-section {{ background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }}
+    .layers-title {{ font-size: 0.68rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.04em; }}
+    .layers-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.7rem; }}
+    .layer-cb {{ display: flex; align-items: center; gap: 6px; cursor: pointer; color: #cbd5e1; }}
+    .layer-cb input {{ cursor: pointer; accent-color: #38bdf8; }}
     
     /* Telemetry KPI Grid */
-    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }}
-    .kpi-card {{ background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 6px 8px; }}
-    .kpi-label {{ font-size: 0.64rem; color: #94a3b8; text-transform: uppercase; }}
-    .kpi-val {{ font-size: 0.88rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }}
+    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }}
+    .kpi-card {{ background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 5px 7px; }}
+    .kpi-label {{ font-size: 0.62rem; color: #94a3b8; text-transform: uppercase; }}
+    .kpi-val {{ font-size: 0.84rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }}
     
     /* Operating Point Banners */
-    #operating-banner {{ padding: 8px 10px; border-radius: 8px; font-size: 0.72rem; line-height: 1.35; margin-bottom: 12px; font-weight: 600; }}
+    #operating-banner {{ padding: 6px 8px; border-radius: 6px; font-size: 0.7rem; line-height: 1.35; margin-bottom: 10px; font-weight: 600; }}
     .banner-ideal {{ background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; }}
     .banner-turbo {{ background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fbbf24; }}
     .banner-breakpoint {{ background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171; }}
     .banner-eco {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; }}
 
-    #inspector {{ background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 0.75rem; }}
-    #inspector-title {{ font-weight: 700; color: #38bdf8; margin-bottom: 4px; }}
-    #inspector-desc {{ color: #cbd5e1; font-size: 0.72rem; line-height: 1.35; }}
-    .legend-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }}
-    .legend-item {{ display: flex; align-items: center; gap: 8px; font-size: 0.72rem; color: #cbd5e1; }}
-    .box {{ width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }}
-    .btn-exploded {{ width: 100%; background: #0284c7; color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.75rem; transition: background 0.2s; }}
+    #inspector {{ background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 8px; margin-bottom: 10px; font-size: 0.72rem; }}
+    #inspector-title {{ font-weight: 700; color: #38bdf8; margin-bottom: 3px; }}
+    #inspector-desc {{ color: #cbd5e1; font-size: 0.7rem; line-height: 1.35; }}
+    .legend-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 10px; }}
+    .legend-item {{ display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #cbd5e1; }}
+    .box {{ width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }}
+    .btn-exploded {{ width: 100%; background: #0284c7; color: white; border: none; padding: 7px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.72rem; transition: background 0.2s; }}
     .btn-exploded:hover {{ background: #0369a1; }}
-    #controls-hint {{ position: absolute; bottom: 16px; left: 16px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); padding: 8px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.72rem; z-index: 100; }}
+    #controls-hint {{ position: absolute; bottom: 16px; left: 16px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); padding: 6px 12px; border-radius: 6px; color: #94a3b8; font-size: 0.7rem; z-index: 100; }}
   </style>
 </head>
 <body>
@@ -284,14 +295,26 @@ class ChipDesignPipeline:
       💠 <strong>Ideal Operating Point:</strong> Optimal Energy-Delay Product ($0.78V$). Maximum Perf/Watt with zero thermal throttling.
     </div>
 
+    <!-- Multi-Layer Interconnect Stack Visibility Toggles -->
+    <div class="layers-section">
+      <div class="layers-title">🌌 Multi-Layer Stack Explorer</div>
+      <div class="layers-grid">
+        <label class="layer-cb"><input type="checkbox" id="cbTransistors" checked> Transistor Die</label>
+        <label class="layer-cb"><input type="checkbox" id="cbInterconnects" checked> M0-M15 Metal Mesh</label>
+        <label class="layer-cb"><input type="checkbox" id="cbVias" checked> Vertical Vias</label>
+        <label class="layer-cb"><input type="checkbox" id="cbPowerGrid" checked> BSPDN Power Rails</label>
+        <label class="layer-cb" style="grid-column: span 2;"><input type="checkbox" id="cbParticles" checked> ⚡ Live Data Flow Particles</label>
+      </div>
+    </div>
+
     <!-- Live Telemetry KPI Grid -->
-    <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi-grid">
       <div class="kpi-card">
-        <div class="kpi-label">Big CPU Clock</div>
+        <div class="kpi-label">Core Clock ($f_{{clk}}$)</div>
         <div class="kpi-val" id="kpiBigCpu" style="color:#ef4444;">2.85 GHz</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">GPU Shader Clock</div>
+        <div class="kpi-label">GPU/NPU Clock</div>
         <div class="kpi-val" id="kpiGpu" style="color:#a855f7;">980 MHz</div>
       </div>
       <div class="kpi-card">
@@ -299,7 +322,7 @@ class ChipDesignPipeline:
         <div class="kpi-val" id="kpiVoltage" style="color:#38bdf8;">0.78 V</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Die Junction Temp</div>
+        <div class="kpi-label">Junction Temp ($T_j$)</div>
         <div class="kpi-val" id="kpiTemp" style="color:#10b981;">52 °C</div>
       </div>
       <div class="kpi-card">
@@ -307,20 +330,20 @@ class ChipDesignPipeline:
         <div class="kpi-val" id="kpiPower">5.4 W</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Compute Throughput</div>
+        <div class="kpi-label">Throughput / Bandwidth</div>
         <div class="kpi-val" id="kpiThroughput" style="color:#f59e0b;">2.8 TFLOPS</div>
       </div>
     </div>
     
     <div id="inspector">
       <div id="inspector-title">💡 Hover / Click Any Subsystem Tile</div>
-      <div id="inspector-desc">Interactive raycasting will inspect real-time clock frequencies and microarchitecture specs.</div>
+      <div id="inspector-desc">Interactive raycasting will inspect real-time clock frequencies, BEOL metal traces, and microarchitecture specs.</div>
     </div>
 
     <div class="legend-grid" id="legendGrid"></div>
     <button class="btn-exploded" id="toggleExploded">Toggle Exploded-View Inspection</button>
   </div>
-  <div id="controls-hint">🖱️ Left-Click: Rotate | Right-Click: Pan | Scroll: Zoom | Slide DVFS: Test Operating Points</div>
+  <div id="controls-hint">🖱️ Left-Click: Rotate | Right-Click: Pan | Scroll: Zoom | Toggle Layers & DVFS Slider</div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {{
@@ -331,7 +354,7 @@ class ChipDesignPipeline:
       var scene = new THREE.Scene();
       scene.background = new THREE.Color(0x0a0d14);
       var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(0, 14, 22);
+      camera.position.set(0, 16, 24);
       
       var renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -344,7 +367,7 @@ class ChipDesignPipeline:
       controls.dampingFactor = 0.05;
       controls.target.set(0, 1.0, 0);
       
-      // Lighting
+      // Studio Lighting
       var ambLight = new THREE.AmbientLight(0xffffff, 0.75);
       scene.add(ambLight);
       var dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
@@ -362,8 +385,21 @@ class ChipDesignPipeline:
       var layers = [];
       var interactiveObjects = [];
 
-      function addInteractiveMesh(mesh, name, desc, specs) {{
-        mesh.userData = {{ name: name, desc: desc, specs: specs || {{}}, origColor: mesh.material.color.getHex() }};
+      // Groups for Multi-Layer Stack
+      var transistorGroup = new THREE.Group();
+      var interconnectGroup = new THREE.Group();
+      var viaGroup = new THREE.Group();
+      var powerGridGroup = new THREE.Group();
+      var particlesGroup = new THREE.Group();
+
+      rootGroup.add(transistorGroup);
+      rootGroup.add(interconnectGroup);
+      rootGroup.add(viaGroup);
+      rootGroup.add(powerGridGroup);
+      rootGroup.add(particlesGroup);
+
+      function addInteractiveMesh(mesh, name, desc) {{
+        mesh.userData = {{ name: name, desc: desc, origColor: mesh.material.color.getHex() }};
         interactiveObjects.push(mesh);
       }}
 
@@ -376,7 +412,7 @@ class ChipDesignPipeline:
           bannerText: "🟢 <strong>Eco Standby:</strong> Minimum leakage power ($0.60V$). Background OS tasks only.",
           voltage: "0.60 V", temp: "36 °C", power: "1.4 W",
           bigCpu: "1.20 GHz", littleCpu: "0.60 GHz", gpu: "350 MHz", npu: "8 TOPS",
-          throughput: "0.8 TFLOPS", memBw: "51 GB/s", tempColor: "#38bdf8"
+          throughput: "0.8 TFLOPS", tempColor: "#38bdf8"
         }},
         2: {{
           name: "Ideal Efficiency ⭐",
@@ -385,7 +421,7 @@ class ChipDesignPipeline:
           bannerText: "💠 <strong>Ideal Operating Point:</strong> Sweet spot on V-f curve ($0.78V$). Maximum Perf/Watt efficiency.",
           voltage: "0.78 V", temp: "52 °C", power: "5.4 W",
           bigCpu: "2.85 GHz", littleCpu: "1.40 GHz", gpu: "980 MHz", npu: "24 TOPS",
-          throughput: "2.8 TFLOPS", memBw: "102 GB/s", tempColor: "#10b981"
+          throughput: "2.8 TFLOPS", tempColor: "#10b981"
         }},
         3: {{
           name: "Max Sustained (Turbo) ⚡",
@@ -394,7 +430,7 @@ class ChipDesignPipeline:
           bannerText: "⚡ <strong>Max Sustained Turbo:</strong> Peak rated frequency ($0.95V$). High-load rendering & 3D gaming.",
           voltage: "0.95 V", temp: "78 °C", power: "14.2 W",
           bigCpu: "3.60 GHz", littleCpu: "2.00 GHz", gpu: "1.45 GHz", npu: "38 TOPS",
-          throughput: "4.6 TFLOPS", memBw: "136 GB/s", tempColor: "#f59e0b"
+          throughput: "4.6 TFLOPS", tempColor: "#f59e0b"
         }},
         4: {{
           name: "Thermal Breakpoint ⚠️",
@@ -403,7 +439,7 @@ class ChipDesignPipeline:
           bannerText: "🔴 <strong>Thermal & Voltage Breakpoint:</strong> Dielectric threshold ($1.15V$). Tj > 95°C forces thermal throttling!",
           voltage: "1.15 V", temp: "98 °C", power: "28.5 W",
           bigCpu: "4.20 GHz (Throttling)", littleCpu: "2.40 GHz", gpu: "1.85 GHz", npu: "52 TOPS",
-          throughput: "6.2 TFLOPS", memBw: "153 GB/s", tempColor: "#ef4444"
+          throughput: "6.2 TFLOPS", tempColor: "#ef4444"
         }}
       }};
 
@@ -428,7 +464,6 @@ class ChipDesignPipeline:
         document.getElementById("kpiPower").textContent = p.power;
         document.getElementById("kpiThroughput").textContent = p.throughput;
 
-        // Visual Heatmap / Emissive Glow Feedback on Silicon Tiles
         for (var i = 0; i < interactiveObjects.length; i++) {{
           var mesh = interactiveObjects[i];
           if (state === 4) {{
@@ -449,9 +484,109 @@ class ChipDesignPipeline:
         updateDvfsTelemetry(currentDvfsState);
       }});
 
-      // ── Build Microarchitecture-Specific 3D Scene ──
+      // ── Checkbox Layer Toggles ──
+      document.getElementById("cbTransistors").addEventListener("change", function(e) {{ transistorGroup.visible = e.target.checked; }});
+      document.getElementById("cbInterconnects").addEventListener("change", function(e) {{ interconnectGroup.visible = e.target.checked; }});
+      document.getElementById("cbVias").addEventListener("change", function(e) {{ viaGroup.visible = e.target.checked; }});
+      document.getElementById("cbPowerGrid").addEventListener("change", function(e) {{ powerGridGroup.visible = e.target.checked; }});
+      document.getElementById("cbParticles").addEventListener("change", function(e) {{ particlesGroup.visible = e.target.checked; }});
+
+      // ── 🌌 1. BUILD MULTI-LAYER BEOL INTERCONNECT MESH (M0 - M15) ──
+      // Lower Metal Layers (M0-M3): Ultra-dense fine-pitch copper wires
+      var mLowerMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.85, roughness: 0.2, transparent: true, opacity: 0.65 }});
+      var wireGeomX = new THREE.BoxGeometry(14.5, 0.04, 0.08);
+      var wireGeomZ = new THREE.BoxGeometry(0.08, 0.04, 14.5);
+
+      for (var layer = 0; layer < 4; layer++) {{
+        var layerY = 1.0 + layer * 0.35;
+        // Orthogonal routing (Even layers along X, Odd layers along Z)
+        for (var tr = -6.5; tr <= 6.5; tr += 0.45) {{
+          var wireMesh = new THREE.Mesh(layer % 2 === 0 ? wireGeomX : wireGeomZ, mLowerMat);
+          if (layer % 2 === 0) {{
+            wireMesh.position.set(0, layerY, tr);
+          }} else {{
+            wireMesh.position.set(tr, layerY, 0);
+          }}
+          interconnectGroup.add(wireMesh);
+        }}
+      }}
+
+      // Semi-Global Metal Layers (M4-M8): Clock Trees & AXI NoC Data Buses
+      var mMidMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.9, roughness: 0.15, transparent: true, opacity: 0.75 }});
+      var midWireX = new THREE.BoxGeometry(15.0, 0.08, 0.2);
+      var midWireZ = new THREE.BoxGeometry(0.2, 0.08, 15.0);
+
+      for (var ml = 0; ml < 3; ml++) {{
+        var midY = 2.4 + ml * 0.5;
+        for (var b = -6.0; b <= 6.0; b += 1.5) {{
+          var mWire = new THREE.Mesh(ml % 2 === 0 ? midWireX : midWireZ, mMidMat);
+          if (ml % 2 === 0) {{
+            mWire.position.set(0, midY, b);
+          }} else {{
+            mWire.position.set(b, midY, 0);
+          }}
+          interconnectGroup.add(mWire);
+        }}
+      }}
+
+      // Top Metal Layers (M9-M15): Global VDD/VSS Power Distribution Mesh
+      var mTopMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.95, roughness: 0.1, transparent: true, opacity: 0.8 }});
+      var topMeshX = new THREE.BoxGeometry(15.5, 0.12, 0.45);
+      var topMeshZ = new THREE.BoxGeometry(0.45, 0.12, 15.5);
+
+      for (var tl = 0; tl < 2; tl++) {{
+        var topY = 3.9 + tl * 0.6;
+        for (var p = -6.0; p <= 6.0; p += 2.5) {{
+          var pMesh = new THREE.Mesh(tl % 2 === 0 ? topMeshX : topMeshZ, mTopMat);
+          if (tl % 2 === 0) {{
+            pMesh.position.set(0, topY, p);
+          }} else {{
+            pMesh.position.set(p, topY, 0);
+          }}
+          interconnectGroup.add(pMesh);
+        }}
+      }}
+
+      // Vertical Inter-Layer Via Columns (V0 - V14)
+      var viaMat = new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.95, roughness: 0.1 }});
+      var viaGeom = new THREE.CylinderGeometry(0.04, 0.04, 3.2, 8);
+      for (var vx = -5.0; vx <= 5.0; vx += 2.5) {{
+        for (var vz = -5.0; vz <= 5.0; vz += 2.5) {{
+          var viaCol = new THREE.Mesh(viaGeom, viaMat);
+          viaCol.position.set(vx, 2.5, vz);
+          viaGroup.add(viaCol);
+        }}
+      }}
+
+      // ── ✨ 2. REAL-TIME ANIMATED DATA FLOW PARTICLE STREAMS ──
+      var particleCount = 450;
+      var particleGeo = new THREE.BufferGeometry();
+      var particlePositions = new Float32Array(particleCount * 3);
+      var particleSpeeds = new Float32Array(particleCount);
+      var particleAxes = new Uint8Array(particleCount); // 0 = X, 1 = Z, 2 = Y
+
+      for (var p = 0; p < particleCount; p++) {{
+        particlePositions[p * 3 + 0] = (Math.random() - 0.5) * 14.0;
+        particlePositions[p * 3 + 1] = 1.0 + Math.random() * 3.2;
+        particlePositions[p * 3 + 2] = (Math.random() - 0.5) * 14.0;
+        particleSpeeds[p] = 0.04 + Math.random() * 0.08;
+        particleAxes[p] = Math.floor(Math.random() * 3);
+      }}
+
+      particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+      var particleMat = new THREE.PointsMaterial({{
+        color: 0x38bdf8,
+        size: 0.28,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+      }});
+      var particleSystem = new THREE.Points(particleGeo, particleMat);
+      particlesGroup.add(particleSystem);
+
+      // ── 🏛️ 3. ARCHITECTURE-SPECIFIC SILICON FLOORPLAN ──
       if (archKey === "tpu") {{
-        // ── 🧠 1. TPU / AI TENSOR PROCESSING UNIT (2D Systolic Array) ──
+        // ── 🧠 TPU / 2D SYSTOLIC ARRAY ──
         document.getElementById("legendGrid").innerHTML = `
           <div class="legend-item"><span class="box" style="background:#10b981"></span> Systolic PEs</div>
           <div class="legend-item"><span class="box" style="background:#38bdf8"></span> SRAM Buffers</div>
@@ -459,30 +594,23 @@ class ChipDesignPipeline:
           <div class="legend-item"><span class="box" style="background:#dc2626"></span> BSPDN Backside Power</div>
         `;
 
-        var bspdnGroup = new THREE.Group();
         var bspdnMat = new THREE.MeshStandardMaterial({{ color: 0xdc2626, metalness: 0.85, roughness: 0.25 }});
         for (var b = 0; b < 6; b++) {{
           var bMesh = new THREE.Mesh(new THREE.BoxGeometry(16, 0.35, 0.8), bspdnMat);
           bMesh.position.set(0, -0.9, -5.0 + b * 2.0);
-          bspdnGroup.add(bMesh);
-          addInteractiveMesh(bMesh, "BSPDN Buried Power Rails (Vdd/Vss)", "Backside power grid delivering clean IR-drop power directly to PE columns.");
+          powerGridGroup.add(bMesh);
+          addInteractiveMesh(bMesh, "BSPDN Buried Power Rails (Vdd/Vss)", "Backside power grid delivering direct IR-drop-free current to PE columns.");
         }}
-        rootGroup.add(bspdnGroup);
-        layers.push({{ group: bspdnGroup, baseY: 0, explodedY: -3.0 }});
 
-        var subGroup = new THREE.Group();
         var subMesh = new THREE.Mesh(new THREE.BoxGeometry(16.5, 0.7, 16.5), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }}));
-        subGroup.add(subMesh);
-        rootGroup.add(subGroup);
-        layers.push({{ group: subGroup, baseY: 0, explodedY: 0 }});
+        transistorGroup.add(subMesh);
 
-        var tpuCoreGroup = new THREE.Group();
         var peMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.75, roughness: 0.2 }});
         for (var r = 0; r < 8; r++) {{
           for (var c = 0; c < 8; c++) {{
             var peMesh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 1.0), peMat);
             peMesh.position.set(-4.2 + c * 1.2, 0.6, -4.2 + r * 1.2);
-            tpuCoreGroup.add(peMesh);
+            transistorGroup.add(peMesh);
             addInteractiveMesh(peMesh, `Systolic PE [${{r}},${{c}}] (MAC Unit)`, "16-bit Bfloat16 Multiply-Accumulate unit with weight stationary registers.");
           }}
         }}
@@ -490,25 +618,22 @@ class ChipDesignPipeline:
         var sramMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.8, roughness: 0.25 }});
         var weightBuf = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.55, 1.6), sramMat);
         weightBuf.position.set(0, 0.65, -6.0);
-        tpuCoreGroup.add(weightBuf);
+        transistorGroup.add(weightBuf);
         addInteractiveMesh(weightBuf, "Weight Stationary SRAM Buffer", "High-bandwidth 512KB SRAM feeding systolic columns with zero latency.");
 
         var actBuf = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 10.0), sramMat);
         actBuf.position.set(-6.0, 0.65, 0);
-        tpuCoreGroup.add(actBuf);
+        transistorGroup.add(actBuf);
         addInteractiveMesh(actBuf, "Input Activation SRAM Buffer", "Double-buffered activation feature matrix feeding row PEs.");
 
         var vecMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.8, roughness: 0.2 }});
         var vecUnit = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.55, 1.6), vecMat);
         vecUnit.position.set(0, 0.65, 6.0);
-        tpuCoreGroup.add(vecUnit);
+        transistorGroup.add(vecUnit);
         addInteractiveMesh(vecUnit, "Vector Activation Unit (GELU/Softmax)", "Pipelined SIMD transcendental engine performing activation, LayerNorm, and scaling.");
 
-        rootGroup.add(tpuCoreGroup);
-        layers.push({{ group: tpuCoreGroup, baseY: 0, explodedY: 3.5 }});
-
       }} else if (archKey === "soc") {{
-        // ── 📱 2. HETEROGENEOUS MOBILE APU / SOC (Apple Silicon / Snapdragon) ──
+        // ── 📱 HETEROGENEOUS MOBILE APU / SOC ──
         document.getElementById("legendGrid").innerHTML = `
           <div class="legend-item"><span class="box" style="background:#ef4444"></span> Big CPU Cores</div>
           <div class="legend-item"><span class="box" style="background:#38bdf8"></span> LITTLE Cores</div>
@@ -518,69 +643,57 @@ class ChipDesignPipeline:
           <div class="legend-item"><span class="box" style="background:#f97316"></span> NoC Mesh Router</div>
         `;
 
-        var pkgGroup = new THREE.Group();
         var pkgMesh = new THREE.Mesh(new THREE.BoxGeometry(17, 0.6, 17), new THREE.MeshStandardMaterial({{ color: 0x0f172a, roughness: 0.7 }}));
-        pkgGroup.add(pkgMesh);
-        rootGroup.add(pkgGroup);
-        layers.push({{ group: pkgGroup, baseY: 0, explodedY: -3.0 }});
+        pkgMesh.position.y = -0.6;
+        powerGridGroup.add(pkgMesh);
 
-        var socGroup = new THREE.Group();
         var subMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 0.5, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.5 }}));
-        socGroup.add(subMesh);
+        transistorGroup.add(subMesh);
 
-        // Big Performance CPU Cores (Red)
         var bigCpuMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.75, roughness: 0.25 }});
         for (var c = 0; c < 2; c++) {{
           var bCore = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 3.2), bigCpuMat);
           bCore.position.set(-4.0 + c * 3.8, 0.55, -4.5);
-          socGroup.add(bCore);
+          transistorGroup.add(bCore);
           addInteractiveMesh(bCore, `Big Performance CPU Core ${{c}}`, "64-bit Out-of-Order superscalar core with 192KB L1 cache. Ideal: 2.85GHz @ 0.78V | Max: 3.6GHz | Breakpoint: 4.2GHz @ 1.15V.");
         }}
 
-        // LITTLE Efficiency CPU Cores (Cyan)
         var littleCpuMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.75, roughness: 0.25 }});
         for (var lc = 0; lc < 4; lc++) {{
           var lCore = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.6), littleCpuMat);
           lCore.position.set(4.0 + (lc % 2) * 1.9, 0.55, -5.0 + Math.floor(lc / 2) * 1.9);
-          socGroup.add(lCore);
+          transistorGroup.add(lCore);
           addInteractiveMesh(lCore, `Efficiency CPU Core ${{lc}}`, "Ultra-low-power in-order core for background OS tasks. Ideal: 1.4GHz @ 0.68V | Max: 2.0GHz.");
         }}
 
-        // GPU Compute Shader Array (Purple)
         var gpuMat = new THREE.MeshStandardMaterial({{ color: 0xa855f7, metalness: 0.8, roughness: 0.2 }});
         var gpuMesh = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.5, 5.0), gpuMat);
         gpuMesh.position.set(-3.5, 0.55, 2.5);
-        socGroup.add(gpuMesh);
+        transistorGroup.add(gpuMesh);
         addInteractiveMesh(gpuMesh, "GPU Parallel Compute & Shader Array", "Multi-core SIMT graphics engine. Ideal: 980MHz (2.8 TFLOPS) | Max Turbo: 1.45GHz (4.6 TFLOPS).");
 
-        // NPU Neural Engine (Green)
         var npuMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.8, roughness: 0.2 }});
         var npuMesh = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.5, 3.2), npuMat);
         npuMesh.position.set(3.8, 0.55, 0.2);
-        socGroup.add(npuMesh);
+        transistorGroup.add(npuMesh);
         addInteractiveMesh(npuMesh, "16-Core NPU Neural Engine", "Dedicated AI matrix processor. Ideal: 24 TOPS INT8 | Max: 38 TOPS @ 1.6GHz.");
 
-        // LPDDR5X Memory PHY Channels (Yellow)
         var phyMat = new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.85, roughness: 0.15 }});
         var phyNorth = new THREE.Mesh(new THREE.BoxGeometry(14.0, 0.45, 0.8), phyMat);
         phyNorth.position.set(0, 0.55, 6.8);
-        socGroup.add(phyNorth);
+        transistorGroup.add(phyNorth);
         addInteractiveMesh(phyNorth, "LPDDR5X Dual-Channel Memory PHY", "8533 Mbps low-power high-speed memory interface delivering 136 GB/s bandwidth.");
 
-        // Glowing Network-on-Chip (NoC) Crossbar Grid (Orange)
         var nocMat = new THREE.MeshStandardMaterial({{ color: 0xf97316, emissive: 0xf97316, emissiveIntensity: 0.3, metalness: 0.9 }});
         for (var k = -4; k <= 4; k += 4) {{
           var nocBar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 13.0), nocMat);
           nocBar.position.set(k, 0.7, 0);
-          socGroup.add(nocBar);
+          transistorGroup.add(nocBar);
           addInteractiveMesh(nocBar, "Network-on-Chip (NoC) Interconnect", "Coherent low-latency AXI5 packet-switched crossbar linking all SoC subsystem tiles.");
         }}
 
-        rootGroup.add(socGroup);
-        layers.push({{ group: socGroup, baseY: 0, explodedY: 2.0 }});
-
       }} else if (archKey === "memory") {{
-        // ── 💾 3. HBM3 / 3D STACKED DRAM MEMORY CUBE ──
+        // ── 💾 HBM3 / 3D STACKED DRAM MEMORY CUBE ──
         document.getElementById("legendGrid").innerHTML = `
           <div class="legend-item"><span class="box" style="background:#a855f7"></span> Silicon Interposer</div>
           <div class="legend-item"><span class="box" style="background:#0284c7"></span> Base Logic Die</div>
@@ -588,45 +701,24 @@ class ChipDesignPipeline:
           <div class="legend-item"><span class="box" style="background:#eab308"></span> Through-Silicon Vias</div>
         `;
 
-        var interposerGroup = new THREE.Group();
         var intMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 0.5, 15), new THREE.MeshStandardMaterial({{ color: 0xa855f7, metalness: 0.8, roughness: 0.25 }}));
-        interposerGroup.add(intMesh);
-        rootGroup.add(interposerGroup);
-        layers.push({{ group: interposerGroup, baseY: 0, explodedY: -3.0 }});
+        powerGridGroup.add(intMesh);
 
-        var logicDieGroup = new THREE.Group();
         var logicMesh = new THREE.Mesh(new THREE.BoxGeometry(11, 0.6, 11), new THREE.MeshStandardMaterial({{ color: 0x0284c7, metalness: 0.75, roughness: 0.2 }}));
         logicMesh.position.y = 0.6;
-        logicDieGroup.add(logicMesh);
+        transistorGroup.add(logicMesh);
         addInteractiveMesh(logicMesh, "HBM3 Base Logic Controller Die", "Master PHY, DFI interface, Built-in Self Test (BIST), and memory error correction (ECC).");
-        rootGroup.add(logicDieGroup);
-        layers.push({{ group: logicDieGroup, baseY: 0, explodedY: -1.0 }});
 
-        var dramStackGroup = new THREE.Group();
         var dramMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, transparent: true, opacity: 0.88, metalness: 0.7, roughness: 0.2 }});
-        var tsvMat = new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.95, roughness: 0.1 }});
-
         for (var d = 0; d < 4; d++) {{
           var dramDie = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.45, 10.5), dramMat);
           dramDie.position.y = 1.3 + d * 0.75;
-          dramStackGroup.add(dramDie);
+          transistorGroup.add(dramDie);
           addInteractiveMesh(dramDie, `3D Stacked DRAM Die Layer ${{d}}`, "High-density DRAM cell arrays (16Gb per die) with micro-second refresh timing.");
         }}
 
-        for (var vx = -4; vx <= 4; vx += 2.0) {{
-          for (var vz = -4; vz <= 4; vz += 2.0) {{
-            var tsvMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.6, 10), tsvMat);
-            tsvMesh.position.set(vx, 2.4, vz);
-            dramStackGroup.add(tsvMesh);
-            addInteractiveMesh(tsvMesh, "Through-Silicon Via (TSV) Channel", "Vertical copper interconnect transmitting 1024-bit wide-I/O signals across stacked dies.");
-          }}
-        }}
-
-        rootGroup.add(dramStackGroup);
-        layers.push({{ group: dramStackGroup, baseY: 0, explodedY: 3.0 }});
-
       }} else if (archKey === "cpu") {{
-        // ── 🖥️ 4. OUT-OF-ORDER CPU CORE (RV64GC / x86) ──
+        // ── 🖥️ OUT-OF-ORDER CPU CORE (RV64GC / x86) ──
         document.getElementById("legendGrid").innerHTML = `
           <div class="legend-item"><span class="box" style="background:#ef4444"></span> OoO Execution Engine</div>
           <div class="legend-item"><span class="box" style="background:#38bdf8"></span> TAGE Branch Predictor</div>
@@ -634,37 +726,31 @@ class ChipDesignPipeline:
           <div class="legend-item"><span class="box" style="background:#eab308"></span> L3 Shared Cache</div>
         `;
 
-        var subGroup = new THREE.Group();
-        subGroup.add(new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }})));
-        rootGroup.add(subGroup);
-        layers.push({{ group: subGroup, baseY: 0, explodedY: 0 }});
+        var subMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }}));
+        transistorGroup.add(subMesh);
 
-        var cpuGroup = new THREE.Group();
         var exeMesh = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.55, 6.5), new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.75, roughness: 0.25 }}));
         exeMesh.position.set(-3.5, 0.65, -2.5);
-        cpuGroup.add(exeMesh);
+        transistorGroup.add(exeMesh);
         addInteractiveMesh(exeMesh, "Out-of-Order Execution Units & ROB", "4 Integer ALUs, 2 Vector FPUs, Load/Store units, and 128-entry Reorder Buffer. Ideal: 3.2GHz @ 0.82V | Breakpoint: 4.4GHz @ 1.18V.");
 
         var feMesh = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.55, 6.5), new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.8, roughness: 0.2 }}));
         feMesh.position.set(3.5, 0.65, -2.5);
-        cpuGroup.add(feMesh);
+        transistorGroup.add(feMesh);
         addInteractiveMesh(feMesh, "TAGE Branch Predictor & Instruction Fetch", "Multi-table conditional branch prediction with 4-wide instruction decoder.");
 
         var l2Mesh = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.55, 4.0), new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.75, roughness: 0.25 }}));
         l2Mesh.position.set(-3.5, 0.65, 4.0);
-        cpuGroup.add(l2Mesh);
+        transistorGroup.add(l2Mesh);
         addInteractiveMesh(l2Mesh, "L1/L2 Non-Blocking Cache Banks", "64KB L1 Data/Inst cache and 1MB private L2 cache with hardware prefetchers.");
 
         var l3Mesh = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.55, 4.0), new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.85, roughness: 0.2 }}));
         l3Mesh.position.set(3.5, 0.65, 4.0);
-        cpuGroup.add(l3Mesh);
+        transistorGroup.add(l3Mesh);
         addInteractiveMesh(l3Mesh, "Shared L3 SRAM Cache Slice", "High-density 8MB shared L3 cache with MESI/MOESI hardware coherence.");
 
-        rootGroup.add(cpuGroup);
-        layers.push({{ group: cpuGroup, baseY: 0, explodedY: 3.0 }});
-
       }} else {{
-        // ── 🎮 5. GPU SIMT / GENERAL DIGITAL ASIC ──
+        // ── 🎮 GPU SIMT / GENERAL DIGITAL ASIC ──
         document.getElementById("legendGrid").innerHTML = `
           <div class="legend-item"><span class="box" style="background:#a855f7"></span> Streaming Multiprocessors</div>
           <div class="legend-item"><span class="box" style="background:#10b981"></span> Tensor Cores</div>
@@ -672,28 +758,31 @@ class ChipDesignPipeline:
           <div class="legend-item"><span class="box" style="background:#eab308"></span> Memory Controllers</div>
         `;
 
-        var subGroup = new THREE.Group();
-        subGroup.add(new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }})));
-        rootGroup.add(subGroup);
-        layers.push({{ group: subGroup, baseY: 0, explodedY: 0 }});
+        var subMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 15), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.6 }}));
+        transistorGroup.add(subMesh);
 
-        var gpuGroup = new THREE.Group();
         var smMat = new THREE.MeshStandardMaterial({{ color: 0xa855f7, metalness: 0.8, roughness: 0.2 }});
         for (var s = 0; s < 6; s++) {{
           var smMesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.55, 3.2), smMat);
           smMesh.position.set(-4.0 + (s % 3) * 4.0, 0.65, -3.5 + Math.floor(s / 3) * 4.0);
-          gpuGroup.add(smMesh);
+          transistorGroup.add(smMesh);
           addInteractiveMesh(smMesh, `Streaming Multiprocessor (SM ${{s}})`, "128 CUDA compute cores, SIMT warp scheduler, and Tensor Core matrix units. Ideal: 1.1GHz | Max Turbo: 1.65GHz.");
         }}
 
         var l2Gpu = new THREE.Mesh(new THREE.BoxGeometry(12.0, 0.5, 2.0), new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.75, roughness: 0.2 }}));
         l2Gpu.position.set(0, 0.65, 5.0);
-        gpuGroup.add(l2Gpu);
+        transistorGroup.add(l2Gpu);
         addInteractiveMesh(l2Gpu, "Shared High-Speed L2 Cache (32MB)", "Unified crossbar-connected cache with high-throughput multi-channel routing.");
-
-        rootGroup.add(gpuGroup);
-        layers.push({{ group: gpuGroup, baseY: 0, explodedY: 3.0 }});
       }}
+
+      // Exploded Layer Offsets
+      layers = [
+        {{ group: powerGridGroup, baseY: 0, explodedY: -3.5 }},
+        {{ group: transistorGroup, baseY: 0, explodedY: 0 }},
+        {{ group: interconnectGroup, baseY: 0, explodedY: 3.5 }},
+        {{ group: viaGroup, baseY: 0, explodedY: 3.5 }},
+        {{ group: particlesGroup, baseY: 0, explodedY: 3.5 }}
+      ];
 
       // ── Interactive Raycaster for Hover & Click Inspections ──
       var raycaster = new THREE.Raycaster();
@@ -737,17 +826,39 @@ class ChipDesignPipeline:
       // Exploded View Button Logic
       document.getElementById('toggleExploded').addEventListener('click', function() {{
         isExploded = !isExploded;
-        this.textContent = isExploded ? "Collapse Die Layers" : "Toggle Exploded-View Inspection";
+        this.textContent = isExploded ? "Collapse Stack Layers" : "Toggle Exploded-View Inspection";
       }});
       
+      // Animation Loop with Real-Time Particle Pulse
       function animate() {{
         requestAnimationFrame(animate);
         controls.update();
-        rootGroup.rotation.y += 0.002;
+        rootGroup.rotation.y += 0.0015;
         
-        for (var i = 0; i < layers.length; i++) {{
-          var targetY = isExploded ? layers[i].explodedY : layers[i].baseY;
-          layers[i].group.position.y += (targetY - layers[i].group.position.y) * 0.08;
+        // Animate Data Flow Particles along Interconnects
+        if (particlesGroup.visible) {{
+          var positions = particleGeo.attributes.position.array;
+          for (var i = 0; i < particleCount; i++) {{
+            var axis = particleAxes[i];
+            var spd = particleSpeeds[i] * (currentDvfsState * 0.5 + 0.5);
+            if (axis === 0) {{
+              positions[i * 3 + 0] += spd;
+              if (positions[i * 3 + 0] > 7.2) positions[i * 3 + 0] = -7.2;
+            }} else if (axis === 1) {{
+              positions[i * 3 + 2] += spd;
+              if (positions[i * 3 + 2] > 7.2) positions[i * 3 + 2] = -7.2;
+            }} else {{
+              positions[i * 3 + 1] += spd * 0.4;
+              if (positions[i * 3 + 1] > 4.2) positions[i * 3 + 1] = 1.0;
+            }}
+          }}
+          particleGeo.attributes.position.needsUpdate = true;
+        }}
+
+        // Smooth vertical layer explosion animation
+        for (var l = 0; l < layers.length; l++) {{
+          var targetY = isExploded ? layers[l].explodedY : layers[l].baseY;
+          layers[l].group.position.y += (targetY - layers[l].group.position.y) * 0.08;
         }}
         
         renderer.render(scene, camera);
