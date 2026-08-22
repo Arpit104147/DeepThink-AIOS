@@ -34,6 +34,16 @@ class TaskRouter:
         if any(kw in p_lower for kw in reasoning_keywords) and not any(k in p_lower for k in ["python", "c++", "cpp", "javascript", "script"]):
             return "REASONING"
 
+        # 3. Deterministic Fast-Path for Explicit Software Coding & Systems Programming
+        coding_keywords = [
+            "c++", "cpp", "c++17", "c++20", "python", "rust", "golang", "java",
+            "javascript", "typescript", "react", "html/css", "sql query", "bash script",
+            "implement in", "write a function", "write a class", "lru cache", "binary search tree",
+            "multithreading", "mutex", "concurrency in", "dockerfile", "pytest", "unit test"
+        ]
+        if any(kw in p_lower for kw in coding_keywords):
+            return "CODING"
+
         p = (
             "Classify this user request into ONE of the following 4 categories:\n"
             "1. CODING: Software programming (Python, C, C++, Rust, Go, Java, JavaScript, Bash, HTML/CSS, Web Apps).\n"
