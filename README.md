@@ -34,14 +34,26 @@ DeepThink AIOS is an **enterprise-grade, fully local multi-agent AI Operating Sy
 
 ### ✨ Key Features & Specialized Pipelines
 
-- **🎓 Master 2-Volume Study Engine (`🎓 Study`)** — Pedagogical textbook synthesis powered by **DeepSeek-R1**. Authors 15–20 page master reference books with centered display KaTeX formulas (`$$ ... $$`), multi-dimensional comparison tables, memory mnemonics, a **10-Problem Solved Question Bank**, and a **Standardized Mock Exam Blueprint**. Supports direct PDF/Document ingestion.
-- **🔮 Industrial Multi-Domain ML Tournament Engine (`🔮 Predict`)** — High-precision time-series forecasting across Financial Markets, Climate/Weather, Energy & Battery SOH decay, Cloud Telemetry, and Macroeconomics. Competes **8 ML Algorithms** (`HistGradientBoosting`, `RandomForest`, `ExtraTrees`, `SVR`, `Polynomial Ridge`, `Huber`, `ElasticNet`, `ExponentialSmoothing`) inside an isolated sandbox, streaming an interactive **Plotly fan chart** with $\pm 1.96\sigma$ (95%) uncertainty corridors.
-- **🔬 Universal Semiconductor EDA & 3D Physical Die Visualizer** — Synthesizes synthesizable Verilog/SystemVerilog HDL and SPICE netlists across all process nodes (180nm Planar to 2nm GAAFET Nanosheets). Renders **5 distinct interactive 3D microarchitectural layouts** (TPU Systolic Arrays, Mobile SoCs, HBM3 3D Stacked DRAM, Out-of-Order CPUs, SIMT GPUs) with real-time component raycasting, hover tooltips, and vertical exploded-view inspection.
-- **⚡ Dual-Mode Mathematical Reasoning Engine** — Solves complex calculus, differential geometry, and theoretical physics proofs (e.g. *Schwarzschild Metric*, *Lorentz Transformations*, *Dirac Equation*) with pure 2-stage theoretical KaTeX derivations or Program-Aided Language (PAL) **SymPy/SciPy** sandbox verification.
+- **🎓 Master 2-Volume Study Engine (`🎓 Study`)** — Pedagogical textbook synthesis powered by **DeepSeek-R1**. Authors 15–20 page master reference books with centered display KaTeX formulas (`$$ ... $$`), embedded **Mermaid architectural flowcharts**, pedagogical alert callouts (`> [!TIP]`, `> [!IMPORTANT]`), a **1-Page High-Yield Formula Cheat-Sheet**, multi-dimensional comparison tables, a **10-Problem Solved Question Bank**, and a **Standardized University Mock Exam**. Supports direct PDF/Slide ingestion.
+- **🔮 Maximum Power Prediction Engine (`🔮 Predict`)** — High-precision time-series forecasting across Financial Markets, Climate/Weather, Energy & Battery SOH decay, and Cloud Telemetry. Features a **14-Signal Alpha Feature Space** ($\text{RSI}_{14}$, $\text{MACD}$ Histogram, Bollinger Bandwidth, Fourier Harmonics, News Sentiment Decay), an **8-Algorithm Tournament** with **Bayesian Softmax Inverse-Loss Stacking** ($\beta = 3.5$), and **Conformal Prediction Probabilistic Uncertainty Bands** ($80\%$ & $95\%$ corridors in Plotly).
+- **🔬 Scientific Semiconductor EDA & 3D Physical Die Visualizer** — Synthesizes synthesizable Verilog/SystemVerilog HDL and SPICE netlists across all process nodes (180nm Planar to 2nm RibbonFET / GAA Nanosheets). Integrates real transistor physics ($L_g = 12\text{nm}$, $W_{\text{eff}} = 240\text{nm}$, $\text{HfO}_2$ dielectric, Subthreshold Swing $S = 65\text{mV/dec}$, BSPDN $\Delta V = 11.8\text{mV}$), semi-transparent low-k $\text{SiCOH}$ ($k=2.2$) glass, and an interactive **Alpha-Power Law live clock simulation toolbar** (`[ ▶ Run ]`, `[ ⏸ Pause ]`, `[ ⏭ Step ]`).
+- **⚡ Zero-Hallucination Mathematical Reasoning Engine** — Solves complex calculus, differential geometry, and theoretical physics proofs with pure 2-stage theoretical KaTeX derivations or Program-Aided Language (PAL) **SymPy CAS sandbox execution** where exact code computations override conversational text guesses. Verifies general relativistic proofs using **Kretschmann Curvature Scalar Invariants** ($K = \frac{48G^2M^2}{c^4 r^6}$) and asymptotic boundary limits (Minkowski & Newtonian).
+- **💻 Production-Grade Autonomous Coding Pipeline** — Multi-phase software engineering with Big-O complexity optimization ($O(N)$ / $O(N \log N)$), automated **AST Static Analysis Linting (SAST)**, strict type annotations, Google-style docstrings, C++17 shared mutex concurrency (`std::shared_mutex`, lock-free SPSC queues), and multi-language execution sandboxes.
 - **📊 Benchmark Studio & Telemetry Dashboard** — Parallel evaluation across **11 standard suites** (HumanEval, MBPP, GSM8K, MATH, GPQA, AIME, MuSR, MMLU-Pro, SWE-bench Lite, SWE-bench Pro, SearchQA) with real-time scoring vs GPT-4o and Claude 3.5 Sonnet baselines, live throughput ($\text{tok/s}$), and JSON report exports.
-- **💻 Modern C++17 / Python Coding Pipeline** — Multi-phase software engineering with logic drafting, actor-critic verification, C++17 shared mutex concurrency (`std::shared_mutex`, lock-free SPSC ring buffers), and automated testbench execution.
-- **🌐 100% Keyless Multi-Tier Web Search (`🌐 Search` & `🔬 Extreme`)** — Scrapes live financial quotes, real-time weather, and multi-source academic publications (arXiv, Wikipedia, technical documentation) with deep 5,120+ token synthesis without API keys.
+- **🌐 100% Keyless Multi-Tier Web Search (`🌐 Search` & `🔬 Extreme`)** — Scrapes live financial quotes, real-time weather, and multi-source academic publications with deep synthesis without API keys.
 - **⚡ Elastic VRAM Management (EVM) & DMA** — Zero-cost dynamic model hot-swapping between System RAM and GPU VRAM with CPU-to-GPU cache promotion.
+
+---
+
+### 🌟 Flagship Golden Prompts Showcase
+
+| Pipeline | Example Prompt to Try in the UI | Key Output Artifacts |
+|---|---|---|
+| 🔬 **Chip Design** | `Design a 2nm GAAFET TPU with an 8x8 Systolic Array of Bfloat16 PEs, Backside Power Delivery (BSPDN), synthesizable Verilog, and 3D silicon layout.` | Synthesizable RTL, self-checking testbench, and interactive 3D WebGL silicon die with live clock stepping |
+| 🔮 **Prediction** | `Predict the price trajectory of Bitcoin (BTC-USD) over the next 15 days based on macro momentum and FinBERT news sentiment.` | 14-Signal Alpha Features, 8-Model Bayesian Softmax Tournament, and 80%/95% Conformal Uncertainty Plotly curve |
+| ⚡ **Reasoning** | `Derive the Schwarzschild metric from Einstein's field equations R_uv = 0, computing all Christoffel symbols, Newtonian limit, and Kretschmann invariant.` | Publication-grade KaTeX derivation ($$ ... $$) with Kretschmann scalar invariant $K = \frac{48G^2M^2}{c^4 r^6}$ proof |
+| 💻 **Coding** | `Implement a high-throughput thread-safe LRU Cache in Python with TTL expiration, O(1) ops, complete type hints, docstrings, and unit tests.` | Production-grade Python module, AST linted, with self-testing test harness passing in local sandbox |
+| 🎓 **Study** | `Teach me Transformer Attention Mechanism (Self-Attention, Multi-Head, KV-Cache) from first principles as an exhaustive graduate textbook.` | 2-Volume Master Treatise with Mermaid architecture diagram, display math, 1-page formula cheat-sheet, 10 solved problems & mock exam |
 
 ---
 
@@ -64,23 +76,23 @@ flowchart TD
     %% ── TOP-LEVEL INGESTION ──
     USER([User Prompt / Image / PDF]) --> MODE_CHECK{"Pipeline Mode Selected?"}
     
-    MODE_CHECK -->|🎓 Study| STUDY_PIPE["Study Pipeline: 2-Volume DeepSeek-R1 Master Curriculum"]
-    MODE_CHECK -->|🔮 Predict| PREDICT_PIPE["Predict Pipeline: 8-Algorithm ML Tournament & Fan Chart"]
+    MODE_CHECK -->|🎓 Study| STUDY_PIPE["Study Pipeline: 2-Volume Master Curriculum + Mermaid + 10 Problems + Exam"]
+    MODE_CHECK -->|🔮 Predict| PREDICT_PIPE["Predict Pipeline: 14-Signal Alpha Features + 8-Model Bayesian Tournament"]
     MODE_CHECK -->|🔬 Extreme| EXTREME_PIPE["Extreme WebSearch: Multi-Source Academic Survey"]
     MODE_CHECK -->|🌐 Search| SEARCH_PIPE["Simple Search: Live Real-Time Web Data"]
     MODE_CHECK -->|📊 Benchmark| BENCH_PIPE["Benchmark Studio: 11-Suite Parallel Worker Evaluation"]
     MODE_CHECK -->|Auto / Prompt| ROUTER["Fast-Path & Router Intent Classifier"]
 
     %% ── Intent Classification Branches ──
-    ROUTER --> PATH_CODING["1. CODING (C++17 / Python / Polyglot)"]
-    ROUTER --> PATH_REASONING["2. REASONING (Theory & PAL SymPy)"]
-    ROUTER --> PATH_CHIP["3. CHIP DESIGN (180nm to 2nm GAAFET & 3D View)"]
+    ROUTER --> PATH_CODING["1. CODING (AST Linter + O(N) Complexity + Type Hints)"]
+    ROUTER --> PATH_REASONING["2. REASONING (SymPy CAS Grounding & Kretschmann Scalar)"]
+    ROUTER --> PATH_CHIP["3. CHIP DESIGN (2nm GAAFET, BSPDN & 3D Live Clock)"]
     ROUTER --> PATH_VISION["4. VISION & OCR"]
     ROUTER --> PATH_SIMPLE["5. DIRECT / CONVERSATIONAL"]
 
     %% ── Execution Pathways ──
-    STUDY_PIPE --> STUDY_OUT["Master Reference Book + 10 Solved Problems + Mock Exam"]
-    PREDICT_PIPE --> PREDICT_OUT["8-Model ML Tournament + Multi-Trace Plotly Confidence Curve"]
+    STUDY_PIPE --> STUDY_OUT["Master Textbook + 1-Page Cheat Sheet + 10 Solved Problems + Mock Exam"]
+    PREDICT_PIPE --> PREDICT_OUT["8-Model Bayesian Stacking + 80%/95% Conformal Fan Chart"]
     BENCH_PIPE --> BENCH_OUT["Real-Time Throughput / Accuracy Telemetry vs Baselines"]
     PATH_CODING --> CODE_SB{"Execution Sandbox"} --> CODE_PASS["Verified Working Polyglot Code"]
     PATH_REASONING --> PAL_SB{"SymPy / Math Sandbox"} --> PAL_PASS["Verified KaTeX Proof ($$ ... $$)"]
