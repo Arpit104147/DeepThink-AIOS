@@ -7,11 +7,33 @@ class TaskRouter:
     @staticmethod
     def classify_task(orchestrator, router_llm, prompt):
         """Classify user query into task types (CODING, REASONING, CHIP_DESIGN, SIMPLE)."""
+        p_lower = prompt.lower()
+
+        # 1. Deterministic Fast-Path for Hardware & EDA Chip Design
+        chip_keywords = [
+            "verilog", "systemverilog", "vhdl", "ngspice", "spice netlist",
+            "chip design", "semiconductor layout", "eda tools", "iverilog", "yosys",
+            "gdstk", "cla adder", "carry-lookahead", "binary counter", "up/down counter",
+            "fsm in verilog", "flip-flop", "alu in verilog", "dumpfile", "dumpvars",
+            "3d semiconductor", "asic", "fpga"
+        ]
+        if any(kw in p_lower for kw in chip_keywords):
+            return "CHIP_DESIGN"
+
+        # 2. Deterministic Fast-Path for Pure Math / Physics Proofs
+        reasoning_keywords = [
+            "derive", "proof of", "prove that", "eigenvalues and eigenfunctions",
+            "lorentz transformations", "hamiltonian", "schrodinger", "dirac ladder",
+            "commutation relation", "time dilation", "special relativity"
+        ]
+        if any(kw in p_lower for kw in reasoning_keywords) and not any(k in p_lower for k in ["python", "c++", "cpp", "javascript", "script"]):
+            return "REASONING"
+
         p = (
             "Classify this user request into ONE of the following 4 categories:\n"
-            "1. CODING: Request for writing, modifying, debugging, or optimizing code (Python, C, C++, Verilog, HTML/JS, etc.).\n"
-            "2. REASONING: Step-by-step logic proofs, math derivations, physics proofs, or complex multi-step deductions.\n"
-            "3. CHIP_DESIGN: Verilog HDL hardware design, SPICE analog simulation, or circuit netlists.\n"
+            "1. CODING: Software programming (Python, C, C++, Rust, Go, Java, JavaScript, Bash, HTML/CSS, Web Apps).\n"
+            "2. REASONING: Step-by-step logic proofs, math derivations, physics proofs, or theoretical deductions.\n"
+            "3. CHIP_DESIGN: Verilog / SystemVerilog HDL hardware design, FPGA/ASIC digital circuits, SPICE analog simulation, or 3D semiconductor layout.\n"
             "4. SIMPLE: General knowledge, weather, facts, conversational QA, summaries, or direct questions.\n\n"
             "Reply ONLY with ONE category word (CODING, REASONING, CHIP_DESIGN, or SIMPLE).\n\n"
             f"User Request: {prompt[:500]}"
