@@ -38,35 +38,47 @@ class PredictionPipeline:
         if real_data_context:
             data_instruction = (
                 f"LIVE HISTORICAL / MARKET DATA EXTRACTED:\n{real_data_context}\n\n"
-                f"INSTRUCTION: Extract the actual historical numbers/dates from the live data above and load them into NumPy/Pandas arrays. "
-                f"If additional time points are needed, interpolate or extend realistically based on the historical trend.\n\n"
+                f"INSTRUCTION: Extract the actual historical numbers/dates from the live data above directly into inline Python arrays/lists: "
+                f"`prices = np.array([...])`. NEVER call `pd.read_csv(...)` with external filenames.\n\n"
             )
         else:
             data_instruction = (
-                "INSTRUCTION: Generate a dense, realistic multivariate time series dataset (100+ points) modeling the specific domain dynamics "
-                "with realistic trend, seasonality, and variance.\n\n"
+                "INSTRUCTION: Create a self-contained inline NumPy/Pandas synthetic dataset (50-100 data points) modeling realistic domain trajectory, "
+                "seasonality, and noise. `prices = np.array([...])` or generate via `np.linspace(...)`. NEVER call `pd.read_csv(...)`.\n\n"
             )
 
         if status_callback:
             status_callback("🔮 Training & Cross-Validating Multi-Algorithm ML Tournament...", "info", "ornith", 50)
 
         script_p = (
-            "Write an optimized, production-grade Python script using scikit-learn, numpy, and pandas for this predictive modeling task.\n\n"
+            "Write an optimized, self-contained Python script using scikit-learn, numpy, and pandas for this predictive modeling tournament.\n\n"
             f"USER REQUEST: {prompt}\n\n"
             f"{data_instruction}"
-            "MANDATORY MULTI-ALGORITHM ML TOURNAMENT REQUIREMENTS:\n"
-            "1. Split data chronologically or train/test (80/20).\n"
-            "2. Train and evaluate 6 distinct competitive regression architectures:\n"
-            "   a. Model A: Polynomial Ridge (PolynomialFeatures(degree=2) + StandardScaler + Ridge(alpha=1.0))\n"
-            "   b. Model B: HistGradientBoostingRegressor(max_iter=100, random_state=42)\n"
-            "   c. Model C: RandomForestRegressor(n_estimators=100, random_state=42)\n"
-            "   d. Model D: ExtraTreesRegressor(n_estimators=100, random_state=42)\n"
-            "   e. Model E: Support Vector Regressor (StandardScaler + SVR(kernel='rbf', C=100.0, epsilon=0.1))\n"
-            "   f. Model F: HuberRegressor(max_iter=200)\n"
-            "3. Compute R² score, Root Mean Squared Error (RMSE), and Mean Absolute Error (MAE) for all 6 models on the test split.\n"
-            "4. Automatically select the CHAMPION model (highest R² score).\n"
-            "5. Use the Champion model to forecast the next 10 future time steps, including 95% confidence bounds (± 1.96 * residual std).\n"
-            "6. Output ONLY valid JSON metrics dictionary at the end:\n"
+            "MANDATORY SCIKIT-LEARN IMPORT & MODEL RULES:\n"
+            "1. IMPORTS — Use EXACTLY these standard imports:\n"
+            "   import numpy as np\n"
+            "   import pandas as pd\n"
+            "   import json\n"
+            "   from sklearn.pipeline import make_pipeline\n"
+            "   from sklearn.preprocessing import StandardScaler, PolynomialFeatures\n"
+            "   from sklearn.linear_model import Ridge, HuberRegressor\n"
+            "   from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, HistGradientBoostingRegressor\n"
+            "   from sklearn.svm import SVR\n"
+            "   from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error\n"
+            "   (NOTE: 'PolynomialRegression' DOES NOT EXIST in sklearn. Use `make_pipeline(PolynomialFeatures(degree=2), Ridge(alpha=1.0))` instead.)\n\n"
+            "2. ML ARCHITECTURES TO TRAIN:\n"
+            "   - 'Polynomial_Ridge': make_pipeline(PolynomialFeatures(degree=2), Ridge(alpha=1.0))\n"
+            "   - 'Hist_Gradient_Boosting': HistGradientBoostingRegressor(max_iter=100, random_state=42)\n"
+            "   - 'Random_Forest': RandomForestRegressor(n_estimators=100, random_state=42)\n"
+            "   - 'Extra_Trees': ExtraTreesRegressor(n_estimators=100, random_state=42)\n"
+            "   - 'Support_Vector_SVR': make_pipeline(StandardScaler(), SVR(kernel='rbf', C=100.0, epsilon=0.1))\n"
+            "   - 'Huber_Robust': HuberRegressor(max_iter=200)\n\n"
+            "3. EVALUATION & CHAMPION SELECTION:\n"
+            "   - Train on 80% split, test on 20% split.\n"
+            "   - Calculate R², RMSE, MAE for each model.\n"
+            "   - Select champion with highest test R² score.\n"
+            "   - Forecast the next 10-15 time steps with 95% confidence bounds (± 1.96 * residual std).\n\n"
+            "4. OUTPUT FORMAT — print ONLY valid single-line or multi-line JSON at the very end:\n"
             "   PREDICTIVE_METRICS = {\n"
             "       'champion_model': str,\n"
             "       'r2': float,\n"
@@ -80,7 +92,7 @@ class PredictionPipeline:
             "       'confidence_upper': list\n"
             "   }\n"
             "   print(json.dumps(PREDICTIVE_METRICS))\n\n"
-            "Wrap script in ```python``` blocks."
+            "Wrap Python script in ```python``` blocks."
         )
 
         code_resp = orchestrator._call_model(coder_llm, script_p, gen_tokens, gen_temp)
@@ -90,6 +102,26 @@ class PredictionPipeline:
             status_callback("🔮 Executing ML Tournament in High-Performance Sandbox...", "info", "system", 75)
 
         ok, output = orchestrator.sandbox.execute(code, language="python", timeout=60)
+
+        # Quick single-pass auto-fix if model made an import or syntax error
+        if not ok and output:
+            fix_prompt = (
+                f"Fix the following Python predictive modeling script to resolve the execution error:\n\n"
+                f"ERROR:\n{output[:600]}\n\n"
+                f"ORIGINAL SCRIPT:\n{code[:2000]}\n\n"
+                f"RULES:\n"
+                f"1. Fix any invalid imports (e.g. use make_pipeline(PolynomialFeatures(2), Ridge(1.0)) for polynomial ridge).\n"
+                f"2. Ensure all data arrays are defined in-memory without calling pd.read_csv with non-existent files.\n"
+                f"3. Output ONLY the fixed python script in ```python```."
+            )
+            fixed_resp = orchestrator._call_model(coder_llm, fix_prompt, gen_tokens, gen_temp)
+            fixed_code = Sandbox.extract_code(orchestrator._strip_thinking(fixed_resp))
+            if fixed_code:
+                ok_fix, output_fix = orchestrator.sandbox.execute(fixed_code, language="python", timeout=60)
+                if ok_fix or ("champion_model" in output_fix or "r2" in output_fix):
+                    code = fixed_code
+                    output = output_fix
+                    ok = ok_fix
 
         metrics_json = None
         # Robust multi-line JSON search
