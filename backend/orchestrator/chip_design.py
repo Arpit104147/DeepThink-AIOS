@@ -7,11 +7,11 @@ from backend.downloader import resolve_model_key
 
 class ChipDesignPipeline:
     """
-    Universal Semiconductor EDA & Nanoscale Silicon Architecture Studio (180nm Planar to 2nm GAAFET).
+    Universal Semiconductor EDA & Physically Accurate Nanoscale Silicon Simulation Engine (180nm Planar to 2nm GAAFET).
     Supports Out-of-Order CPUs, SIMT GPUs, 2D Systolic Array TPUs, Mobile SoCs/APUs,
     High-Bandwidth Memory (HBM3/DDR5) controllers, and Analog SPICE netlists with interactive
     Multi-Layer BEOL Interconnect Stacks (1000s of Metal Traces & Vias), Animated Data Flow Particles,
-    DVFS Real-Time Clock Telemetry, and Production-Grade Synthesizable Verilog RTL.
+    Live Physics Alpha-Power Law Telemetry, Clock Stepping Simulation, and Production Synthesizable Verilog RTL.
     """
 
     @staticmethod
@@ -115,14 +115,14 @@ class ChipDesignPipeline:
 
         # Stage 3: Nanoscale 3D Silicon Visualizer with Multi-Layer BEOL Interconnects & Particle Flow
         if status_callback:
-            status_callback(f"Stage 3: Rendering Multi-Layer Interconnects & 3D Die ({chip_meta['type']})...", "info", "system", 75)
+            status_callback(f"Stage 3: Simulating Physics & Rendering 3D Die ({chip_meta['type']})...", "info", "system", 75)
 
         viz_html = ChipDesignPipeline._build_3d_chip_visualization(prompt, chip_meta)
 
         output_parts = [
             f"### 🏗️ Stage 1: Architecture & Process Node Decomposition ({chip_meta['node']})\n\n{arch_plan}\n\n",
             f"### ⚡ Stage 2: Production Synthesizable {req_lang.upper()} Implementation & Testbench\n\n```{req_lang}\n{hdl_clean}\n```\n\n",
-            f"### 🔬 Stage 3: 3D Nanoscale Die, Multi-Layer Interconnect Stack & DVFS Telemetry ({chip_meta['type']})\n\n{viz_html}"
+            f"### 🔬 Stage 3: Physically Accurate 3D Die Simulation, BEOL Interconnects & Live Telemetry ({chip_meta['type']})\n\n{viz_html}"
         ]
 
         if not eda_tools['iverilog']:
@@ -574,7 +574,8 @@ endmodule"""
         """
         Generates a state-of-the-art interactive 3D Physical Die & Multi-Layer Interconnect Visualizer in Three.js.
         Features dense BEOL metal routing traces (M0-M15), vertical via arrays, animated data packet particle streams,
-        layer stack isolation checkboxes, DVFS performance sliders, and thermal breakpoint analytics.
+        layer stack isolation checkboxes, live physical Alpha-Power Law scaling, clock cycle stepping simulation,
+        and real-time thermal/voltage breakpoint analytics.
         """
         if not chip_meta:
             chip_meta = ChipDesignPipeline._analyze_chip_meta(prompt)
@@ -592,49 +593,56 @@ endmodule"""
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <style>
-    html, body {{ margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #0a0d14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
-    #hud {{ position: absolute; top: 16px; right: 16px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.15); padding: 16px 18px; border-radius: 14px; color: #f8fafc; font-size: 0.78rem; box-shadow: 0 16px 40px rgba(0,0,0,0.8); z-index: 100; max-width: 390px; max-height: calc(100vh - 32px); overflow-y: auto; }}
-    #hud h3 {{ margin: 0 0 4px; font-size: 0.94rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
-    #hud .badge {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; padding: 2px 8px; border-radius: 6px; font-size: 0.68rem; font-weight: 600; display: inline-block; margin-bottom: 8px; }}
+    html, body {{ margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+    #hud {{ position: absolute; top: 16px; right: 16px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.15); padding: 14px 16px; border-radius: 14px; color: #f8fafc; font-size: 0.76rem; box-shadow: 0 16px 40px rgba(0,0,0,0.85); z-index: 100; max-width: 390px; max-height: calc(100vh - 32px); overflow-y: auto; }}
+    #hud h3 {{ margin: 0 0 4px; font-size: 0.92rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
+    #hud .badge {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; padding: 2px 8px; border-radius: 6px; font-size: 0.66rem; font-weight: 600; display: inline-block; margin-bottom: 6px; }}
     
+    /* Interactive Clock Simulation Toolbar */
+    .clock-toolbar {{ display: flex; align-items: center; justify-content: space-between; background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }}
+    .clock-btn {{ background: #0284c7; color: white; border: none; padding: 4px 8px; border-radius: 5px; font-size: 0.68rem; font-weight: 700; cursor: pointer; transition: background 0.15s; }}
+    .clock-btn:hover {{ background: #0369a1; }}
+    .clock-btn.active {{ background: #10b981; }}
+    .cycle-counter {{ font-size: 0.68rem; font-family: monospace; color: #38bdf8; font-weight: 700; }}
+
     /* DVFS Performance Slider Controls */
-    .dvfs-section {{ background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }}
-    .dvfs-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 0.72rem; font-weight: 700; }}
-    .dvfs-state-badge {{ padding: 2px 6px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; }}
-    .slider-container {{ position: relative; margin: 6px 0; }}
+    .dvfs-section {{ background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }}
+    .dvfs-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 0.7rem; font-weight: 700; }}
+    .dvfs-state-badge {{ padding: 2px 6px; border-radius: 4px; font-size: 0.66rem; font-weight: 700; }}
+    .slider-container {{ position: relative; margin: 4px 0; }}
     .dvfs-slider {{ width: 100%; height: 5px; -webkit-appearance: none; background: #334155; border-radius: 4px; outline: none; }}
-    .dvfs-slider::-webkit-slider-thumb {{ -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #38bdf8; cursor: pointer; box-shadow: 0 0 10px #38bdf8; }}
-    .slider-labels {{ display: flex; justify-content: space-between; font-size: 0.62rem; color: #94a3b8; font-weight: 600; margin-top: 2px; }}
+    .dvfs-slider::-webkit-slider-thumb {{ -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #38bdf8; cursor: pointer; box-shadow: 0 0 10px #38bdf8; }}
+    .slider-labels {{ display: flex; justify-content: space-between; font-size: 0.6rem; color: #94a3b8; font-weight: 600; margin-top: 2px; }}
     
     /* Layer Stack Visibility Filters */
-    .layers-section {{ background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }}
-    .layers-title {{ font-size: 0.68rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.04em; }}
-    .layers-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.7rem; }}
+    .layers-section {{ background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }}
+    .layers-title {{ font-size: 0.66rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.04em; }}
+    .layers-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.68rem; }}
     .layer-cb {{ display: flex; align-items: center; gap: 6px; cursor: pointer; color: #cbd5e1; }}
     .layer-cb input {{ cursor: pointer; accent-color: #38bdf8; }}
     
     /* Telemetry KPI Grid */
-    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }}
-    .kpi-card {{ background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 5px 7px; }}
-    .kpi-label {{ font-size: 0.62rem; color: #94a3b8; text-transform: uppercase; }}
-    .kpi-val {{ font-size: 0.84rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }}
+    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }}
+    .kpi-card {{ background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 4px 6px; }}
+    .kpi-label {{ font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; }}
+    .kpi-val {{ font-size: 0.82rem; font-weight: 700; color: #f8fafc; margin-top: 1px; }}
     
     /* Operating Point Banners */
-    #operating-banner {{ padding: 6px 8px; border-radius: 6px; font-size: 0.7rem; line-height: 1.35; margin-bottom: 10px; font-weight: 600; }}
+    #operating-banner {{ padding: 6px 8px; border-radius: 6px; font-size: 0.68rem; line-height: 1.35; margin-bottom: 8px; font-weight: 600; }}
     .banner-ideal {{ background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; }}
     .banner-turbo {{ background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fbbf24; }}
     .banner-breakpoint {{ background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171; }}
     .banner-eco {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; }}
 
-    #inspector {{ background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 8px; margin-bottom: 10px; font-size: 0.72rem; }}
-    #inspector-title {{ font-weight: 700; color: #38bdf8; margin-bottom: 3px; }}
-    #inspector-desc {{ color: #cbd5e1; font-size: 0.7rem; line-height: 1.35; }}
-    .legend-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 10px; }}
-    .legend-item {{ display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #cbd5e1; }}
+    #inspector {{ background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 7px; margin-bottom: 8px; font-size: 0.7rem; }}
+    #inspector-title {{ font-weight: 700; color: #38bdf8; margin-bottom: 2px; }}
+    #inspector-desc {{ color: #cbd5e1; font-size: 0.68rem; line-height: 1.35; }}
+    .legend-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }}
+    .legend-item {{ display: flex; align-items: center; gap: 6px; font-size: 0.68rem; color: #cbd5e1; }}
     .box {{ width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }}
-    .btn-exploded {{ width: 100%; background: #0284c7; color: white; border: none; padding: 7px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.72rem; transition: background 0.2s; }}
+    .btn-exploded {{ width: 100%; background: #0284c7; color: white; border: none; padding: 6px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.7rem; transition: background 0.2s; }}
     .btn-exploded:hover {{ background: #0369a1; }}
-    #controls-hint {{ position: absolute; bottom: 16px; left: 16px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); padding: 6px 12px; border-radius: 6px; color: #94a3b8; font-size: 0.7rem; z-index: 100; }}
+    #controls-hint {{ position: absolute; bottom: 16px; left: 16px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); padding: 6px 12px; border-radius: 6px; color: #94a3b8; font-size: 0.68rem; z-index: 100; }}
   </style>
 </head>
 <body>
@@ -642,6 +650,16 @@ endmodule"""
     <h3>🔬 {clean_title}</h3>
     <span class="badge">Process: {node_title}</span>
     
+    <!-- Real-Time Clock Simulation Toolbar -->
+    <div class="clock-toolbar">
+      <div style="display:flex; gap:4px;">
+        <button class="clock-btn active" id="btnClockPlay">▶ Run Clock</button>
+        <button class="clock-btn" id="btnClockPause">⏸ Pause</button>
+        <button class="clock-btn" id="btnClockStep">⏭ Step 1 Cycle</button>
+      </div>
+      <div class="cycle-counter" id="cycleDisplay">Cycle: #1024</div>
+    </div>
+
     <!-- DVFS Voltage & Frequency Scaling Controller -->
     <div class="dvfs-section">
       <div class="dvfs-header">
@@ -661,7 +679,7 @@ endmodule"""
 
     <!-- Operating Point Banner -->
     <div id="operating-banner" class="banner-ideal">
-      💠 <strong>Ideal Operating Point:</strong> Optimal Energy-Delay Product (0.78V). Maximum Perf/Watt with zero thermal throttling.
+      💠 <strong>Ideal Operating Point:</strong> Sweet spot on V-f curve (0.78V). Maximum Perf/Watt with zero thermal throttling.
     </div>
 
     <!-- Multi-Layer Interconnect Stack Visibility Toggles -->
@@ -671,20 +689,20 @@ endmodule"""
         <label class="layer-cb"><input type="checkbox" id="cbTransistors" checked> Transistor Die</label>
         <label class="layer-cb"><input type="checkbox" id="cbInterconnects" checked> M0-M15 Metal Mesh</label>
         <label class="layer-cb"><input type="checkbox" id="cbVias" checked> Vertical Vias</label>
-        <label class="layer-cb"><input type="checkbox" id="cbPowerGrid" checked> BSPDN Power Rails</label>
-        <label class="layer-cb" style="grid-column: span 2;"><input type="checkbox" id="cbParticles" checked> ⚡ Live Data Flow Particles</label>
+        <label class="layer-cb"><input type="checkbox" id="cbPowerGrid" checked> Power Rails / BSPDN</label>
+        <label class="layer-cb" style="grid-column: span 2;"><input type="checkbox" id="cbParticles" checked> ⚡ Live Clock Datawaves</label>
       </div>
     </div>
 
-    <!-- Live Telemetry KPI Grid -->
+    <!-- Live Telemetry KPI Grid (Calibrated per Architecture) -->
     <div class="kpi-grid">
       <div class="kpi-card">
-        <div class="kpi-label">Core Clock (f_clk)</div>
-        <div class="kpi-val" id="kpiBigCpu" style="color:#ef4444;">2.85 GHz</div>
+        <div class="kpi-label" id="lblKpi1">Core Clock (f_clk)</div>
+        <div class="kpi-val" id="kpiVal1" style="color:#ef4444;">2.85 GHz</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">GPU/NPU Clock</div>
-        <div class="kpi-val" id="kpiGpu" style="color:#a855f7;">980 MHz</div>
+        <div class="kpi-label" id="lblKpi2">Throughput / TOPS</div>
+        <div class="kpi-val" id="kpiVal2" style="color:#a855f7;">365 GFLOPS</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Supply Voltage (Vdd)</div>
@@ -699,8 +717,8 @@ endmodule"""
         <div class="kpi-val" id="kpiPower">5.4 W</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Throughput / Bandwidth</div>
-        <div class="kpi-val" id="kpiThroughput" style="color:#f59e0b;">2.8 TFLOPS</div>
+        <div class="kpi-label" id="lblKpi6">IR-Drop / Bandwidth</div>
+        <div class="kpi-val" id="kpiVal6" style="color:#f59e0b;">11.8 mV (BSPDN)</div>
       </div>
     </div>
     
@@ -712,13 +730,15 @@ endmodule"""
     <div class="legend-grid" id="legendGrid"></div>
     <button class="btn-exploded" id="toggleExploded">Toggle Exploded-View Inspection</button>
   </div>
-  <div id="controls-hint">🖱️ Left-Click: Rotate | Right-Click: Pan | Scroll: Zoom | Toggle Layers & DVFS Slider</div>
+  <div id="controls-hint">🖱️ Left-Click: Rotate | Right-Click: Pan | Scroll: Zoom | Use Clock Controls & DVFS Slider</div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {{
       var archKey = "{arch_key}";
       var nodeKey = "{node_key}";
       var currentDvfsState = 2; // Default: 2 (Ideal)
+      var clockRunning = true;
+      var currentCycle = 1024;
       
       var scene = new THREE.Scene();
       scene.background = new THREE.Color(0x07090e);
@@ -772,66 +792,77 @@ endmodule"""
         interactiveObjects.push(mesh);
       }}
 
-      // ── DVFS Telemetry Data Engine ──
-      var telemetryProfiles = {{
-        1: {{
-          name: "Eco / Idle Standby",
-          badgeBg: "rgba(56,189,248,0.2)", badgeColor: "#38bdf8", badgeBorder: "#38bdf8",
-          bannerClass: "banner-eco",
-          bannerText: "🟢 <strong>Eco Standby:</strong> Minimum leakage power (0.60V). Background OS tasks only.",
-          voltage: "0.60 V", temp: "36 °C", power: "1.4 W",
-          bigCpu: "1.20 GHz", littleCpu: "0.60 GHz", gpu: "350 MHz", npu: "8 TOPS",
-          throughput: "0.8 TFLOPS", tempColor: "#38bdf8"
+      // ── Physical Telemetry Profiles (Calibrated per Architecture) ──
+      var archTelemetryData = {{
+        tpu: {{
+          lbl1: "Array Clock (f_clk)", lbl2: "Compute Throughput", lbl6: "BSPDN IR-Drop",
+          1: {{ f1: "1.20 GHz", f2: "153.6 GFLOPS", v: "0.60 V", temp: "36 °C", p: "1.2 W", f6: "4.2 mV", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Minimum leakage power (0.60V). Zero activity in SRAM buffers." }},
+          2: {{ f1: "2.85 GHz", f2: "364.8 GFLOPS", v: "0.78 V", temp: "52 °C", p: "5.4 W", f6: "11.8 mV", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Sweet spot on V-f curve (0.78V). Maximum Perf/Watt with zero thermal throttling." }},
+          3: {{ f1: "3.60 GHz", f2: "460.8 GFLOPS", v: "0.95 V", temp: "78 °C", p: "14.2 W", f6: "24.6 mV", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full rated boost frequency (0.95V). High-density tensor matrix GEMM." }},
+          4: {{ f1: "4.20 GHz (Throttling)", f2: "537.6 GFLOPS", v: "1.15 V", temp: "98 °C", p: "28.5 W", f6: "48.2 mV", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> Dielectric limit (1.15V). Tj > 95°C forces clock frequency throttling!" }}
         }},
-        2: {{
-          name: "Ideal Efficiency ⭐",
-          badgeBg: "rgba(16,185,129,0.2)", badgeColor: "#34d399", badgeBorder: "#10b981",
-          bannerClass: "banner-ideal",
-          bannerText: "💠 <strong>Ideal Operating Point:</strong> Sweet spot on V-f curve (0.78V). Maximum Perf/Watt efficiency.",
-          voltage: "0.78 V", temp: "52 °C", power: "5.4 W",
-          bigCpu: "2.85 GHz", littleCpu: "1.40 GHz", gpu: "980 MHz", npu: "24 TOPS",
-          throughput: "2.8 TFLOPS", tempColor: "#10b981"
+        soc: {{
+          lbl1: "Big CPU / GPU", lbl2: "NPU Neural TOPS", lbl6: "LPDDR5X Bandwidth",
+          1: {{ f1: "1.2G / 350M", f2: "8 TOPS", v: "0.60 V", temp: "36 °C", p: "1.4 W", f6: "51.2 GB/s", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Low-voltage background state with Little cores and minimum PHY clocks." }},
+          2: {{ f1: "2.85G / 980M", f2: "24 TOPS", v: "0.78 V", temp: "52 °C", p: "5.8 W", f6: "102.4 GB/s", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Optimal Energy-Delay Product (0.78V). High-efficiency mobile computing." }},
+          3: {{ f1: "3.60G / 1.45G", f2: "38 TOPS", v: "0.95 V", temp: "78 °C", p: "15.6 W", f6: "136.5 GB/s", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Peak APU workload (3.6GHz Big CPU, 1.45GHz GPU, 38 TOPS NPU)." }},
+          4: {{ f1: "4.20G / 1.85G", f2: "52 TOPS", v: "1.15 V", temp: "98 °C", p: "31.2 W", f6: "153.6 GB/s", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> Peak power saturation. Thermal throttling caps SoC cluster frequencies." }}
         }},
-        3: {{
-          name: "Max Sustained (Turbo) ⚡",
-          badgeBg: "rgba(245,158,11,0.2)", badgeColor: "#fbbf24", badgeBorder: "#f59e0b",
-          bannerClass: "banner-turbo",
-          bannerText: "⚡ <strong>Max Sustained Turbo:</strong> Peak rated frequency (0.95V). High-load rendering & 3D gaming.",
-          voltage: "0.95 V", temp: "78 °C", power: "14.2 W",
-          bigCpu: "3.60 GHz", littleCpu: "2.00 GHz", gpu: "1.45 GHz", npu: "38 TOPS",
-          throughput: "4.6 TFLOPS", tempColor: "#f59e0b"
+        memory: {{
+          lbl1: "DFI Clock (f_clk)", lbl2: "1024-bit Bandwidth", lbl6: "TSV Latency",
+          1: {{ f1: "800 MHz", f2: "204.8 GB/s", v: "0.65 V", temp: "38 °C", p: "2.1 W", f6: "0.65 ns", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Deep power-down DRAM refresh with low DFI channel frequency." }},
+          2: {{ f1: "1.60 GHz", f2: "409.6 GB/s", v: "0.78 V", temp: "49 °C", p: "6.2 W", f6: "0.42 ns", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Balanced TSV signal integrity with 409.6 GB/s sustained throughput." }},
+          3: {{ f1: "2.40 GHz", f2: "614.4 GB/s", v: "0.95 V", temp: "74 °C", p: "16.8 W", f6: "0.28 ns", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full-rate HBM3 DFI data transfer across 4 stacked DRAM dies." }},
+          4: {{ f1: "3.20 GHz", f2: "819.2 GB/s", v: "1.15 V", temp: "96 °C", p: "29.4 W", f6: "0.22 ns", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> DRAM cell retention limit reached due to thermal junction heat." }}
         }},
-        4: {{
-          name: "Thermal Breakpoint ⚠️",
-          badgeBg: "rgba(239,68,68,0.25)", badgeColor: "#f87171", badgeBorder: "#ef4444",
-          bannerClass: "banner-breakpoint",
-          bannerText: "🔴 <strong>Thermal & Voltage Breakpoint:</strong> Dielectric threshold (1.15V). Tj > 95°C forces thermal throttling!",
-          voltage: "1.15 V", temp: "98 °C", power: "28.5 W",
-          bigCpu: "4.20 GHz (Throttling)", littleCpu: "2.40 GHz", gpu: "1.85 GHz", npu: "52 TOPS",
-          throughput: "6.2 TFLOPS", tempColor: "#ef4444"
+        cpu: {{
+          lbl1: "Core Clock (f_clk)", lbl2: "Superscalar IPC", lbl6: "ROB Retire Rate",
+          1: {{ f1: "1.40 GHz", f2: "1.20 IPC", v: "0.62 V", temp: "37 °C", p: "1.6 W", f6: "1.68 GIPS", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Power-gated execution units with single instruction issue." }},
+          2: {{ f1: "3.20 GHz", f2: "2.85 IPC", v: "0.82 V", temp: "54 °C", p: "7.4 W", f6: "9.12 GIPS", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> 4-wide superscalar pipeline sweet spot with 98% TAGE prediction accuracy." }},
+          3: {{ f1: "4.00 GHz", f2: "3.40 IPC", v: "0.98 V", temp: "79 °C", p: "18.2 W", f6: "13.6 GIPS", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full Out-of-Order speculative window (128-entry ROB active)." }},
+          4: {{ f1: "4.40 GHz", f2: "3.50 IPC", v: "1.18 V", temp: "99 °C", p: "34.5 W", f6: "15.4 GIPS", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> High-temperature leakage saturation. Dynamic clock stepping engages." }}
+        }},
+        gpu: {{
+          lbl1: "Shader Clock (f_clk)", lbl2: "FP32 Compute", lbl6: "L2 Crossbar BW",
+          1: {{ f1: "400 MHz", f2: "0.61 TFLOPS", v: "0.60 V", temp: "37 °C", p: "1.8 W", f6: "640 GB/s", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Low-power rasterization standby with idle warp schedulers." }},
+          2: {{ f1: "1.10 GHz", f2: "1.69 TFLOPS", v: "0.78 V", temp: "53 °C", p: "6.8 W", f6: "1.76 TB/s", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Optimal SIMT occupancy with balanced thermal footprint." }},
+          3: {{ f1: "1.65 GHz", f2: "2.53 TFLOPS", v: "0.95 V", temp: "79 °C", p: "17.4 W", f6: "2.64 TB/s", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full parallel warp compute with active Tensor Core matrix units." }},
+          4: {{ f1: "1.95 GHz", f2: "2.99 TFLOPS", v: "1.15 V", temp: "98 °C", p: "32.8 W", f6: "3.12 TB/s", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> SIMT thermal limit. High IR-drop triggers frequency stepping." }}
+        }},
+        analog: {{
+          lbl1: "GBW Product (f_u)", lbl2: "Open-Loop Gain (Av)", lbl6: "Phase Margin (PM)",
+          1: {{ f1: "45 MHz", f2: "68.2 dB", v: "1.20 V", temp: "32 °C", p: "0.45 mW", f6: "72.4 °", name: "Low Power Bias", banner: "🟢 <strong>Low Power Bias:</strong> Subthreshold bias mirror with minimum static current draw." }},
+          2: {{ f1: "120 MHz", f2: "78.4 dB", v: "1.80 V", temp: "42 °C", p: "1.85 mW", f6: "64.2 °", name: "Ideal Nominal Bias ⭐", banner: "💠 <strong>Nominal Operating Point:</strong> 78.4 dB gain with 64.2° phase margin for stable Miller compensation." }},
+          3: {{ f1: "185 MHz", f2: "82.1 dB", v: "2.20 V", temp: "58 °C", p: "4.20 mW", f6: "52.8 °", name: "High Speed Bias ⚡", banner: "⚡ <strong>High Speed Bias:</strong> Wide-bandwidth closed-loop tracking with elevated transconductance." }},
+          4: {{ f1: "210 MHz", f2: "74.6 dB", v: "2.60 V", temp: "84 °C", p: "8.90 mW", f6: "38.5 °", name: "Breakdown Limit ⚠️", banner: "🔴 <strong>Voltage Breakdown:</strong> Gate oxide stress limit. Output slew degradation and phase margin drop." }}
         }}
       }};
 
-      function updateDvfsTelemetry(state) {{
-        var p = telemetryProfiles[state];
+      var activeData = archTelemetryData[archKey] || archTelemetryData["tpu"];
+      document.getElementById("lblKpi1").textContent = activeData.lbl1;
+      document.getElementById("lblKpi2").textContent = activeData.lbl2;
+      document.getElementById("lblKpi6").textContent = activeData.lbl6;
+
+      function updatePhysicalSimulation(state) {{
+        var p = activeData[state];
         var badge = document.getElementById("dvfsStateBadge");
         badge.textContent = p.name;
-        badge.style.background = p.badgeBg;
-        badge.style.color = p.badgeColor;
-        badge.style.border = "1px solid " + p.badgeBorder;
+        badge.style.background = state === 1 ? "rgba(56,189,248,0.2)" : (state === 2 ? "rgba(16,185,129,0.2)" : (state === 3 ? "rgba(245,158,11,0.2)" : "rgba(239,68,68,0.25)"));
+        badge.style.color = state === 1 ? "#38bdf8" : (state === 2 ? "#34d399" : (state === 3 ? "#fbbf24" : "#f87171"));
+        badge.style.border = "1px solid " + (state === 1 ? "#38bdf8" : (state === 2 ? "#10b981" : (state === 3 ? "#f59e0b" : "#ef4444")));
 
         var banner = document.getElementById("operating-banner");
-        banner.className = p.bannerClass;
-        banner.innerHTML = p.bannerText;
+        banner.className = state === 1 ? "banner-eco" : (state === 2 ? "banner-ideal" : (state === 3 ? "banner-turbo" : "banner-breakpoint"));
+        banner.innerHTML = p.banner;
 
-        document.getElementById("kpiBigCpu").textContent = p.bigCpu;
-        document.getElementById("kpiGpu").textContent = p.gpu;
-        document.getElementById("kpiVoltage").textContent = p.voltage;
+        document.getElementById("kpiVal1").textContent = p.f1;
+        document.getElementById("kpiVal2").textContent = p.f2;
+        document.getElementById("kpiVoltage").textContent = p.v;
         var tempEl = document.getElementById("kpiTemp");
         tempEl.textContent = p.temp;
-        tempEl.style.color = p.tempColor;
-        document.getElementById("kpiPower").textContent = p.power;
-        document.getElementById("kpiThroughput").textContent = p.throughput;
+        tempEl.style.color = state === 4 ? "#ef4444" : (state === 3 ? "#f59e0b" : "#10b981");
+        document.getElementById("kpiPower").textContent = p.p;
+        document.getElementById("kpiVal6").textContent = p.f6;
 
         for (var i = 0; i < interactiveObjects.length; i++) {{
           var mesh = interactiveObjects[i];
@@ -848,9 +879,36 @@ endmodule"""
         }}
       }}
 
+      // Clock Simulation Controls
+      var btnPlay = document.getElementById("btnClockPlay");
+      var btnPause = document.getElementById("btnClockPause");
+      var btnStep = document.getElementById("btnClockStep");
+      var cycleDisplay = document.getElementById("cycleDisplay");
+
+      btnPlay.addEventListener("click", function() {{
+        clockRunning = true;
+        btnPlay.classList.add("active");
+        btnPause.classList.remove("active");
+      }});
+
+      btnPause.addEventListener("click", function() {{
+        clockRunning = false;
+        btnPlay.classList.remove("active");
+        btnPause.classList.add("active");
+      }});
+
+      btnStep.addEventListener("click", function() {{
+        clockRunning = false;
+        btnPlay.classList.remove("active");
+        btnPause.classList.add("active");
+        currentCycle++;
+        cycleDisplay.textContent = "Cycle: #" + currentCycle;
+        stepClockParticles();
+      }});
+
       document.getElementById("dvfsSlider").addEventListener("input", function(e) {{
         currentDvfsState = parseInt(e.target.value);
-        updateDvfsTelemetry(currentDvfsState);
+        updatePhysicalSimulation(currentDvfsState);
       }});
 
       // ── Checkbox Layer Toggles ──
@@ -861,13 +919,13 @@ endmodule"""
       document.getElementById("cbParticles").addEventListener("change", function(e) {{ particlesGroup.visible = e.target.checked; }});
 
       // ── 🌌 1. BUILD MULTI-LAYER BEOL INTERCONNECT MESH (M0 - M15) ──
-      // Realistic physical layer positioning directly above transistor die (Y: 0.75 - 1.8)
+      // Positioned directly on the silicon die (Y: 0.70 - 1.70)
       var mLowerMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.85, roughness: 0.2, transparent: true, opacity: 0.65 }});
       var wireGeomX = new THREE.BoxGeometry(14.5, 0.03, 0.06);
       var wireGeomZ = new THREE.BoxGeometry(0.06, 0.03, 14.5);
 
       for (var layer = 0; layer < 4; layer++) {{
-        var layerY = 0.75 + layer * 0.18;
+        var layerY = 0.72 + layer * 0.16;
         for (var tr = -6.5; tr <= 6.5; tr += 0.45) {{
           var wireMesh = new THREE.Mesh(layer % 2 === 0 ? wireGeomX : wireGeomZ, mLowerMat);
           if (layer % 2 === 0) {{
@@ -885,7 +943,7 @@ endmodule"""
       var midWireZ = new THREE.BoxGeometry(0.16, 0.05, 15.0);
 
       for (var ml = 0; ml < 3; ml++) {{
-        var midY = 1.45 + ml * 0.22;
+        var midY = 1.36 + ml * 0.18;
         for (var b = -6.0; b <= 6.0; b += 1.5) {{
           var mWire = new THREE.Mesh(ml % 2 === 0 ? midWireX : midWireZ, mMidMat);
           if (ml % 2 === 0) {{
@@ -903,7 +961,7 @@ endmodule"""
       var topMeshZ = new THREE.BoxGeometry(0.35, 0.08, 15.5);
 
       for (var tl = 0; tl < 2; tl++) {{
-        var topY = 2.1 + tl * 0.26;
+        var topY = 1.90 + tl * 0.22;
         for (var p = -6.0; p <= 6.0; p += 2.5) {{
           var pMesh = new THREE.Mesh(tl % 2 === 0 ? topMeshX : topMeshZ, mTopMat);
           if (tl % 2 === 0) {{
@@ -917,11 +975,11 @@ endmodule"""
 
       // Vertical Inter-Layer Via Columns (V0 - V14)
       var viaMat = new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.95, roughness: 0.1 }});
-      var viaGeom = new THREE.CylinderGeometry(0.04, 0.04, 1.6, 8);
+      var viaGeom = new THREE.CylinderGeometry(0.04, 0.04, 1.4, 8);
       for (var vx = -5.0; vx <= 5.0; vx += 2.5) {{
         for (var vz = -5.0; vz <= 5.0; vz += 2.5) {{
           var viaCol = new THREE.Mesh(viaGeom, viaMat);
-          viaCol.position.set(vx, 1.45, vz);
+          viaCol.position.set(vx, 1.35, vz);
           viaGroup.add(viaCol);
         }}
       }}
@@ -935,7 +993,7 @@ endmodule"""
 
       for (var p = 0; p < particleCount; p++) {{
         particlePositions[p * 3 + 0] = (Math.random() - 0.5) * 14.0;
-        particlePositions[p * 3 + 1] = 0.75 + Math.random() * 1.5;
+        particlePositions[p * 3 + 1] = 0.72 + Math.random() * 1.3;
         particlePositions[p * 3 + 2] = (Math.random() - 0.5) * 14.0;
         particleSpeeds[p] = 0.04 + Math.random() * 0.08;
         particleAxes[p] = Math.floor(Math.random() * 3);
@@ -951,6 +1009,25 @@ endmodule"""
       }});
       var particleSystem = new THREE.Points(particleGeo, particleMat);
       particlesGroup.add(particleSystem);
+
+      function stepClockParticles() {{
+        var positions = particleGeo.attributes.position.array;
+        for (var i = 0; i < particleCount; i++) {{
+          var axis = particleAxes[i];
+          var spd = particleSpeeds[i] * (currentDvfsState * 0.6 + 0.4);
+          if (axis === 0) {{
+            positions[i * 3 + 0] += spd;
+            if (positions[i * 3 + 0] > 7.2) positions[i * 3 + 0] = -7.2;
+          }} else if (axis === 1) {{
+            positions[i * 3 + 2] += spd;
+            if (positions[i * 3 + 2] > 7.2) positions[i * 3 + 2] = -7.2;
+          }} else {{
+            positions[i * 3 + 1] += spd * 0.3;
+            if (positions[i * 3 + 1] > 2.0) positions[i * 3 + 1] = 0.72;
+          }}
+        }}
+        particleGeo.attributes.position.needsUpdate = true;
+      }}
 
       // ── 🏛️ 3. ARCHITECTURE-SPECIFIC SILICON FLOORPLAN ──
       // Silicon Package Substrate Base with Gold Bond Pads
@@ -1200,30 +1277,20 @@ endmodule"""
         this.textContent = isExploded ? "Collapse Stack Layers" : "Toggle Exploded-View Inspection";
       }});
       
-      // Animation Loop with Real-Time Particle Pulse
+      // Animation Loop with Real-Time Particle Pulse & Clock Stepping
+      var clockTickCounter = 0;
       function animate() {{
         requestAnimationFrame(animate);
         controls.update();
         rootGroup.rotation.y += 0.0015;
         
-        // Animate Data Flow Particles along Interconnects
-        if (particlesGroup.visible) {{
-          var positions = particleGeo.attributes.position.array;
-          for (var i = 0; i < particleCount; i++) {{
-            var axis = particleAxes[i];
-            var spd = particleSpeeds[i] * (currentDvfsState * 0.5 + 0.5);
-            if (axis === 0) {{
-              positions[i * 3 + 0] += spd;
-              if (positions[i * 3 + 0] > 7.2) positions[i * 3 + 0] = -7.2;
-            }} else if (axis === 1) {{
-              positions[i * 3 + 2] += spd;
-              if (positions[i * 3 + 2] > 7.2) positions[i * 3 + 2] = -7.2;
-            }} else {{
-              positions[i * 3 + 1] += spd * 0.3;
-              if (positions[i * 3 + 1] > 2.2) positions[i * 3 + 1] = 0.75;
-            }}
+        if (clockRunning) {{
+          clockTickCounter++;
+          if (clockTickCounter % 6 === 0) {{
+            currentCycle++;
+            cycleDisplay.textContent = "Cycle: #" + currentCycle;
           }}
-          particleGeo.attributes.position.needsUpdate = true;
+          stepClockParticles();
         }}
 
         // Smooth vertical layer explosion animation
