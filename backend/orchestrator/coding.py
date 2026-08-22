@@ -157,8 +157,27 @@ class CodingPipeline:
                     code_p = f"USER REQUEST: {prompt}\n\nPLAN:\n{compiled_plan}\n\nWrite a complete, robust Python script implementing this plan with self-testing assertions. Wrap in ```python```."
                     sys_prompt = coder_sys
                 elif req_lang == "html":
-                    code_p = f"Implement a complete web application for this plan:\n{compiled_plan}\n\nWrap each file in <file path=\"...\">...</file> blocks."
-                    sys_prompt = "You are an expert full-stack web developer."
+                    is_3d_viz = any(k in prompt.lower() for k in [
+                        "3d", "three", "webgl", "model", "visual", "diagram", "dna",
+                        "crispr", "protein", "membrane", "simulation", "molecule", "cell"
+                    ])
+                    if is_3d_viz:
+                        sys_prompt = (
+                            "You are a master WebGL and 3D scientific visualization engineer.\n"
+                            "Create a complete, single-file, interactive 3D HTML page using Three.js (r128).\n\n"
+                            "STRICT RULES:\n"
+                            "1. Use CDN scripts in <head>:\n"
+                            "   <script src=\"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js\"></script>\n"
+                            "   <script src=\"https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js\"></script>\n"
+                            "2. Visual Design: Dark theme background (#0a0d14), studio lighting (AmbientLight + DirectionalLight), and 60 FPS OrbitControls.\n"
+                            "3. Accurate Scientific Geometry: Implement custom Three.js meshes and parametric curves accurately representing the requested biological, chemical, or physical structure (e.g. DNA double-helix with base-pair rungs, CRISPR-Cas9 enzyme envelope + guide RNA + target DNA, cell membrane bilayer, or protein ribbons).\n"
+                            "4. Interactive HUD: Include a clean glassmorphic HUD overlay in the top-right corner with title, color legend, and component descriptions.\n"
+                            "5. Output ONLY valid, runnable single-file HTML inside ```html``` blocks."
+                        )
+                        code_p = f"USER REQUEST: {prompt}\n\nPLAN:\n{compiled_plan}\n\nWrite the complete, interactive 3D Three.js HTML page wrapped in ```html```."
+                    else:
+                        code_p = f"Implement a complete, beautiful web application for this request:\n{prompt}\n\nPlan:\n{compiled_plan}\n\nWrap each file in <file path=\"...\">...</file> blocks or output single-file HTML in ```html```."
+                        sys_prompt = "You are an expert full-stack web developer. Output complete, production-grade web code."
                 else:
                     c_header_rule = ""
                     if req_lang == "cpp":
@@ -243,7 +262,13 @@ class CodingPipeline:
             return "verilog"
         elif "spice" in p_lower or "ngspice" in p_lower:
             return "spice"
-        elif "html" in p_lower or "css" in p_lower or "web app" in p_lower or "website" in p_lower:
+        elif any(k in p_lower for k in [
+            "html", "css", "web app", "website", "landing page",
+            "3d model", "3d visualization", "3d diagram", "three.js", "threejs",
+            "webgl", "interactive 3d", "render 3d", "interactive diagram", "canvas",
+            "double helix", "crispr", "dna diagram", "protein 3d", "cell membrane",
+            "molecular model", "3d simulation"
+        ]):
             return "html"
         elif " c " in p_lower or "in c language" in p_lower or "in c," in p_lower or p_lower.endswith("in c"):
             return "c"
