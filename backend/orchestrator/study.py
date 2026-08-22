@@ -90,19 +90,20 @@ class StudyPipeline:
             "Your task is to write VOLUME I of a definitive, publication-grade academic master reference textbook chapter.\n\n"
             "MANDATORY LATEX & PROSE RULES:\n"
             "1. NO META-OUTLINES: Do NOT write outlines, bullet summaries of what you plan to do, or brief overviews. Write out the ENTIRE chapter in continuous, rich, human-readable textbook prose with full explanations.\n"
-            "2. DISPLAY LATEX EQUATIONS: Write EVERY major theorem, governing formula, and mathematical proof in centered display LaTeX (`$$ ... $$`).\n"
-            "3. INLINE VARIABLES: Wrap all inline mathematical symbols and parameters in single dollar signs ($x$, $W_Q$, $d_k$, $\\mathcal{O}(N^2)$).\n"
-            "4. FIRST-PRINCIPLES DEPTH: Explain the physical/computational intuition, state transitions, step-by-step algebraic steps, variable definitions, and boundary behaviors.\n\n"
+            "2. DISPLAY LATEX EQUATIONS: Write EVERY major theorem, governing formula, and mathematical proof in centered display LaTeX (`$$ ... $$`) on its own dedicated line.\n"
+            "3. INLINE VARIABLES: Wrap individual mathematical symbols in single dollar signs ($x$, $\\beta_t$, $W_Q$, $d_k$, $\\mathcal{O}(N^2)$).\n"
+            "4. NO ENGLISH IN MATH DELIMITERS: NEVER put explanatory English words or sentences inside single dollar signs `$ ... $`. Write English text outside math delimiters.\n"
+            "5. FIRST-PRINCIPLES DEPTH: Explain physical/computational intuition, state transitions, step-by-step algebraic steps, variable definitions, and boundary behaviors.\n\n"
             "REQUIRED VOLUME I STRUCTURE:\n"
             "### 1. 🎓 Executive Overview, Core Axioms & Physical Intuition\n"
-            "- Foundational axioms, historical evolution, and computational motivation.\n"
+            "- Foundational axioms, historical evolution, and mathematical motivation.\n"
             "- 2 vivid real-world analogies explaining non-obvious dynamics.\n"
             "- Core graduate competencies mastered.\n\n"
             "### 2. 📚 Exhaustive Conceptual Breakdown & Architectural Mechanics\n"
             "- Divide into at least 4 detailed subsections (e.g. 2.1, 2.2, 2.3, 2.4).\n"
             "- Write multi-paragraph continuous explanations from first principles analyzing internal operations.\n\n"
             "### 3. 📐 The Complete Mathematical Framework & Rigorous Derivations\n"
-            "- State all governing equations in display LaTeX `$$ ... $$`.\n"
+            "- State all governing equations in centered display LaTeX `$$ ... $$`.\n"
             "- Provide complete line-by-line algebraic proofs showing every intermediate step.\n"
             "- Define every variable, matrix dimension, tensor shape, and constant explicitly in bullet points.\n\n"
             "### 4. 🔬 Boundary Dynamics, Complexity Analysis & Engineering Constraints\n"
@@ -118,7 +119,7 @@ class StudyPipeline:
         )
 
         raw_vol1 = orchestrator._call_model(reasoning_llm, prompt_vol1, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol1)
-        cleaned_vol1 = orchestrator._strip_thinking(raw_vol1)
+        cleaned_vol1 = StudyPipeline._sanitize_study_latex(orchestrator._strip_thinking(raw_vol1))
         orchestrator._check_cancelled("study:volume1_done")
 
         # ── Volume II: Applied Taxonomy, 10-Problem Solved Question Bank & Standardized Mock Exam ──
@@ -128,11 +129,11 @@ class StudyPipeline:
         sys_prompt_vol2 = (
             "You are a Distinguished Chief Examiner and Professor for National Competitive & Graduate Examinations.\n"
             "Your task is to write VOLUME II: Applied Taxonomy, Master Solved Question Bank, and Complete Standardized Mock Examination Paper.\n\n"
-            "CRITICAL MANDATE — NO SUMMARIES OR PROMISES:\n"
-            "- DO NOT write a syllabus outline or say 'In this section we will solve problems'.\n"
-            "- You MUST write out all 10 problems IN FULL with concrete numbers, parameter values, step-by-step algebraic substitutions, and final boxed answers.\n"
-            "- You MUST write out the complete Mock Exam paper with full questions, options A/B/C/D, answer keys, and marking rubrics.\n"
-            "- Render ALL math in display LaTeX (`$$ ... $$`).\n\n"
+            "CRITICAL MANDATES — DO NOT REPEAT VOLUME I:\n"
+            "1. START DIRECTLY with Module 5 ('### 5. 📊 Master Multi-Dimensional Comparison & Classification Matrices'). DO NOT repeat introduction or theory from Volume I.\n"
+            "2. WRITE ALL 10 PROBLEMS IN FULL: In Module 7, you MUST write out 10 distinct problems with concrete numerical parameters, step-by-step algebraic substitutions, and final boxed answers.\n"
+            "3. FULL MOCK EXAM PAPER: In Module 8, write out 5 full MCQs (with options A/B/C/D, answer keys & explanations), 3 Short Numerical Problems with full work, and 2 Long-Form Derivations with marking rubrics.\n"
+            "4. DISPLAY LATEX: Render all formulas in display LaTeX (`$$ ... $$`). Never put English sentences inside `$ ... $`.\n\n"
             "REQUIRED VOLUME II STRUCTURE:\n"
             "### 5. 📊 Master Multi-Dimensional Comparison & Classification Matrices\n"
             "Construct a dense, multi-column Markdown comparison table contrasting key architectures, computational complexities, memory footprints, and trade-offs.\n\n"
@@ -153,14 +154,17 @@ class StudyPipeline:
         )
 
         prompt_vol2 = (
-            f"TARGET TOPIC: {clean_title}\n"
-            f"VOLUME I CONTEXT (Already authored):\n{cleaned_vol1[:1200]}...\n\n"
-            f"Write the complete, fully worked-out VOLUME II for '{clean_title}'. "
-            f"Write out EVERY SINGLE ONE of the 10 solved problems and all exam questions in full with complete derivations and LaTeX math ($$ ... $$):"
+            f"TARGET TOPIC: {clean_title}\n\n"
+            f"TASK: Author the MASTER PROBLEM BANK & EXAMINATION SUITE (Volume II) for '{clean_title}'.\n\n"
+            f"INSTRUCTIONS:\n"
+            f"Start DIRECTLY with Module 5 (Do NOT re-introduce the topic). Author Modules 5, 6, 7 (all 10 fully solved problems), and 8 (complete mock exam paper) with full mathematical rigor ($$ ... $$):\n\n"
+            f"### 5. 📊 Master Multi-Dimensional Comparison & Classification Matrices"
         )
 
         raw_vol2 = orchestrator._call_model(reasoning_llm, prompt_vol2, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol2)
-        cleaned_vol2 = orchestrator._strip_thinking(raw_vol2)
+        cleaned_vol2 = StudyPipeline._sanitize_study_latex(orchestrator._strip_thinking(raw_vol2))
+        if not cleaned_vol2.startswith("### 5"):
+            cleaned_vol2 = "### 5. 📊 Master Multi-Dimensional Comparison & Classification Matrices\n\n" + cleaned_vol2
         orchestrator._check_cancelled("study:volume2_done")
 
         if status_callback:
@@ -168,7 +172,7 @@ class StudyPipeline:
 
         return (
             f"# 🎓 Master Reference Textbook & Comprehensive Pedagogical Treatise\n"
-            f"## 📖 Subject: {clean_title.title()}\n\n"
+            f"## 📖 Subject: {clean_title}\n\n"
             f"> **Curriculum Standard:** University Graduate Reference Level | **Engine:** DeepSeek-R1 High-Precision Pedagogical Core\n\n"
             f"---\n\n"
             f"## 📚 Volume I: Theoretical Foundations, Architecture & Complete Formal Derivations\n\n"
@@ -195,7 +199,7 @@ class StudyPipeline:
             "Your task is to transform the provided source document into VOLUME I of a comprehensive, human-readable master study guide and reference textbook.\n\n"
             "MANDATORY GROUNDING & LATEX RULES:\n"
             "1. STRICT GROUNDING: Every concept, theorem, definition, and formula must be strictly grounded in the ingested source document.\n"
-            "2. DISPLAY LATEX: Write all mathematical formulas and equations in centered display LaTeX (`$$ ... $$`).\n"
+            "2. DISPLAY LATEX: Write all mathematical formulas and equations in centered display LaTeX (`$$ ... $$`). Never put English sentences inside `$ ... $`.\n"
             "3. CONTINUOUS TEXTBOOK PROSE: Write in-depth, multi-paragraph explanations explaining all dynamics from first principles. Do NOT write brief bullet outlines.\n\n"
             "REQUIRED STRUCTURE:\n"
             "### 1. 🎓 Executive Epistemological Summary & Foundational Definitions\n"
@@ -211,7 +215,7 @@ class StudyPipeline:
         )
 
         raw_vol1 = orchestrator._call_model(reasoning_llm, prompt_vol1, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol1)
-        cleaned_vol1 = orchestrator._strip_thinking(raw_vol1)
+        cleaned_vol1 = StudyPipeline._sanitize_study_latex(orchestrator._strip_thinking(raw_vol1))
         orchestrator._check_cancelled("study:doc_vol1_done")
 
         # Volume II: Document-Grounded Practice Bank & Exam Suite
@@ -224,7 +228,8 @@ class StudyPipeline:
             "MANDATORY EXAM RULES:\n"
             "1. NO PROMISES OR OUTLINES: Write out all 10 problems completely with full numbers, step-by-step worked solutions, and final boxed answers.\n"
             "2. Ground all problems and exam questions directly in the formulas and concepts present in the ingested document.\n"
-            "3. Render all math in centered display LaTeX (`$$ ... $$`).\n\n"
+            "3. Render all math in centered display LaTeX (`$$ ... $$`). Never put English sentences inside `$ ... $`.\n"
+            "4. START DIRECTLY with Module 5 ('### 5. 📊 Comparative Taxonomy & Classification Matrices'). Do NOT repeat Volume I introductions.\n\n"
             "REQUIRED STRUCTURE:\n"
             "### 5. 📊 Comparative Taxonomy & Classification Matrices\n"
             "### 6. 💡 High-Yield Exam Traps, Common Misconceptions & Mnemonics\n"
@@ -234,12 +239,15 @@ class StudyPipeline:
 
         prompt_vol2 = (
             f"INGESTED SOURCE DOCUMENT CONTENT:\n\"\"\"\n{doc_text[:10000]}\n\"\"\"\n\n"
-            f"VOLUME I SUMMARY:\n{cleaned_vol1[:1200]}...\n\n"
-            f"Write the complete, document-grounded VOLUME II with all 10 solved problems and full mock exam paper written out in complete detail:"
+            f"TARGET SUBJECT: {clean_title}\n\n"
+            f"Write the complete, document-grounded VOLUME II with all 10 solved problems and full mock exam paper written out in complete detail, starting directly with Module 5:\n\n"
+            f"### 5. 📊 Comparative Taxonomy & Classification Matrices"
         )
 
         raw_vol2 = orchestrator._call_model(reasoning_llm, prompt_vol2, max_tokens=gen_tokens, temperature=gen_temp, system_prompt=sys_prompt_vol2)
-        cleaned_vol2 = orchestrator._strip_thinking(raw_vol2)
+        cleaned_vol2 = StudyPipeline._sanitize_study_latex(orchestrator._strip_thinking(raw_vol2))
+        if not cleaned_vol2.startswith("### 5"):
+            cleaned_vol2 = "### 5. 📊 Comparative Taxonomy & Classification Matrices\n\n" + cleaned_vol2
 
         return (
             f"# 🎓 Document-Grounded Master Reference Treatise & Solved Examination Suite\n\n"
@@ -258,23 +266,57 @@ class StudyPipeline:
         if not prompt:
             return "Advanced Academic Subject Reference"
         
-        # Strip common instruction prefixes
+        text = prompt.strip()
+        # Remove common instruction prefixes
         text = re.sub(
-            r"^(teach me|explain|create study notes for|notes on|give me notes for|study guide for|a complete guide on|write a textbook on|author an exhaustive graduate level reference textbook on|author an exhaustive reference textbook on|author a textbook on)\s+",
-            "", prompt, flags=re.I
+            r"^(teach me|explain|create study notes for|notes on|give me notes for|study guide for|a complete guide on|write a textbook on|author an exhaustive graduate level reference textbook on|author an exhaustive reference textbook on|author an exhaustive graduate-level reference textbook chapter on|author a textbook on)\s+",
+            "", text, flags=re.I
         ).strip()
 
-        # If prompt has multiple sentences, take the first core clause
+        # If prompt has 'from first principles' or 'focusing on', grab the text before it
+        match_first = re.split(r"\s+(?:from first principles|focusing on|covering|including|with full)\b", text, flags=re.I)
+        if match_first and len(match_first[0].strip()) > 3:
+            candidate = match_first[0].strip().rstrip(":,.- ")
+            if len(candidate) < 90:
+                return candidate.title()
+
+        # If prompt has sentences, grab first sentence
         if "." in text:
             first_clause = text.split(".")[0].strip()
             if len(first_clause) > 5 and len(first_clause) < 90:
-                text = first_clause
+                return first_clause.title()
 
-        # Strip tail instruction clauses
-        text = re.sub(r"(author an exhaustive.*|covering mathematical derivations.*|with full derivations.*|create a 10.*|complete mock exam.*)", "", text, flags=re.I).strip()
-        text = text.rstrip(":,.- ")
+        return text[:80].strip().title() if text else "Advanced Academic Curriculum"
 
-        return text[:80].strip() if text else "Advanced Academic Curriculum"
+    @staticmethod
+    def _sanitize_study_latex(text):
+        """Fixes unclosed or misformatted LaTeX blocks to prevent squashed math rendering."""
+        if not text:
+            return text
+
+        # Convert unclosed inline math followed by English text into display blocks
+        # e.g., $d\mathbf{x}_t = ... where \mathbf{x}_t -> $$d\mathbf{x}_t = ...$$\nwhere $\mathbf{x}_t
+        text = re.sub(
+            r"\$([^\$\n]{10,})\s+(where|with|and|such that|in which)\s+",
+            r"$$\1$$\n\2 ",
+            text,
+            flags=re.IGNORECASE
+        )
+
+        # Fix missing double dollar closings
+        lines = text.split("\n")
+        fixed_lines = []
+        in_display_math = False
+        for line in lines:
+            if line.strip().startswith("$$") and line.strip().endswith("$$") and len(line.strip()) > 4:
+                fixed_lines.append(line)
+            elif line.strip().startswith("$$"):
+                in_display_math = not in_display_math
+                fixed_lines.append(line)
+            else:
+                fixed_lines.append(line)
+        
+        return "\n".join(fixed_lines)
 
     @staticmethod
     def _extract_document_text(payload):
