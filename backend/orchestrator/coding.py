@@ -1,13 +1,20 @@
 import os
 import re
 import gc
+import ast
 import uuid
 import shutil
 from backend.sandbox import Sandbox
+from backend.downloader import resolve_model_key
 from backend.orchestrator.router import TaskRouter
 
 class CodingPipeline:
-    """7-Phase Agentic Actor-Critic Coding Pipeline & AST Linter Surgical Patcher."""
+    """
+    Production-Grade Autonomous Coding Pipeline & Algorithmic Complexity Optimizer.
+    Features 6-Phase Dual-Agent Logic Planning, Strict Type-Safe Code Generation,
+    AST Static Analysis Linting, Cross-Model Devil's Advocate Critic Auditing,
+    and Real-Time Sandboxed Automated Verification.
+    """
 
     @staticmethod
     def execute(orchestrator, prompt, mode="auto", selected_models=None, status_callback=None):
@@ -34,7 +41,7 @@ class CodingPipeline:
             if min_ctx - gen_tokens < 1500:
                 gen_tokens = max(2048, min_ctx - 1500)
 
-        logic_temp = 0.4
+        logic_temp = 0.3
         crunch_budget = max(1024, ds_ctx - gen_tokens - 1000)
         ds_safe = orchestrator._crunch_prompt(prompt, "deepseek_r1", crunch_budget, status_callback)
 
@@ -45,23 +52,25 @@ class CodingPipeline:
         initial_failed_error = ""
 
         planner_sys = (
-            f"You are a distinguished principal software architect.\n"
-            f"Your task is to draft a rigorous, step-by-step logic and algorithmic architecture plan for {lang_name}.\n\n"
-            f"MANDATORY ARCHITECTURAL RULES:\n"
-            f"1. ALGORITHMIC SPECIFICATION: Detail the exact data structures, memory alignment, concurrency primitives (atomics, memory orderings, cacheline padding), time/space complexity, and edge cases.\n"
-            f"2. PROSE ONLY — NO CODE BLOCKS: Write clear, numbered English steps. DO NOT write code blocks, triple backticks (```), or incomplete code snippets in the plan.\n"
-            f"3. THOROUGHNESS: Clearly define state transitions, lock-free pointer swaps, invariants, and multi-threaded self-testing assertions."
+            f"You are a Distinguished Principal Software Architect and Chief Systems Fellow.\n"
+            f"Your task is to draft an exhaustive, optimal algorithmic architecture plan strictly for {lang_name}.\n\n"
+            f"MANDATORY ARCHITECTURAL & COMPLEXITY RULES:\n"
+            f"1. ALGORITHMIC OPTIMIZATION (Big-O): Enforce optimal time and space complexity bounds (prefer O(1), O(N), or O(N log N) using hash-maps, two-pointers, sliding windows, prefix arrays, or binary search). Avoid naive O(N^2) brute force.\n"
+            f"2. MEMORY & DATA STRUCTURES: Specify cache-friendly contiguous data layouts, cacheline padding (64-byte alignment), and atomic lock-free orderings (acquire/release) where concurrency is needed.\n"
+            f"3. PROSE ONLY — NO CODE BLOCKS: Write numbered English specification steps. DO NOT write code blocks or triple backticks (```) in the logic plan.\n"
+            f"4. DEFENSIVE BOUNDARIES: Detail exact edge cases: null/None inputs, empty collections, single-item collections, boundary integers, and thread-safety invariants."
         )
 
         coder_sys = (
-            f"You are an expert computational programmer and software engineer.\n"
-            f"Your job is to translate the logic plan into a complete, clean, and immediately runnable {lang_name} program.\n\n"
-            f"STRICT RULES:\n"
-            f"1. Implement all structures and algorithms EXACTLY as requested.\n"
-            f"2. Do NOT write placeholders, mock functions, or abbreviated loop bodies.\n"
-            f"3. Handle edge cases: bounds checking, thread safety, memory deallocation.\n"
-            f"4. AUTOMATED SELF-TESTING MANDATE: Append a complete self-testing test suite in main() with assertions.\n"
-            f"5. Output ONLY valid {lang_name} code inside ```{req_lang}``` blocks."
+            f"You are an Expert Principal Computational Software Engineer.\n"
+            f"Your task is to implement a complete, optimized, production-grade {lang_name} program based on the logic plan.\n\n"
+            f"MANDATORY PRODUCTION CODE QUALITY STANDARDS:\n"
+            f"1. STRICT TYPE ANNOTATIONS: Use explicit type hints across all function signatures, parameters, and return types (e.g. from typing import List, Dict, Optional, Tuple, Union, Any in Python; const correctness and templates in C++).\n"
+            f"2. GOOGLE-STYLE DOCSTRINGS: Write clean docstrings for every class and public function explaining Args, Returns, Raises, and practical usage Examples.\n"
+            f"3. ALGORITHMIC EFFICIENCY: Implement optimal algorithms with minimal memory overhead and zero redundant allocations.\n"
+            f"4. DEFENSIVE ERROR HANDLING: Handle edge cases gracefully with explicit exception types and input validation (never bare except:).\n"
+            f"5. AUTOMATED SELF-TESTING HARNESS IN main(): Append a complete, executable main() test suite containing assertions covering nominal operations and edge cases (empty inputs, single items, boundary limits).\n"
+            f"6. NO LAZINESS OR PLACEHOLDERS: Output ONLY complete, runnable code inside ```{req_lang}``` blocks. Never write '// TODO', mock functions, or abbreviated loop bodies."
         )
 
         benchmark_coder_sys = (
@@ -97,21 +106,21 @@ class CodingPipeline:
         for reset in range(max_resets):
             max_rounds = 1 if reset > 0 else 2
             for rnd in range(max_rounds):
-                # Phase 1: Logic Plan
+                # Phase 1: Logic & Algorithmic Architecture Plan
                 orchestrator._check_cancelled("code:draft_logic")
                 is_nuclear = (reset > 0)
                 model_key = "deepseek_r1" if is_nuclear else "vibethinker"
                 model_name = orchestrator._get_display_model_name(model_key)
 
                 if status_callback:
-                    lbl = f"🧠 {model_name} drafting logic..." if is_benchmark else f"🧠 {model_name} drafting logic (Attempt {rnd+1}/{max_rounds})..."
+                    lbl = f"🧠 {model_name} drafting algorithmic architecture (Attempt {rnd+1}/{max_rounds})..."
                     status_callback(lbl, "info", model_key, 20 + rnd*10)
 
                 ds_llm = orchestrator._get_model(model_key, required_ctx=ds_ctx)
                 ds_display = orchestrator._get_display_model_name(model_key)
-                plan_p = f"TARGET PROGRAMMING LANGUAGE: {lang_name}\n\nUSER REQUEST: {ds_safe}\n\nCreate a step-by-step logic and algorithmic architecture plan strictly for {lang_name}:"
+                plan_p = f"TARGET PROGRAMMING LANGUAGE: {lang_name}\n\nUSER REQUEST: {ds_safe}\n\nCreate an optimal algorithmic architecture and data structure plan strictly for {lang_name}:"
                 
-                # Recall past verified experiences from persistent memory
+                # Recall past verified experiences from persistent vector memory
                 try:
                     if hasattr(orchestrator, "memory") and orchestrator.memory and not is_benchmark:
                         past_mem = orchestrator.memory.recall(prompt, n_results=1)
@@ -124,7 +133,7 @@ class CodingPipeline:
                     plan_p += f"\n\nLESSONS FROM PREVIOUS FAILURES:\n{lessons[:800]}"
                 ds_draft = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, plan_p, gen_tokens, logic_temp, system_prompt=planner_sys))
 
-                # Phase 2: Reasoning Sandbox (Only for Python interactive queries, skip for benchmarks)
+                # Phase 2: Reasoning Sandbox Logic Verification
                 orchestrator._check_cancelled("code:verify_logic")
                 active_router = orchestrator._get_model("router", required_ctx=1024)
                 use_logic_playground = (not is_benchmark) and (req_lang == "python") and TaskRouter.is_playground_applicable(orchestrator, active_router, prompt)
@@ -138,23 +147,24 @@ class CodingPipeline:
                 if not verified:
                     ds_llm = orchestrator._get_model("deepseek_r1", required_ctx=ds_ctx)
                     ds_display = orchestrator._get_display_model_name("deepseek_r1")
-                    fix_p = f"ORIGINAL REQUEST ({lang_name}):\n{prompt}\n\nLogic plan FAILED verification.\nPlan:\n{ds_draft[:2000]}\nError:\n{pg_out[:1000]}\nRewrite a corrected logic plan strictly for {lang_name}."
+                    fix_p = f"ORIGINAL REQUEST ({lang_name}):\n{prompt}\n\nLogic plan FAILED verification.\nPlan:\n{ds_draft[:2000]}\nError:\n{pg_out[:1000]}\nRewrite an optimized, corrected logic plan strictly for {lang_name}."
                     ds_draft = orchestrator._strip_thinking(orchestrator._call_model(ds_llm, fix_p, gen_tokens, logic_temp, system_prompt=planner_sys))
 
                 compiled_plan = ds_draft
 
-                # Phase 3: Write Code
+                # Phase 3: Production Code Synthesis
                 orchestrator._check_cancelled("code:write_code")
                 oc_llm = orchestrator._get_model("ornith", required_ctx=oc_ctx)
                 coder_display = orchestrator._get_display_model_name("ornith")
                 if status_callback:
-                    status_callback(f"💻 {coder_display} writing code...", "info", "ornith", 50 + rnd*10)
+                    status_callback(f"💻 {coder_display} synthesizing production {lang_name} code...", "info", "ornith", 50 + rnd*10)
 
-                if is_benchmark:
-                    code_p = f"Implement a complete, optimal Python solution for this task and plan:\n\nTask:\n{prompt}\n\nPlan:\n{compiled_plan}\n\nOutput ONLY python code in ```python```."
-                    sys_prompt = benchmark_coder_sys
-                elif req_lang == "python":
-                    code_p = f"USER REQUEST: {prompt}\n\nPLAN:\n{compiled_plan}\n\nWrite a complete, robust Python script implementing this plan with self-testing assertions. Wrap in ```python```."
+                if req_lang == "python":
+                    code_p = (
+                        f"USER REQUEST: {prompt}\n\n"
+                        f"ARCHITECTURAL PLAN:\n{compiled_plan}\n\n"
+                        f"Write a complete, highly optimized, type-annotated, production-grade Python script with Google docstrings and self-testing assertions in main(). Wrap in ```python```."
+                    )
                     sys_prompt = coder_sys
                 elif req_lang == "html":
                     is_3d_viz = any(k in prompt.lower() for k in [
@@ -170,7 +180,7 @@ class CodingPipeline:
                             "   <script src=\"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js\"></script>\n"
                             "   <script src=\"https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js\"></script>\n"
                             "2. Visual Design: Dark theme background (#0a0d14), studio lighting (AmbientLight + DirectionalLight), and 60 FPS OrbitControls.\n"
-                            "3. Accurate Scientific Geometry: Implement custom Three.js meshes and parametric curves accurately representing the requested biological, chemical, or physical structure (e.g. DNA double-helix with base-pair rungs, CRISPR-Cas9 enzyme envelope + guide RNA + target DNA, cell membrane bilayer, or protein ribbons).\n"
+                            "3. Accurate Scientific Geometry: Implement custom Three.js meshes and parametric curves accurately representing the requested biological, chemical, or physical structure.\n"
                             "4. Interactive HUD: Include a clean glassmorphic HUD overlay in the top-right corner with title, color legend, and component descriptions.\n"
                             "5. Output ONLY valid, runnable single-file HTML inside ```html``` blocks."
                         )
@@ -203,7 +213,7 @@ class CodingPipeline:
                         )
 
                     code_p = (
-                        f"Write a complete, fully working, self-contained {lang_name} program for this request:\n{prompt}\n\n"
+                        f"Write a complete, fully working, self-contained, high-performance {lang_name} program for this request:\n{prompt}\n\n"
                         f"{c_header_rule}"
                         f"Plan:\n{compiled_plan}\n\n"
                         f"Write ONLY valid {lang_name} code inside ```{req_lang}``` blocks. Include main() with complete unit tests."
@@ -219,14 +229,19 @@ class CodingPipeline:
                 else:
                     code = Sandbox.extract_code(raw_model_output)
 
-                # For automated benchmark evaluation, return code immediately for official harness testing
-                if is_benchmark:
-                    return f"```python\n{code}\n```"
+                # Phase 4: AST Static Analysis & Linting Pass (Python)
+                if req_lang == "python" and code and not files_dict:
+                    ast_ok, ast_err = CodingPipeline._lint_python_ast(code)
+                    if not ast_ok:
+                        if status_callback:
+                            status_callback("🛡️ AST Linter detected syntax defect, repairing...", "warning", "ornith", 55 + rnd*10)
+                        fix_ast_p = f"Fix Python syntax error in the following code:\n\nERROR:\n{ast_err}\n\nCODE:\n{code}\n\nOutput complete fixed Python code in ```python```."
+                        code = Sandbox.extract_code(orchestrator._strip_thinking(orchestrator._call_model(oc_llm, fix_ast_p, gen_tokens, gen_temp, system_prompt=coder_sys)))
 
-                # Phase 4: Execution Sandbox
+                # Phase 5: Execution Sandbox & Automated Assertion Testing
                 orchestrator._check_cancelled("code:execute_sandbox")
                 if status_callback:
-                    status_callback(f"Executing in Sandbox (Attempt {rnd+1}/{max_rounds})...", "info", "sandbox", 60 + rnd*10)
+                    status_callback(f"Executing in Sandbox (Attempt {rnd+1}/{max_rounds})...", "info", "sandbox", 65 + rnd*10)
 
                 if files_dict:
                     ok, output_log, temp_dir = orchestrator.sandbox.execute_workspace(files_dict)
@@ -243,7 +258,7 @@ class CodingPipeline:
                     initial_failed_code = code
                     initial_failed_error = output
 
-                # Agent IDE surgical patch / rewrite
+                # Phase 6: Agentic Compiler Error Auto-Patching Loop
                 oc_fix = orchestrator._get_model("ornith", required_ctx=oc_ctx)
                 fix_p = f"Fix the following {lang_name} code to resolve the compilation/runtime errors:\n\nCODE:\n{code[:2000]}\n\nCOMPILER ERROR:\n{output[:800]}\n\nOutput complete fixed program in ```{req_lang}```."
                 code = Sandbox.extract_code(orchestrator._strip_thinking(orchestrator._call_model(oc_fix, fix_p, gen_tokens, gen_temp)))
@@ -254,6 +269,17 @@ class CodingPipeline:
 
         # Fallback output if all retries exhausted
         return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang, execution_passed=False)
+
+    @staticmethod
+    def _lint_python_ast(code):
+        """Validates Python code via Abstract Syntax Tree (AST) parsing before sandbox execution."""
+        try:
+            ast.parse(code)
+            return True, ""
+        except SyntaxError as e:
+            return False, f"SyntaxError at line {e.lineno}, offset {e.offset}: {e.msg}"
+        except Exception as ex:
+            return False, str(ex)
 
     @staticmethod
     def _detect_target_language(prompt):
