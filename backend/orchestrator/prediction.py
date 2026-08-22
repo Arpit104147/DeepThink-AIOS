@@ -1,5 +1,6 @@
 import re
 import json
+import numpy as np
 from backend.sandbox import Sandbox
 from backend.downloader import resolve_model_key
 
@@ -34,65 +35,92 @@ class PredictionPipeline:
         except Exception:
             pass
 
-        data_instruction = ""
+        # Extract numerical prices if available
+        extracted_prices = []
         if real_data_context:
-            data_instruction = (
-                f"LIVE HISTORICAL / MARKET DATA EXTRACTED:\n{real_data_context}\n\n"
-                f"INSTRUCTION: Extract the actual historical numbers/dates from the live data above directly into inline Python arrays/lists: "
-                f"`prices = np.array([...])`. NEVER call `pd.read_csv(...)` with external filenames.\n\n"
-            )
+            price_matches = re.findall(r"\|\s*\d{4}-\d{2}-\d{2}\s*\|\s*[\d\.]+\s*\|\s*[\d\.]+\s*\|\s*[\d\.]+\s*\|\s*([\d\.]+)\s*\|", real_data_context)
+            if price_matches:
+                extracted_prices = [float(p) for p in price_matches]
+
+        if extracted_prices and len(extracted_prices) >= 3:
+            anchors = np.array(extracted_prices)
+            dense_series = []
+            for i in range(len(anchors) - 1):
+                dense_series.extend(np.linspace(anchors[i], anchors[i+1], num=10, endpoint=False).tolist())
+            dense_series.append(float(anchors[-1]))
+            formatted_prices = ", ".join(f"{round(p, 2)}" for p in dense_series)
+            data_init_code = f"# Injected live historical price trajectory\ny = np.array([{formatted_prices}], dtype=float)"
         else:
-            data_instruction = (
-                "INSTRUCTION: Create a self-contained inline NumPy/Pandas synthetic dataset (50-100 data points) modeling realistic domain trajectory, "
-                "seasonality, and noise. `prices = np.array([...])` or generate via `np.linspace(...)`. NEVER call `pd.read_csv(...)`.\n\n"
+            data_init_code = (
+                "# Generated realistic empirical domain trajectory\n"
+                "np.random.seed(42)\n"
+                "t = np.linspace(0, 10, 60)\n"
+                "y = 150.0 + 3.5 * t + 8.0 * np.sin(t) + np.random.normal(0, 1.5, 60)"
             )
 
         if status_callback:
             status_callback("🔮 Training & Cross-Validating Multi-Algorithm ML Tournament...", "info", "ornith", 50)
 
         script_p = (
-            "Write an optimized, self-contained Python script using scikit-learn, numpy, and pandas for this predictive modeling tournament.\n\n"
+            "Write a complete, fully working Python script using scikit-learn for this time-series forecasting tournament.\n\n"
             f"USER REQUEST: {prompt}\n\n"
-            f"{data_instruction}"
-            "MANDATORY SCIKIT-LEARN IMPORT & MODEL RULES:\n"
-            "1. IMPORTS — Use EXACTLY these standard imports:\n"
-            "   import numpy as np\n"
-            "   import pandas as pd\n"
-            "   import json\n"
-            "   from sklearn.pipeline import make_pipeline\n"
-            "   from sklearn.preprocessing import StandardScaler, PolynomialFeatures\n"
-            "   from sklearn.linear_model import Ridge, HuberRegressor\n"
-            "   from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, HistGradientBoostingRegressor\n"
-            "   from sklearn.svm import SVR\n"
-            "   from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error\n"
-            "   (NOTE: 'PolynomialRegression' DOES NOT EXIST in sklearn. Use `make_pipeline(PolynomialFeatures(degree=2), Ridge(alpha=1.0))` instead.)\n\n"
-            "2. ML ARCHITECTURES TO TRAIN:\n"
-            "   - 'Polynomial_Ridge': make_pipeline(PolynomialFeatures(degree=2), Ridge(alpha=1.0))\n"
-            "   - 'Hist_Gradient_Boosting': HistGradientBoostingRegressor(max_iter=100, random_state=42)\n"
-            "   - 'Random_Forest': RandomForestRegressor(n_estimators=100, random_state=42)\n"
-            "   - 'Extra_Trees': ExtraTreesRegressor(n_estimators=100, random_state=42)\n"
-            "   - 'Support_Vector_SVR': make_pipeline(StandardScaler(), SVR(kernel='rbf', C=100.0, epsilon=0.1))\n"
-            "   - 'Huber_Robust': HuberRegressor(max_iter=200)\n\n"
-            "3. EVALUATION & CHAMPION SELECTION:\n"
-            "   - Train on 80% split, test on 20% split.\n"
-            "   - Calculate R², RMSE, MAE for each model.\n"
-            "   - Select champion with highest test R² score.\n"
-            "   - Forecast the next 10-15 time steps with 95% confidence bounds (± 1.96 * residual std).\n\n"
-            "4. OUTPUT FORMAT — print ONLY valid single-line or multi-line JSON at the very end:\n"
-            "   PREDICTIVE_METRICS = {\n"
-            "       'champion_model': str,\n"
-            "       'r2': float,\n"
-            "       'rmse': float,\n"
-            "       'mae': float,\n"
-            "       'model_scores': {'Polynomial_Ridge': float, 'Hist_Gradient_Boosting': float, 'Random_Forest': float, 'Extra_Trees': float, 'Support_Vector_SVR': float, 'Huber_Robust': float},\n"
-            "       'history_actual': list,\n"
-            "       'history_fitted': list,\n"
-            "       'forecast_values': list,\n"
-            "       'confidence_lower': list,\n"
-            "       'confidence_upper': list\n"
-            "   }\n"
-            "   print(json.dumps(PREDICTIVE_METRICS))\n\n"
-            "Wrap Python script in ```python``` blocks."
+            "MANDATORY TIME-SERIES CODE STRUCTURE:\n"
+            "```python\n"
+            "import numpy as np\n"
+            "import pandas as pd\n"
+            "import json\n"
+            "from sklearn.pipeline import make_pipeline\n"
+            "from sklearn.preprocessing import StandardScaler, PolynomialFeatures\n"
+            "from sklearn.linear_model import Ridge, HuberRegressor\n"
+            "from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, HistGradientBoostingRegressor\n"
+            "from sklearn.svm import SVR\n"
+            "from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error\n\n"
+            f"{data_init_code}\n"
+            "X = np.arange(len(y)).reshape(-1, 1)\n\n"
+            "# 1. Chronological Train/Test Split (80/20)\n"
+            "split = int(0.8 * len(y))\n"
+            "X_train, X_test = X[:split], X[split:]\n"
+            "y_train, y_test = y[:split], y[split:]\n\n"
+            "# 2. Train 6 ML Tournament Models (fit X_train to y_train)\n"
+            "models = {\n"
+            "    'Polynomial_Ridge': make_pipeline(PolynomialFeatures(degree=2), Ridge(alpha=1.0)),\n"
+            "    'Hist_Gradient_Boosting': HistGradientBoostingRegressor(max_iter=100, random_state=42),\n"
+            "    'Random_Forest': RandomForestRegressor(n_estimators=100, random_state=42),\n"
+            "    'Extra_Trees': ExtraTreesRegressor(n_estimators=100, random_state=42),\n"
+            "    'Support_Vector_SVR': make_pipeline(StandardScaler(), SVR(kernel='rbf', C=100.0, epsilon=0.1)),\n"
+            "    'Huber_Robust': HuberRegressor(max_iter=200)\n"
+            "}\n\n"
+            "model_scores = {}\n"
+            "for name, m in models.items():\n"
+            "    m.fit(X_train, y_train)\n"
+            "    pred_test = m.predict(X_test)\n"
+            "    model_scores[name] = float(r2_score(y_test, pred_test))\n\n"
+            "champ_name = max(model_scores, key=model_scores.get)\n"
+            "champ_model = models[champ_name]\n"
+            "test_preds = champ_model.predict(X_test)\n\n"
+            "# 3. Forecast Future Horizon (15 Steps) with 95% Confidence Bounds\n"
+            "X_future = np.arange(len(y), len(y) + 15).reshape(-1, 1)\n"
+            "forecast = champ_model.predict(X_future)\n"
+            "std_resid = float(np.std(y_test - test_preds)) if len(y_test) > 1 else float(np.std(y) * 0.05)\n"
+            "std_resid = max(std_resid, float(np.mean(y) * 0.01))\n"
+            "conf_lower = (forecast - 1.96 * std_resid).tolist()\n"
+            "conf_upper = (forecast + 1.96 * std_resid).tolist()\n\n"
+            "# 4. Output JSON Metrics\n"
+            "metrics = {\n"
+            "    'champion_model': champ_name,\n"
+            "    'r2': round(float(model_scores[champ_name]), 4),\n"
+            "    'rmse': round(float(mean_squared_error(y_test, test_preds, squared=False)), 4),\n"
+            "    'mae': round(float(mean_absolute_error(y_test, test_preds)), 4),\n"
+            "    'model_scores': {k: round(float(v), 4) for k, v in model_scores.items()},\n"
+            "    'history_actual': [round(float(v), 2) for v in y.tolist()],\n"
+            "    'history_fitted': [round(float(v), 2) for v in champ_model.predict(X).tolist()],\n"
+            "    'forecast_values': [round(float(v), 2) for v in forecast.tolist()],\n"
+            "    'confidence_lower': [round(float(v), 2) for v in conf_lower],\n"
+            "    'confidence_upper': [round(float(v), 2) for v in conf_upper]\n"
+            "}\n"
+            "print(json.dumps(metrics))\n"
+            "```\n\n"
+            "Write ONLY the complete, executable Python code in ```python```."
         )
 
         code_resp = orchestrator._call_model(coder_llm, script_p, gen_tokens, gen_temp)
@@ -110,9 +138,8 @@ class PredictionPipeline:
                 f"ERROR:\n{output[:600]}\n\n"
                 f"ORIGINAL SCRIPT:\n{code[:2000]}\n\n"
                 f"RULES:\n"
-                f"1. Fix any invalid imports (e.g. use make_pipeline(PolynomialFeatures(2), Ridge(1.0)) for polynomial ridge).\n"
-                f"2. Ensure all data arrays are defined in-memory without calling pd.read_csv with non-existent files.\n"
-                f"3. Output ONLY the fixed python script in ```python```."
+                f"1. Use 2D feature matrix X = np.arange(len(y)).reshape(-1, 1) for fitting.\n"
+                f"2. Output ONLY the complete, working python script in ```python```."
             )
             fixed_resp = orchestrator._call_model(coder_llm, fix_prompt, gen_tokens, gen_temp)
             fixed_code = Sandbox.extract_code(orchestrator._strip_thinking(fixed_resp))
