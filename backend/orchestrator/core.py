@@ -363,20 +363,28 @@ class AgentOrchestrator:
                 parts = cleaned.split(open_tag, 1)
                 before_think = parts[0].strip()
                 after_think = parts[1].strip() if len(parts) > 1 else ""
-                # Filter out internal reasoning from after_think
-                if "\n\n" in after_think:
-                    paragraphs = [p.strip() for p in after_think.split("\n\n") if p.strip()]
-                    content_paragraphs = [p for p in paragraphs if not p.lower().startswith(("okay,", "so,", "i need to", "i should", "first, i", "let's see", "i'll start"))]
-                    after_clean = "\n\n".join(content_paragraphs) if content_paragraphs else after_think
-                else:
-                    after_clean = after_think
-                # Keep both before and after content (don't drop after_think)
-                if before_think and after_clean:
-                    cleaned = before_think + "\n\n" + after_clean
+                
+                # Check if after_think is purely monologue reasoning
+                is_monologue = after_think.lower().startswith((
+                    "wait,", "let me", "okay,", "so,", "i need to", "i should",
+                    "first, i", "let's see", "i'll start", "hmm,", "alright,"
+                ))
+                
+                if before_think and is_monologue:
+                    cleaned = before_think
+                elif before_think and after_think:
+                    # Filter out internal reasoning paragraphs
+                    if "\n\n" in after_think:
+                        paragraphs = [p.strip() for p in after_think.split("\n\n") if p.strip()]
+                        content_paragraphs = [p for p in paragraphs if not p.lower().startswith(("okay,", "so,", "i need to", "i should", "first, i", "let's see", "i'll start", "wait,", "let me"))]
+                        after_clean = "\n\n".join(content_paragraphs) if content_paragraphs else ""
+                    else:
+                        after_clean = "" if is_monologue else after_think
+                    cleaned = (before_think + "\n\n" + after_clean).strip() if after_clean else before_think
+                elif after_think and not is_monologue:
+                    cleaned = after_think
                 elif before_think:
                     cleaned = before_think
-                elif after_clean:
-                    cleaned = after_clean
 
         # Filter out repetitive paragraphs and infinite loops
         if "\n\n" in cleaned:
@@ -429,17 +437,47 @@ class AgentOrchestrator:
         if not text:
             return text
         patterns = [
+            r'\(Note:\s*my\s+training\s+data\s+only\s+goes\s+up\s+to\s+[^)]+\)',
+            r'\(As\s+an\s+AI,\s*my\s+knowledge\s+cutoff\s+is\s+[^)]+\)',
+            r'Always\s+verify\s+with\s+official\s+sources[^.]*\.?',
+            r'Please\s+verify\s+with\s+official\s+sources[^.]*\.?',
             r'Knowledge cutoff:.*?\n',
             r'Note: My knowledge cutoff is.*?\n',
             r'As an AI developed by.*?\n'
         ]
         cleaned = text
         for pat in patterns:
-            cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+            cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE).strip()
         
         # Compact extra blank lines between markdown table rows
         cleaned = re.sub(r'(\|[^\n]+\|)\n\s*\n+(\|[^\n]+\|)', r'\1\n\2', cleaned)
         return cleaned.strip()
+
+    def _apply_search_replace_patch(self, code, patch):
+        """Applies Aider-style SEARCH/REPLACE diff blocks to existing code."""
+        if not patch or "<<<<<<< SEARCH" not in patch or ">>>>>>> REPLACE" not in patch:
+            return None
+        
+        pattern = r"<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE"
+        matches = re.findall(pattern, patch, flags=re.DOTALL)
+        if not matches:
+            return None
+        
+        res = code
+        for search_block, replace_block in matches:
+            if res.count(search_block) != 1:
+                return None
+            res = res.replace(search_block, replace_block, 1)
+        return res
+
+    @staticmethod
+    def _compute_gen_tokens(ctx_limit: int) -> int:
+        """Calculates safe generation token budget while preserving prompt headroom."""
+        gen = int(ctx_limit * 0.4)
+        gen = min(8192, max(2048, gen))
+        if ctx_limit - gen < 1500:
+            gen = max(512, ctx_limit - 1500)
+        return gen
 
     def _compute_headroom(self):
         ds_ctx = 8192

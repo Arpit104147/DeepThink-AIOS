@@ -6,8 +6,10 @@ import time
 import re
 import threading
 # Enable fast multi-threaded Rust transfer engine for HuggingFace Hub downloads
-os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-from huggingface_hub import hf_hub_download
+try:
+    from huggingface_hub import hf_hub_download
+except ImportError:
+    hf_hub_download = None
 
 import json
 
