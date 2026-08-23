@@ -427,6 +427,47 @@ module tb_TPU_Top_Systolic_Array();
     end
 
 endmodule"""
+        elif arch == "analog":
+            node_desc = chip_meta.get("node", "180nm Planar CMOS")
+            return f"""* ============================================================================
+* Circuit: Two-Stage Miller Operational Transconductance Amplifier (OTA)
+* Process: {node_desc}
+* Standard: SPICE3f5 / NGSPICE Synthesizable Subcircuit
+* Topology: NMOS Differential Input Pair + PMOS Current Mirror + Miller Comp
+* ============================================================================
+
+.SUBCKT TWO_STAGE_MILLER_OPAMP VDD VSS VIN_P VIN_N VOUT VBIAS
+* Input Differential Pair
+M1 N1 VIN_N N_TAIL VSS NMOS W=10u L=0.18u
+M2 N2 VIN_P N_TAIL VSS NMOS W=10u L=0.18u
+* PMOS Active Load Mirror
+M3 N1 N1 VDD VDD PMOS W=20u L=0.18u
+M4 N2 N1 VDD VDD PMOS W=20u L=0.18u
+* Tail Current Source
+M5 N_TAIL VBIAS VSS VSS NMOS W=20u L=0.18u
+* Second Stage Gain & Output Driver
+M6 VOUT N2 VDD VDD PMOS W=40u L=0.18u
+M7 VOUT VBIAS VSS VSS NMOS W=40u L=0.18u
+* Miller Frequency Compensation Network
+CC N2 VOUT 1.2p
+RC N2 N_COMP 1.5k
+.ENDS TWO_STAGE_MILLER_OPAMP
+
+* --- Transient & AC Analysis Testbench ---
+VDD VDD 0 DC 1.8V
+VSS VSS 0 DC 0.0V
+VBIAS VBIAS 0 DC 0.65V
+VIN_P VIN_P 0 SIN(0.9 10m 1k)
+VIN_N VIN_N 0 DC 0.9V
+
+X_OPAMP VDD VSS VIN_P VIN_N VOUT VBIAS TWO_STAGE_MILLER_OPAMP
+
+.MODEL NMOS NMOS (LEVEL=1 VTO=0.45 KP=120u GAMMA=0.4 LAMBDA=0.02)
+.MODEL PMOS PMOS (LEVEL=1 VTO=-0.45 KP=40u GAMMA=0.4 LAMBDA=0.02)
+
+.TRAN 10u 5m
+.PRINT TRAN V(VOUT) V(VIN_P)
+.END"""
         else:
             arch_u = arch.upper()
             node_desc = chip_meta.get("node", "2nm GAAFET")
@@ -586,10 +627,10 @@ endmodule"""
         if not chip_meta:
             chip_meta = ChipDesignPipeline._analyze_chip_meta(prompt)
 
-        node_title = chip_meta["node"]
-        chip_type = chip_meta["type"]
-        arch_key = chip_meta["arch_key"]
-        node_key = chip_meta["node_key"]
+        node_title = chip_meta.get("node", "2nm Gate-All-Around (GAA) Nanosheet")
+        chip_type = chip_meta.get("type", "AI TPU / Tensor Processing Engine")
+        arch_key = chip_meta.get("arch_key", "tpu")
+        node_key = chip_meta.get("node_key", "gaafet")
         clean_title = ChipDesignPipeline._clean_chip_title(prompt, chip_type, node_title)
 
         return f"""<!--ARTIFACT_HTML-->
