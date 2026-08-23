@@ -656,15 +656,41 @@ async def chat(request: ChatRequest):
                         except Exception as ex:
                             thread_cb(f"File transcription failed: {str(ex)}. Proceeding with prompt only.", "warning")
                     
-                    # Prepend recent conversation history to preserve multi-turn context
+                    # Prepend hierarchical conversation history to preserve multi-turn context
                     if request.history and len(request.history) > 0:
-                        hist_text = ""
-                        for item in request.history[-6:]:
-                            role = item.get("role", "user")
-                            content = item.get("content", "").strip()
-                            if content:
-                                label = "User" if role == "user" else "Assistant"
-                                hist_text += f"{label}: {content}\n\n"
+                        total_turns = len(request.history)
+                        if total_turns > 6:
+                            # Early turns: extract high-yield constraints and goals
+                            early_turns = request.history[:-6]
+                            early_summary = []
+                            for idx, item in enumerate(early_turns):
+                                r = item.get("role", "user")
+                                c = item.get("content", "").strip()
+                                if c:
+                                    if r == "user":
+                                        early_summary.append(f"• User Goal/Constraint (Turn {idx+1}): {c[:250]}")
+                                    else:
+                                        first_p = c.split('\n\n')[0].strip()[:180]
+                                        early_summary.append(f"• Assistant Key Finding (Turn {idx+1}): {first_p}")
+
+                            hist_text = f"[Executive Summary of Earlier Conversation (Turns 1 to {total_turns-6})]:\n"
+                            hist_text += "\n".join(early_summary[:8]) + "\n\n"
+                            hist_text += "[Recent Direct Conversation Turns]:\n"
+                            for item in request.history[-6:]:
+                                role = item.get("role", "user")
+                                content = item.get("content", "").strip()
+                                if content:
+                                    label = "User" if role == "user" else "Assistant"
+                                    hist_text += f"{label}: {content}\n\n"
+                        else:
+                            hist_text = ""
+                            for item in request.history:
+                                role = item.get("role", "user")
+                                content = item.get("content", "").strip()
+                                if content:
+                                    label = "User" if role == "user" else "Assistant"
+                                    hist_text += f"{label}: {content}\n\n"
+
                         if hist_text:
                             final_prompt = f"Previous Conversation Context:\n{hist_text}Current User Request:\n{final_prompt}"
 
@@ -850,6 +876,33 @@ def workspace_commit(
     if git_agent is None or not git_agent.available:
         raise HTTPException(status_code=503, detail="Git agent not available")
     return git_agent.commit_files(workspace_path, files, message)
+
+# ── Persistent Vector Memory Management Endpoints ──
+@app.get("/api/memory/list")
+def list_user_memories(limit: int = 50):
+    """List recent long-term memories stored in vector memory."""
+    try:
+        return {"memories": memory.list_memories(limit=limit)}
+    except Exception as e:
+        return {"memories": [], "error": str(e)}
+
+@app.post("/api/memory/delete")
+def delete_user_memory(memory_id: str = Body(..., embed=True)):
+    """Delete a specific long-term memory entry."""
+    try:
+        success = memory.delete_memory(memory_id)
+        return {"success": success, "memory_id": memory_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/memory/clear")
+def clear_user_memories():
+    """Clear all long-term memories."""
+    try:
+        success = memory.clear()
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 def free_port(port: int):
     """Cleanly terminate any stale process holding the specified port."""

@@ -614,3 +614,66 @@ class Memory:
                 continue
 
         return interfaces
+
+    def list_memories(self, limit=50, user_id='default'):
+        """Lists recent long-term memories from ChromaDB/SQLite.
+
+        Args:
+            limit: Max number of items to return
+            user_id: User identifier filter
+
+        Returns:
+            list of dicts containing id, task, doc preview, metadata, and timestamp
+        """
+        results = []
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, task, doc, metadata, created_at FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+                (user_id, limit)
+            )
+            rows = cursor.fetchall()
+
+        for mem_id, task, doc, meta_str, created_at in rows:
+            try:
+                meta = json.loads(meta_str) if meta_str else {}
+            except Exception:
+                meta = {}
+            results.append({
+                "id": mem_id,
+                "task": task,
+                "preview": (doc[:200] + "...") if len(doc) > 200 else doc,
+                "metadata": meta,
+                "created_at": created_at
+            })
+
+        return results
+
+    def delete_memory(self, memory_id: str, user_id='default') -> bool:
+        """Deletes a specific memory entry from SQLite and ChromaDB.
+
+        Args:
+            memory_id: The unique memory ID to remove
+            user_id: User identifier
+
+        Returns:
+            bool indicating success
+        """
+        deleted = False
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM memories WHERE id = ? AND user_id = ?",
+                (memory_id, user_id)
+            )
+            deleted = cursor.rowcount > 0
+            conn.commit()
+
+        if self.use_chroma and self.collection:
+            try:
+                self.collection.delete(ids=[memory_id])
+            except Exception:
+                pass
+
+        return deleted
+
