@@ -268,8 +268,8 @@ The Kretschmann scalar $K = R^{\alpha\beta\gamma\delta} R_{\alpha\beta\gamma\del
 
 $$K = R^{\alpha\beta\gamma\delta} R_{\alpha\beta\gamma\delta} = \frac{48 G^2 M^2}{c^4 r^6} = \frac{12 r_s^2}{r^6}$$
 
-* **Event Horizon ($r = r_s$):** $\lim_{r \to r_s} K = \frac{12}{r_s^4} < \infty$. The horizon is a non-singular, removable coordinate artifact (regularized in Kruskal-Szekeres coordinates).
-* **Spacetime Singularity ($r \to 0$):** $\lim_{r \to 0} K = \infty$. This represents a true physical spacetime curvature singularity where tidal forces diverge to infinity.
+* **Event Horizon** ($r = r_s$): $\lim_{r \to r_s} K = \frac{12}{r_s^4} < \infty$. The horizon is a non-singular, removable coordinate artifact (regularized in Kruskal-Szekeres coordinates).
+* **Spacetime Singularity** ($r \to 0$): $\lim_{r \to 0} K = \infty$. This represents a true physical spacetime curvature singularity where tidal forces diverge to infinity.
 
 ---
 
