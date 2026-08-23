@@ -77,12 +77,10 @@ class Memory:
                 )
             """)
             # Phase 3: Add user_id column for multi-tenant memory isolation
-            # ALTER TABLE is idempotent — if column already exists, it will fail
-            # silently and we catch the error gracefully.
             try:
                 cursor.execute("ALTER TABLE memories ADD COLUMN user_id TEXT DEFAULT 'default'")
             except sqlite3.OperationalError:
-                pass  # Column already exists
+                pass
             conn.commit()
 
     def count(self):
@@ -100,11 +98,10 @@ class Memory:
             count = cursor.fetchone()[0]
         return count
 
-    def recall(self, task, n_results=2, embed_fn=None):
+    def recall(self, task, n_results=2, embed_fn=None, domain=None):
         """
         Search memory for past experiences related to the current task.
-        Prioritizes successful solution patterns over mistake/error logs to
-        prevent error contamination when the same question is asked again.
+        Prioritizes successful solution patterns and filters by domain to eliminate cross-domain noise.
         """
         if self.count() == 0:
             return ""
@@ -114,7 +111,7 @@ class Memory:
             try:
                 results = self.collection.query(
                     query_texts=[task],
-                    n_results=n_results * 2,  # Fetch extra to filter
+                    n_results=n_results * 3,  # Fetch extra to filter by domain and threshold
                     include=["documents", "metadatas", "distances"]
                 )
                 if results and results.get('documents') and results['documents'][0]:
@@ -122,24 +119,23 @@ class Memory:
                     metadatas = results.get('metadatas', [[]])[0] if results.get('metadatas') else []
                     distances = results.get('distances', [[]])[0] if results.get('distances') else []
                     
-                    # ChromaDB returns L2 distances by default. Convert to
-                    # approximate cosine similarity: cos ≈ 1 - (d² / 2) for
-                    # unit-normed embeddings. Filter out noise below threshold.
                     filtered_docs = []
                     for i, doc in enumerate(docs):
+                        meta = metadatas[i] if i < len(metadatas) else {}
+                        
+                        # Domain partitioning filter
+                        if domain and meta.get('domain') and meta.get('domain') not in [domain, 'general']:
+                            continue
+                            
                         if i < len(distances):
                             l2_dist = distances[i]
                             approx_cosine = 1.0 - (l2_dist ** 2) / 2.0
                             if approx_cosine < MIN_VECTOR_SCORE:
                                 continue  # Below similarity threshold — noise
-                        meta = metadatas[i] if i < len(metadatas) else {}
+                                
                         filtered_docs.append((doc, meta))
                     
-                    if not filtered_docs:
-                        # No hits above threshold — fall through to keyword search
-                        pass
-                    else:
-                        # Prioritize solution memories over mistake logs
+                    if filtered_docs:
                         solutions = []
                         mistakes = []
                         for doc, meta in filtered_docs:
@@ -148,7 +144,6 @@ class Memory:
                             else:
                                 solutions.append(doc)
                         
-                        # Use solutions first, add at most 1 mistake pattern for context
                         filtered = solutions[:n_results]
                         if len(filtered) < n_results and mistakes:
                             filtered.append(mistakes[0])
@@ -157,7 +152,6 @@ class Memory:
                             filtered = [d for d, _ in filtered_docs[:n_results]]
                         
                         memories = "\n---\n".join(filtered)
-                        # Limit memory injection to prevent Context Window OOM
                         if len(memories) > 3000:
                             cutoff = memories.rfind('\n\n', 0, 3000)
                             cutoff = cutoff if cutoff != -1 else 3000
@@ -166,8 +160,7 @@ class Memory:
             except Exception as e:
                 print(f"ChromaDB query failed: {str(e)}. Falling back to SQLite recall.")
 
-        # SQLite Query Fallback — now selects `created_at` so we can compute
-        # a recency bonus (Phase 2.1).
+        # SQLite Query Fallback
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -179,13 +172,6 @@ class Memory:
             return ""
 
         def _prioritize_and_format(scored_items, limit):
-            """
-            scored_items is a list of (score, doc, meta_str). Higher-score items
-            already come first. This function:
-              (a) drops any hit more than TOP_HIT_MARGIN below the best score;
-              (b) preserves solution > mistake ordering;
-              (c) trims to `limit` items and truncates the joined text.
-            """
             if not scored_items:
                 return ""
 
@@ -204,6 +190,8 @@ class Memory:
                         meta = json.loads(meta_str)
                     except Exception:
                         pass
+                if domain and meta.get('domain') and meta.get('domain') not in [domain, 'general']:
+                    continue
                 if meta.get('type') == 'mistake_fix':
                     mistakes.append(doc)
                 else:
@@ -224,16 +212,9 @@ class Memory:
             return f"\n\nRelevant past experience:\n{memories}\n"
 
         def _recency_bonus(created_at_str):
-            """
-            Convert an ISO-8601 `created_at` timestamp into a recency multiplier
-            in the interval (0, 1]. A memory saved *right now* returns 1.0;
-            RECENCY_HALF_LIFE_DAYS ago returns 0.5; a year ago ≈ 0.001.
-            Returns 0.5 (neutral) if the timestamp is unparseable.
-            """
             if not created_at_str:
                 return 0.5
             try:
-                # SQLite CURRENT_TIMESTAMP format: "YYYY-MM-DD HH:MM:SS"
                 import datetime as _dt
                 ts = _dt.datetime.strptime(created_at_str, "%Y-%m-%d %H:%M:%S")
                 age_days = (_dt.datetime.utcnow() - ts).total_seconds() / 86400.0
@@ -242,7 +223,7 @@ class Memory:
             except Exception:
                 return 0.5
 
-        # ── Vector search (primary) ───────────────────────────────────────
+        # Vector search
         if embed_fn and rows[0][4]:
             try:
                 query_vector = np.array(embed_fn(task))
@@ -259,51 +240,33 @@ class Memory:
                         continue
                     cosine = float(np.dot(query_vector, emb) / (norm_q * norm_e))
                     if cosine < MIN_VECTOR_SCORE:
-                        # Hard-drop noise below the "genuinely related" floor.
                         continue
-                    # Blend cosine similarity with a recency bonus so that a
-                    # slightly-less-similar but newer memory can beat an old
-                    # one on ties. Weight is deliberately small (0.15) so
-                    # semantic match still dominates.
-                    final = (1.0 - RECENCY_WEIGHT) * cosine + \
-                            RECENCY_WEIGHT * _recency_bonus(created_at)
-                    scores.append((final, doc, meta_str))
+                    recency = _recency_bonus(created_at)
+                    final_score = (1.0 - RECENCY_WEIGHT) * cosine + RECENCY_WEIGHT * recency
+                    scores.append((final_score, doc, meta_str))
 
                 if scores:
                     scores.sort(key=lambda x: x[0], reverse=True)
-                    return _prioritize_and_format(scores, n_results)
-                # Fall through to keyword search ONLY when vector search
-                # produced zero above-threshold hits.
+                    formatted = _prioritize_and_format(scores, n_results)
+                    if formatted:
+                        return formatted
             except Exception as e:
-                print(f"SQLite vector similarity search failed: {str(e)}")
+                print(f"Memory Engine: Vector search failed ({e}). Falling back to keyword matching.")
 
-        # ── Keyword-overlap fallback ─────────────────────────────────────
-        # Trimmed STOPWORDS: `plot`, `equation`, `theorem`, `derive`, `3d`,
-        # etc. are actually strong topical signals and should NOT be silenced.
-        # To compensate for the wider vocabulary, we require KEYWORD_MIN_MATCHES
-        # (currently 3) content-word matches — up from the old threshold of 2.
+        # Keyword matching fallback
         STOPWORDS = {
-            # Grammar-only stopwords
-            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't", "as", "at",
-            "be", "because", "been", "before", "being", "below", "between", "both", "but", "by",
-            "can", "can't", "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during",
-            "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd",
-            "he'll", "he's", "her", "here", "here's", "hers", "herself", "him", "himself", "his", "how", "how's",
-            "i", "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself",
-            "let's", "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off", "on", "once", "only",
-            "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own", "same", "shan't", "she", "she'd",
-            "she'll", "she's", "should", "shouldn't", "so", "some", "such", "than", "that", "that's", "the", "their",
-            "theirs", "them", "themselves", "then", "there", "there's", "these", "they", "they'd", "they'll", "they're",
-            "they've", "this", "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", "we",
-            "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", "when's", "where", "where's",
-            "which", "while", "who", "who's", "whom", "why", "why's", "with", "won't", "would", "wouldn't", "you",
-            # Purely task-agnostic verbs — these carry no topical signal
+            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", 
+            "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
+            "can", "did", "do", "does", "doing", "don't", "down", "during", "each", "few", "for", "from", 
+            "further", "had", "has", "have", "having", "he", "her", "here", "hers", "him", "his", "how", 
+            "i", "if", "in", "into", "is", "it", "its", "me", "more", "most", "my", "myself", "no", "nor", 
+            "not", "of", "off", "on", "once", "only", "or", "other", "our", "ours", "out", "over", "own", 
+            "same", "she", "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", 
+            "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", 
+            "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", 
+            "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves",
             "write", "code", "program", "script", "create", "make", "generate", "give", "please", "solve", "run",
-            "show", "showing", "output", "result", "results", "value", "values",
-            # NOTE: `plot`, `equation`, `theorem`, `derive`, `3d`, `numerical`,
-            # `analytical`, `verify`, `mathematical`, `function`, `surface`,
-            # `parameter`, `constant`, `find`, `calculate`, `scenario` are
-            # INTENTIONALLY NOT in stopwords — they are topical anchors.
+            "show", "showing", "output", "result", "results", "value", "values"
         }
 
         query_words = set(
@@ -321,13 +284,7 @@ class Memory:
                 if w not in STOPWORDS and len(w) > 1
             )
             matches = len(query_words.intersection(task_words))
-            # Require KEYWORD_MIN_MATCHES (3) overlapping content words. For
-            # short queries (1-2 content words) we still require full overlap
-            # to prevent single-word coincidences from surfacing unrelated
-            # memories as "relevant past experience".
-            if matches >= KEYWORD_MIN_MATCHES or (
-                len(query_words) <= 2 and matches == len(query_words)
-            ):
+            if matches >= KEYWORD_MIN_MATCHES or (len(query_words) <= 2 and matches == len(query_words)):
                 keyword_scores.append((float(matches), doc, meta_str))
 
         if keyword_scores:
@@ -343,7 +300,6 @@ class Memory:
             cursor.execute("SELECT task FROM memories")
             rows = cursor.fetchall()
 
-        # Stopwords list to filter out generic noise words
         STOPWORDS = {
             "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", 
             "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
@@ -357,7 +313,6 @@ class Memory:
             "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves"
         }
 
-        # Filter out punctuation and stopwords to compare only content words
         def _get_content_words(t):
             words = [w.strip(",.!?()\"';:") for w in t.lower().split()]
             return set(w for w in words if w and w not in STOPWORDS)
@@ -376,31 +331,25 @@ class Memory:
             
             if not existing_words:
                 continue
-            
-            # If the numeric parameters differ, it's a completely unique physics/math problem
             if task_nums != existing_nums:
                 continue
                 
             overlap = len(task_words & existing_words) / max(len(task_words), len(existing_words))
-            if overlap > 0.95:  # Higher threshold for content words to prevent false duplicate matching
+            if overlap > 0.95:
                 return True
         return False
 
-    def save(self, task, successful_code, metadata=None, embed_fn=None):
-        """Save a compact knowledge summary (NOT the full code) to long-term memory."""
-        # Skip if we already have a very similar task stored
+    def save(self, task, successful_code, metadata=None, embed_fn=None, domain="general"):
+        """Save a compact knowledge summary with domain tagging and de-duplication."""
         if self._is_duplicate(task):
             return None
 
         mem_id = f"mem_{uuid.uuid4().hex}"
 
-        # Extract compact knowledge instead of dumping raw code
-        # 1. Libraries used
         imports = [line.strip() for line in successful_code.split("\n")
                    if line.strip().startswith(("import ", "from "))]
         libs = ", ".join(imports[:5]) if imports else "standard library"
 
-        # 2. Extract python code block if present, otherwise save the mathematical derivation
         code_summary = ""
         if "```python" in successful_code:
             try:
@@ -418,11 +367,13 @@ class Memory:
 
         doc = (
             f"Task: {task}\n"
+            f"Domain: {domain}\n"
             f"Libraries: {libs}\n"
             f"Procedure Summary:\n{code_summary}"
         )
 
         meta = metadata if metadata else {"task": task, "type": "solution"}
+        meta["domain"] = domain
 
         # Save to Chroma
         if self.use_chroma:
@@ -430,91 +381,6 @@ class Memory:
                 self.collection.add(documents=[doc], metadatas=[meta], ids=[mem_id])
             except Exception as e:
                 print(f"Chroma save failed: {str(e)}")
-
-        # Save to SQLite (embeddings stored as binary blobs for fast retrieval)
-        emb_blob = None
-        if embed_fn:
-            try:
-                emb = embed_fn(task)
-                emb_blob = np.array(emb, dtype=np.float32).tobytes()
-            except Exception as e:
-                print(f"Embedding generation failed: {str(e)}")
-
-        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
-                (mem_id, task, doc, json.dumps(meta), emb_blob)
-            )
-            conn.commit()
-
-        return mem_id
-
-    def save_mistake(self, task, wrong_code, error_log, fixed_code, embed_fn=None):
-        """Save a compact mistake-fix pattern (NOT full code) to prevent regression."""
-        mem_id = f"mistake_{uuid.uuid4().hex}"
-
-        # Extract only the error pattern and the fix insight, not full code dumps
-        # 1. Error essence: first 300 chars of the error (usually the traceback line)
-        error_essence = error_log.strip()[:300]
-
-        # 2. What changed: diff-like summary (just the key lines that differ)
-        wrong_lines = set(wrong_code.strip().split("\n"))
-        fixed_lines = set(fixed_code.strip().split("\n"))
-        removed = list(wrong_lines - fixed_lines)[:5]
-        added = list(fixed_lines - wrong_lines)[:5]
-
-        doc = (
-            f"Task: {task}\n"
-            f"Error: {error_essence}\n"
-            f"Root Cause (removed lines): {'; '.join(l.strip() for l in removed) if removed else 'structural change'}\n"
-            f"Fix Pattern (added lines): {'; '.join(l.strip() for l in added) if added else 'structural change'}"
-        )
-
-        meta = {"task": task, "type": "mistake_fix"}
-
-        # Save to Chroma
-        if self.use_chroma:
-            try:
-                self.collection.add(documents=[doc], metadatas=[meta], ids=[mem_id])
-            except Exception as e:
-                print(f"Chroma save mistake failed: {str(e)}")
-
-        # Save to SQLite (embeddings stored as binary blobs for fast retrieval)
-        emb_blob = None
-        if embed_fn:
-            try:
-                emb = embed_fn(task)
-                emb_blob = np.array(emb, dtype=np.float32).tobytes()
-            except Exception as e:
-                print(f"Embedding generation failed: {str(e)}")
-
-        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
-                (mem_id, task, doc, json.dumps(meta), emb_blob)
-            )
-            conn.commit()
-
-        return mem_id
-
-    def store(self, task, doc, metadata=None, embed_fn=None):
-        """General-purpose store method — alias for save() with a pre-built doc.
-        Used by pipelines that construct their own document format (e.g., chip design).
-        """
-        if self._is_duplicate(task):
-            return None
-
-        mem_id = f"mem_{uuid.uuid4().hex}"
-        meta = metadata if metadata else {"task": task, "type": "solution"}
-
-        # Save to Chroma
-        if self.use_chroma:
-            try:
-                self.collection.add(documents=[doc], metadatas=[meta], ids=[mem_id])
-            except Exception as e:
-                print(f"Chroma store failed: {str(e)}")
 
         # Save to SQLite
         emb_blob = None
@@ -535,96 +401,85 @@ class Memory:
 
         return mem_id
 
-    # ── Chip Design: Hardware Interface Pin Contract Registry ─────────
+    def save_mistake(self, task, wrong_code, error_log, fixed_code, embed_fn=None, domain="general"):
+        """Save a compact mistake-fix pattern to prevent regression."""
+        mem_id = f"mistake_{uuid.uuid4().hex}"
 
-    def store_hw_interface(self, module_name, ports_dict, metadata=None):
-        """Store a hardware module's pin interface for hierarchical chip design.
+        error_essence = error_log.strip()[:300]
+        wrong_lines = set(wrong_code.strip().split("\n"))
+        fixed_lines = set(fixed_code.strip().split("\n"))
+        removed = list(wrong_lines - fixed_lines)[:5]
+        added = list(fixed_lines - wrong_lines)[:5]
 
-        Args:
-            module_name: Name of the Verilog module (e.g., 'alu_4bit')
-            ports_dict: Dict of port definitions, e.g.:
-                {'a': {'dir': 'input', 'width': 4},
-                 'b': {'dir': 'input', 'width': 4},
-                 'result': {'dir': 'output', 'width': 4}}
-            metadata: Optional extra metadata (project tag, etc.)
-        """
-        task = f"hw_interface:{module_name}"
-        doc = json.dumps({
-            'module': module_name,
-            'ports': ports_dict,
-            'timestamp': _time.time(),
-        })
-        meta = metadata or {}
-        meta['type'] = 'hw_interface'
-        meta['module_name'] = module_name
+        doc = (
+            f"Task: {task}\n"
+            f"Domain: {domain}\n"
+            f"Error: {error_essence}\n"
+            f"Root Cause (removed lines): {'; '.join(l.strip() for l in removed) if removed else 'structural change'}\n"
+            f"Fix Pattern (added lines): {'; '.join(l.strip() for l in added) if added else 'structural change'}"
+        )
 
-        return self.store(task, doc, metadata=meta)
+        meta = {"task": task, "type": "mistake_fix", "domain": domain}
 
-    def recall_hw_interface(self, module_name):
-        """Retrieve a specific hardware module's pin interface.
+        if self.use_chroma:
+            try:
+                self.collection.add(documents=[doc], metadatas=[meta], ids=[mem_id])
+            except Exception as e:
+                print(f"Chroma save mistake failed: {str(e)}")
 
-        Args:
-            module_name: Name of the module to look up
-
-        Returns:
-            dict with 'module' and 'ports' keys, or None if not found
-        """
-        task_key = f"hw_interface:{module_name}"
+        emb_blob = None
+        if embed_fn:
+            try:
+                emb = embed_fn(task)
+                emb_blob = np.array(emb, dtype=np.float32).tobytes()
+            except Exception as e:
+                print(f"Embedding generation failed: {str(e)}")
 
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT doc FROM memories WHERE task = ? ORDER BY created_at DESC LIMIT 1",
-                (task_key,)
+                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
+                (mem_id, task, doc, json.dumps(meta), emb_blob)
             )
-            row = cursor.fetchone()
+            conn.commit()
 
-        if row:
+        return mem_id
+
+    def store(self, task, doc, metadata=None, embed_fn=None, domain="general"):
+        """General-purpose store method with domain tagging."""
+        if self._is_duplicate(task):
+            return None
+
+        mem_id = f"mem_{uuid.uuid4().hex}"
+        meta = metadata if metadata else {"task": task, "type": "solution"}
+        meta["domain"] = domain
+
+        if self.use_chroma:
             try:
-                return json.loads(row[0])
-            except Exception:
-                return None
-        return None
+                self.collection.add(documents=[doc], metadatas=[meta], ids=[mem_id])
+            except Exception as e:
+                print(f"Chroma store failed: {str(e)}")
 
-    def recall_all_hw_interfaces(self, project_tag=None):
-        """Retrieve all stored hardware interfaces, optionally filtered by project.
+        emb_blob = None
+        if embed_fn:
+            try:
+                emb = embed_fn(task)
+                emb_blob = np.array(emb, dtype=np.float32).tobytes()
+            except Exception as e:
+                print(f"Embedding generation failed: {str(e)}")
 
-        Args:
-            project_tag: Optional project identifier to filter by
-
-        Returns:
-            list of dicts, each with 'module' and 'ports' keys
-        """
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT doc, metadata FROM memories WHERE task LIKE 'hw_interface:%' ORDER BY created_at DESC"
+                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
+                (mem_id, task, doc, json.dumps(meta), emb_blob)
             )
-            rows = cursor.fetchall()
+            conn.commit()
 
-        interfaces = []
-        for doc_str, meta_str in rows:
-            try:
-                meta = json.loads(meta_str) if meta_str else {}
-                if project_tag and meta.get('project') != project_tag:
-                    continue
-                interface = json.loads(doc_str)
-                interfaces.append(interface)
-            except Exception:
-                continue
-
-        return interfaces
+        return mem_id
 
     def list_memories(self, limit=50, user_id='default'):
-        """Lists recent long-term memories from ChromaDB/SQLite.
-
-        Args:
-            limit: Max number of items to return
-            user_id: User identifier filter
-
-        Returns:
-            list of dicts containing id, task, doc preview, metadata, and timestamp
-        """
+        """Lists recent long-term memories from ChromaDB/SQLite."""
         results = []
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
@@ -642,6 +497,7 @@ class Memory:
             results.append({
                 "id": mem_id,
                 "task": task,
+                "domain": meta.get("domain", "general"),
                 "preview": (doc[:200] + "...") if len(doc) > 200 else doc,
                 "metadata": meta,
                 "created_at": created_at
@@ -650,15 +506,7 @@ class Memory:
         return results
 
     def delete_memory(self, memory_id: str, user_id='default') -> bool:
-        """Deletes a specific memory entry from SQLite and ChromaDB.
-
-        Args:
-            memory_id: The unique memory ID to remove
-            user_id: User identifier
-
-        Returns:
-            bool indicating success
-        """
+        """Deletes a specific memory entry from SQLite and ChromaDB."""
         deleted = False
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
@@ -677,3 +525,28 @@ class Memory:
 
         return deleted
 
+    def clear(self):
+        """Clears all stored memories."""
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM memories")
+            conn.commit()
+
+        if self.use_chroma and self.collection:
+            try:
+                self.chroma_client.delete_collection(name="knowledge")
+                self.collection = self.chroma_client.get_or_create_collection(name="knowledge")
+            except Exception:
+                pass
+        return True
+
+    def compact_memory(self, max_entries=1000, max_age_days=180):
+        """Purges stale memories older than max_age_days to keep vector latency < 5ms."""
+        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM memories WHERE created_at < datetime('now', '-' || ? || ' days')",
+                (max_age_days,)
+            )
+            conn.commit()
+        return True

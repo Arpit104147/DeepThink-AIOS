@@ -123,7 +123,7 @@ class CodingPipeline:
                 # Recall past verified experiences from persistent vector memory
                 try:
                     if hasattr(orchestrator, "memory") and orchestrator.memory and not is_benchmark:
-                        past_mem = orchestrator.memory.recall(prompt, n_results=1)
+                        past_mem = orchestrator.memory.recall(prompt, n_results=1, domain="coding")
                         if past_mem:
                             plan_p += f"\n\n{past_mem}"
                 except Exception:
@@ -251,7 +251,7 @@ class CodingPipeline:
                 else:
                     ok, output = orchestrator.sandbox.execute(code, language=req_lang)
                     if ok:
-                        orchestrator.memory.save(prompt, code)
+                        orchestrator.memory.save(prompt, code, domain="coding")
                         return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang, execution_passed=True)
 
                 if not initial_failed_code:
@@ -264,7 +264,7 @@ class CodingPipeline:
                 code = Sandbox.extract_code(orchestrator._strip_thinking(orchestrator._call_model(oc_fix, fix_p, gen_tokens, gen_temp)))
                 ok, output = orchestrator.sandbox.execute(code, language=req_lang)
                 if ok:
-                    orchestrator.memory.save(prompt, code)
+                    orchestrator.memory.save(prompt, code, domain="coding")
                     return orchestrator._synthesize_coding_response(prompt, compiled_plan, code, output, ds_ctx, oc_ctx, ds_ctx, gen_tokens, gen_temp, status_callback, req_lang=req_lang, execution_passed=True)
 
         # Fallback output if all retries exhausted
