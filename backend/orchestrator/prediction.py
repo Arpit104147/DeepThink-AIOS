@@ -32,18 +32,22 @@ class PredictionPipeline:
         unit_label = domain_info["unit"]
         chart_title = domain_info["title"]
         asset_symbol = domain_info.get("symbol", "")
+        is_financial = domain_info.get("is_financial", True)
 
         # 2. Ingest Real Live Market Data & Real-Time News Headlines
         real_data_context = ""
         news_items = []
         try:
             if hasattr(orchestrator, "web_search") and orchestrator.web_search:
-                fin_table = orchestrator.web_search.fetch_financial_quote(prompt)
-                if fin_table:
-                    real_data_context = fin_table
-                
-                # Fetch live news for target asset/domain
-                news_items = orchestrator.web_search.fetch_asset_news(prompt, asset_symbol)
+                if is_financial:
+                    fin_table = orchestrator.web_search.fetch_financial_quote(prompt)
+                    if fin_table:
+                        real_data_context = fin_table
+                    news_items = orchestrator.web_search.fetch_asset_news(prompt, asset_symbol)
+                else:
+                    # Non-financial domains: search domain topic news rather than stock tickers
+                    clean_query = f"{prompt[:60]} analysis latest"
+                    news_items = orchestrator.web_search.search(clean_query, max_results=3)
         except Exception:
             pass
 
@@ -57,7 +61,7 @@ class PredictionPipeline:
             if price_matches:
                 extracted_prices = [float(p) for p in price_matches]
 
-        if extracted_prices and len(extracted_prices) >= 5:
+        if extracted_prices and len(extracted_prices) >= 5 and is_financial:
             anchors = np.array(extracted_prices)
             formatted_prices = ", ".join(f"{round(p, 2)}" for p in anchors)
             data_init_code = f"# Injected 30-day live market quote series\ny = np.array([{formatted_prices}], dtype=float)"
@@ -382,34 +386,44 @@ Write ONLY the complete, executable Python code in ```python```."""
     def _classify_domain(prompt):
         """Classifies the prompt into domain categories with appropriate units, symbols, and titles."""
         p_lower = prompt.lower()
-        if any(k in p_lower for k in ["temperature", "weather", "rainfall", "climate", "solar", "wind", "humidity"]):
-            return {"domain": "Climate & Meteorology", "unit": "°C", "title": "Atmospheric Temperature & Climate Trajectory", "symbol": "Weather"}
-        elif any(k in p_lower for k in ["battery", "degradation", "soh", "charge cycle", "ev range", "electricity", "energy", "load"]):
-            return {"domain": "Energy & Battery Systems", "unit": "% SOH / kWh", "title": "Energy Load & Battery Degradation Corridor", "symbol": "Battery"}
-        elif any(k in p_lower for k in ["server", "latency", "throughput", "cpu load", "ram", "network", "requests", "cloud"]):
-            return {"domain": "Cloud & Infrastructure Telemetry", "unit": "Req/sec / ms", "title": "Cloud Server Workload & Latency Horizon", "symbol": "Server"}
-        elif any(k in p_lower for k in ["inflation", "gdp", "cpi", "revenue", "churn", "housing", "sales", "economic"]):
-            return {"domain": "Macroeconomics & Business Growth", "unit": "Billion $ / %", "title": "Macroeconomic Growth & Revenue Forecast", "symbol": "Macro"}
+        
+        # Priority 1: Battery, Energy Storage & EV Systems (Checked first to prevent false 'temperature' climate matches)
+        if any(k in p_lower for k in ["battery", "degradation", "soh", "charge cycle", "discharge cycle", "lithium", "ev range", "solid-state", "cell degradation", "kwh", "grid storage"]):
+            return {"domain": "Energy & Battery Systems", "unit": "% SOH", "title": "Lithium-Ion Battery Degradation & SOH Forecast", "symbol": "", "is_financial": False}
+        
+        # Priority 2: Cloud, Server & Compute Telemetry
+        elif any(k in p_lower for k in ["server", "latency", "throughput", "cpu load", "ram usage", "network traffic", "requests per second", "rpc latency", "cloud telemetry"]):
+            return {"domain": "Cloud & Infrastructure Telemetry", "unit": "Req/sec", "title": "Cloud Server Workload & Latency Horizon", "symbol": "", "is_financial": False}
+        
+        # Priority 3: Climate & Meteorology (weather, rainfall, atmospheric temperature)
+        elif any(k in p_lower for k in ["weather", "rainfall", "climate", "meteorolog", "precipitation", "atmospheric temperature", "monsoon", "humidity", "forecast temperature", "global warming"]):
+            return {"domain": "Climate & Meteorology", "unit": "°C", "title": "Atmospheric Temperature & Climate Trajectory", "symbol": "", "is_financial": False}
+        
+        # Priority 4: Macroeconomics & Economic Indicators
+        elif any(k in p_lower for k in ["inflation rate", "gdp growth", "cpi index", "recession probability", "unemployment rate", "central bank", "interest rate"]):
+            return {"domain": "Macroeconomics & Business Growth", "unit": "% Rate", "title": "Macroeconomic Growth & Inflation Horizon", "symbol": "", "is_financial": False}
+            
+        # Priority 5: Financial Markets, Crypto, Equities & Commodities
         else:
             paren_match = re.search(r"\(([A-Z0-9\.\-=]{2,10})\)", prompt)
             ticker_words = re.findall(r"\b([A-Z]{2,6})\b", prompt)
             asset_symbol = paren_match.group(1) if paren_match else (ticker_words[0] if ticker_words else "Asset")
-            return {"domain": "Financial Markets & Equities", "unit": "USD ($)", "title": f"{asset_symbol} Price Trajectory & Sentiment Volatility Corridor", "symbol": asset_symbol}
+            return {"domain": "Financial Markets & Equities", "unit": "USD ($)", "title": f"{asset_symbol} Price Trajectory & Volatility Corridor", "symbol": asset_symbol, "is_financial": True}
 
     @staticmethod
     def _analyze_news_sentiment(prompt, news_items):
         """Analyzes scraped news items and returns a sentiment score in [-1.0, 1.0], label, and structured cards."""
-        positive_keywords = ["surge", "jump", "record", "beat", "profit", "bullish", "rally", "growth", "high", "upgrade", "outperform", "dividend", "breakthrough", "gain", "expansion", "partnership"]
-        negative_keywords = ["drop", "fall", "decline", "miss", "loss", "bearish", "crash", "low", "downgrade", "plunge", "recession", "investigation", "layoff", "fine", "cut", "warning", "deficit"]
+        positive_keywords = ["surge", "jump", "record", "beat", "profit", "bullish", "rally", "growth", "high", "upgrade", "outperform", "dividend", "breakthrough", "gain", "expansion", "partnership", "stable", "efficiency", "advance"]
+        negative_keywords = ["drop", "fall", "decline", "miss", "loss", "bearish", "crash", "low", "downgrade", "plunge", "recession", "investigation", "layoff", "fine", "cut", "warning", "deficit", "stress", "wear"]
 
         score = 0.0
         cards = []
 
-        if news_items and isinstance(news_items, list):
+        if news_items and isinstance(news_items, list) and len(news_items) > 0:
             for item in news_items[:4]:
                 title = item.get("title", "")
                 snippet = item.get("snippet", "")
-                url = item.get("link", "")
+                url = item.get("link", "") or item.get("url", "#")
                 full_text = f"{title} {snippet}".lower()
                 
                 pos_count = sum(1 for w in positive_keywords if w in full_text)
@@ -440,16 +454,23 @@ Write ONLY the complete, executable Python code in ```python```."""
             
             score = max(-1.0, min(1.0, score / max(1, len(cards))))
         else:
-            # Domain-derived sentiment default
-            score = 0.45
-            cards = [
-                {"title": f"Market Consensus Outlook: {prompt[:40]}", "snippet": "Strong institutional accumulation and positive momentum indicators across technical timeframes.", "tag": "Bullish 📈", "tag_color": "#34d399", "url": "#"},
-                {"title": "Sector Multi-Factor Analysis", "snippet": "Macroeconomic tailwinds and demand indicators support favorable forward trajectory.", "tag": "Growth ⚡", "tag_color": "#38bdf8", "url": "#"}
-            ]
+            p_low = prompt.lower()
+            if "battery" in p_low or "degradation" in p_low or "soh" in p_low:
+                score = -0.35
+                cards = [
+                    {"title": "SEI Layer Growth Dynamics", "snippet": "Solid-Electrolyte Interphase passivates at high cycle counts, reducing lithium inventory.", "tag": "Capacity Fade ⚡", "tag_color": "#f87171", "url": "#"},
+                    {"title": "Thermal Stress Mitigation", "snippet": "Active thermal management extends operational lifetime under elevated ambient temperatures.", "tag": "Thermal Control ❄️", "tag_color": "#38bdf8", "url": "#"}
+                ]
+            else:
+                score = 0.45
+                cards = [
+                    {"title": f"Consensus Outlook: {prompt[:40]}", "snippet": "Multi-factor quantitative models indicate positive momentum across primary technical signals.", "tag": "Bullish 📈", "tag_color": "#34d399", "url": "#"},
+                    {"title": "Cross-Asset Volatility Horizon", "snippet": "Statistical distribution analysis indicates bounded downside risk across forward horizons.", "tag": "Growth ⚡", "tag_color": "#38bdf8", "url": "#"}
+                ]
 
-        if score >= 0.25:
+        if score >= 0.20:
             label = "Bullish (+)"
-        elif score <= -0.25:
+        elif score <= -0.20:
             label = "Bearish (-)"
         else:
             label = "Neutral (⚖️)"
@@ -466,7 +487,9 @@ Write ONLY the complete, executable Python code in ```python```."""
             y = 22.0 + 8.5 * np.sin(2 * np.pi * t / 7) + 2.0 * np.cos(2 * np.pi * t / 30) + np.random.normal(0, 0.8, len(t))
             unit = "°C"
         elif "Energy" in domain or "Battery" in domain:
-            y = 100.0 * np.exp(-0.008 * t) + 1.5 * np.sin(t) + np.random.normal(0, 0.4, len(t))
+            # Battery SOH starts at 100% and decays monotonically down to ~80-85% with cycle aging
+            y = 100.0 - 0.50 * t - 0.003 * (t**1.7) + np.random.normal(0, 0.25, len(t))
+            y = np.clip(y, 60.0, 100.0)
             unit = "% SOH"
         elif "Cloud" in domain or "Server" in domain:
             y = 1200.0 + 450.0 * np.sin(2 * np.pi * t / 6) + 180.0 * np.cos(t) + np.random.normal(0, 35.0, len(t))
@@ -556,30 +579,30 @@ Write ONLY the complete, executable Python code in ```python```."""
 <head>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
-    html, body {{ margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #0a0d14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
-    #container {{ display: flex; width: 100vw; height: 100vh; }}
-    #chart {{ flex: 1; height: 100vh; }}
-    #sidebar {{ width: 340px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border-left: 1px solid rgba(255,255,255,0.1); padding: 16px; color: #f8fafc; overflow-y: auto; box-sizing: border-box; }}
-    #sidebar h3 {{ margin: 0 0 6px; font-size: 0.95rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
-    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 14px; }}
+    html, body {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0d14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-sizing: border-box; }}
+    #container {{ display: flex; width: 100%; height: 100%; box-sizing: border-box; }}
+    #chart {{ flex: 1; min-width: 0; height: 100%; box-sizing: border-box; }}
+    #sidebar {{ width: 330px; min-width: 330px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border-left: 1px solid rgba(255,255,255,0.1); padding: 14px; color: #f8fafc; overflow-y: auto; box-sizing: border-box; }}
+    #sidebar h3 {{ margin: 0 0 6px; font-size: 0.92rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
+    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 12px; }}
     .kpi-card {{ background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px; }}
-    .kpi-label {{ font-size: 0.66rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }}
-    .kpi-val {{ font-size: 0.98rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }}
-    .section-title {{ font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 14px 0 8px; letter-spacing: 0.04em; }}
+    .kpi-label {{ font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }}
+    .kpi-val {{ font-size: 0.95rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }}
+    .section-title {{ font-size: 0.70rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 12px 0 6px; letter-spacing: 0.04em; }}
   </style>
 </head>
 <body>
   <div id="container">
     <div id="chart"></div>
     <div id="sidebar">
-      <h3>🔮 Bayesian Ensemble & News Intelligence</h3>
+      <h3>🔮 Bayesian Ensemble & Intelligence</h3>
       
       <div style="background:rgba(30,41,59,0.7); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div style="font-size:0.66rem; color:#94a3b8; text-transform:uppercase;">News Catalyst Sentiment</div>
-          <div style="font-size:0.95rem; font-weight:700; color:{sent_color};">{sentiment_label} ({sentiment_score:+.2f})</div>
+          <div style="font-size:0.65rem; color:#94a3b8; text-transform:uppercase;">Catalyst Sentiment</div>
+          <div style="font-size:0.92rem; font-weight:700; color:{sent_color};">{sentiment_label} ({sentiment_score:+.2f})</div>
         </div>
-        <div style="font-size:0.7rem; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; padding:3px 6px; border-radius:4px; font-weight:600;">8-Model Stacking</div>
+        <div style="font-size:0.68rem; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; padding:3px 6px; border-radius:4px; font-weight:600;">8-Model Stacking</div>
       </div>
       
       <div class="kpi-grid">
@@ -601,7 +624,7 @@ Write ONLY the complete, executable Python code in ```python```."""
         </div>
       </div>
 
-      <div class="section-title">📰 Live Catalysts & Market Intelligence</div>
+      <div class="section-title">📰 Domain Catalysts & Intelligence</div>
       {news_cards_html}
 
       <div class="section-title">🏆 8-Model Tournament Weighting</div>
@@ -693,31 +716,38 @@ Write ONLY the complete, executable Python code in ```python```."""
 
     var layout = {{
       title: {{
-        text: '<b>{title}</b><br><span style="font-size:12px;color:#94a3b8;">Bayesian Softmax Stacking Ensemble & Multi-Level Conformal Uncertainty Corridors</span>',
-        font: {{ color: '#f8fafc', size: 16 }}
+        text: '<b>' + {json.dumps(title)} + '</b><br><span style=\"font-size:11px;color:#94a3b8;\">Bayesian Softmax Stacking Ensemble & Multi-Level Conformal Uncertainty Corridors</span>',
+        font: {{ color: '#f8fafc', size: 13 }},
+        x: 0.03,
+        xanchor: 'left',
+        y: 0.98,
+        yanchor: 'top'
       }},
       paper_bgcolor: '#0a0d14',
       plot_bgcolor: '#0f172a',
-      font: {{ color: '#cbd5e1' }},
+      font: {{ color: '#cbd5e1', size: 10 }},
       xaxis: {{
-        title: 'Timeline (Chronological Trading / Sampling Days)',
+        title: {{ text: 'Timeline (Chronological Sampling / Trading Cycles)', font: {{ size: 11 }}, standoff: 8 }},
         gridcolor: 'rgba(255,255,255,0.06)',
         zerolinecolor: 'rgba(255,255,255,0.1)'
       }},
       yaxis: {{
-        title: 'Target Value ({unit})',
+        title: {{ text: 'Target Value (' + {json.dumps(unit)} + ')', font: {{ size: 11 }} }},
         gridcolor: 'rgba(255,255,255,0.06)',
         zerolinecolor: 'rgba(255,255,255,0.1)'
       }},
       legend: {{
         orientation: 'h',
-        yanchor: 'bottom',
+        yanchor: 'top',
         y: -0.22,
         xanchor: 'center',
         x: 0.5,
-        font: {{ size: 11 }}
+        font: {{ size: 9 }},
+        bgcolor: 'rgba(15, 23, 42, 0.85)',
+        bordercolor: 'rgba(255,255,255,0.12)',
+        borderwidth: 1
       }},
-      margin: {{ l: 60, r: 20, t: 70, b: 70 }}
+      margin: {{ l: 50, r: 20, t: 50, b: 85 }}
     }};
 
     Plotly.newPlot('chart', [traceUpper95, traceLower95, traceUpper80, traceLower80, traceAct, traceFit, traceFore], layout, {{ responsive: true, displayModeBar: false }});
