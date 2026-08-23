@@ -8,12 +8,15 @@ import React from "react";
 export const renderMath = (tex, isBlock) => {
   if (window.katex) {
     try {
+      // Clean up double-escaped backslashes before passing to KaTeX
+      const cleanTex = tex.replace(/\\\\([a-zA-Z]+)/g, "\\$1");
       return (
         <span
           dangerouslySetInnerHTML={{
-            __html: window.katex.renderToString(tex, {
+            __html: window.katex.renderToString(cleanTex, {
               displayMode: isBlock,
               throwOnError: false,
+              strict: false,
             }),
           }}
         />
@@ -30,10 +33,7 @@ export const renderMath = (tex, isBlock) => {
 };
 
 /**
- * Normalizes text to ensure all mathematical expressions and LaTeX commands render with KaTeX:
- * 1. Separates LaTeX macros and math formulas glued directly to words/punctuation.
- * 2. Wraps bare tensor notations (R_{tt}, R_{rr}, R_{\mu\nu}=0, g_{tt}, g_{rr}) in $ ... $.
- * 3. Fixes concatenated numbered list items (e.g. "= 02. Radial-radial" -> "= 0\n\n2. Radial-radial").
+ * Normalizes text to ensure all mathematical expressions and LaTeX commands render with KaTeX.
  */
 export const normalizeMarkdownMath = (text) => {
   if (!text) return "";
@@ -42,21 +42,14 @@ export const normalizeMarkdownMath = (text) => {
   // 1. Replace raw unicode minus signs
   result = result.replace(/−/g, "-");
 
-  // 2. Fix concatenated numbered list items (e.g. "= 02. Radial-radial" -> "= 0\n\n2. Radial-radial")
+  // 2. Fix double escaped LaTeX commands in text (\\command -> \command)
+  result = result.replace(/\\\\([a-zA-Z]+)/g, "\\$1");
+
+  // 3. Fix concatenated numbered list items: "... = 02. Radial" -> "... = 0\n\n2. Radial"
   result = result.replace(/([^\n\d])(\d{1,2}\.\s+[A-Z])/g, "$1\n\n$2");
 
-  // 3. Separate words or colons glued to backslash LaTeX commands (e.g. "definition:\Gamma" -> "definition: \Gamma")
-  result = result.replace(/([a-zA-Z0-9\):])(\\([a-zA-Z]+|[^\s\w]))/g, "$1 $2");
-
-  // 4. Separate LaTeX formulas glued to following words (e.g. "\phi^2),we compute" -> "\phi^2), we compute")
-  result = result.replace(/(\)[,\.]?)([a-zA-Z])/g, "$1 $2");
-  result = result.replace(/([a-zA-Z0-9\}\)])(Given|The|To|We|Where|When|Then|Thus|Hence)/g, "$1 $2");
-
-  // 5. Wrap bare tensor notations in $...$: R_{tt}, R_{rr}, R_{\phi\phi}, R_{\mu\nu}=0, g_{tt}, g_{rr}
-  result = result.replace(/(?<![\$\`\\a-zA-Z0-9])([RgT]\_\{[a-zA-Z0-9\\\,\s]+\}(?:\s*=\s*[^,\n\s\)]+)?)(?![\$\`])/g, "$$$1$$");
-
-  // 6. Wrap equation lines starting with ds^2 = or gtt = in display math $$ ... $$
-  result = result.replace(/(?<![\$\`])\b(ds\^2\s*=\s*-[^\n,]+)(?![\$\`])/g, "$$$$$1$$$$");
+  // 4. Ensure proper spacing around $$ display blocks
+  result = result.replace(/\$\$\s*\n\s*/g, "$$\n").replace(/\s*\n\s*\$\$/g, "\n$$");
 
   return result;
 };
@@ -67,9 +60,9 @@ export const normalizeMarkdownMath = (text) => {
  */
 export const renderInlineElements = (text) => {
   if (!text) return null;
-  const normalized = normalizeMarkdownMath(text);
+  const cleanedText = text.replace(/\\\\([a-zA-Z]+)/g, "\\$1");
   // Split on inline math (\( ... \) or $...$), bold (**...**), or inline code (`...`).
-  const inlineParts = normalized.split(/(\\\([\s\S]*?\\\)|\$[^$\n]+\$|\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  const inlineParts = cleanedText.split(/(\\\([\s\S]*?\\\)|\$[^$\n]+\$|\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
   return inlineParts.map((chunk, index) => {
     if (chunk == null || chunk === "") return null;
     if (chunk.startsWith("\\(") && chunk.endsWith("\\)")) {
