@@ -305,8 +305,13 @@ class StudyPipeline:
         if not text:
             return text
 
-        # Convert unclosed inline math followed by English text into display blocks
-        # e.g., $d\mathbf{x}_t = ... where \mathbf{x}_t -> $$d\mathbf{x}_t = ...$$\nwhere $\mathbf{x}_t
+        # 1. Fix single dollar signs that span across newlines (e.g. "$formula \n\n$Next")
+        text = re.sub(r"(?<!\$)\$([^\$]+?)\s*\n\n\$", r"$$\1$$\n\n", text)
+        
+        # 2. Fix cases where an opening $$ is on its own line and formula starts on next line
+        text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
+
+        # 3. Convert unclosed inline math followed by English text into display blocks
         text = re.sub(
             r"\$([^\$\n]{10,})\s+(where|with|and|such that|in which)\s+",
             r"$$\1$$\n\2 ",
