@@ -160,7 +160,9 @@ class ReasoningPipeline:
             if pg_out and str(pg_out).strip():
                 parts.append(f"\n```\n{str(pg_out).strip()[:1500]}\n```")
 
-     @staticmethod
+        return "".join(parts)
+
+    @staticmethod
     def _synthesize_verified_derivation(prompt: str, raw_text: str) -> str:
         """
         Synthesizes a publication-grade, mathematically verified derivation with exact tensor components,
@@ -327,9 +329,5 @@ print("Status: 100% Mathematically Verified & Invariant Checked")
         
         # 4. Fix cases where an opening $$ is on its own line and formula starts on next line
         text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
-
-        return text      r"$$\1$$",
-            text
-        )
 
         return text
