@@ -579,7 +579,7 @@ endmodule"""
         def has_word(patterns, text):
             return bool(re.search(r'\b(' + '|'.join(re.escape(p) for p in patterns) + r')\b', text, re.IGNORECASE))
 
-        # 2. Architecture Family Detection (Hierarchical & Word-Bounded to prevent 'output' -> 'tpu' false matches)
+        # 2. Architecture Family Detection
         if has_word(["soc", "apu", "mobile chip", "snapdragon", "apple silicon", "heterogeneous", "system on chip", "system-on-chip"], p_lower):
             chip_type = "Heterogeneous Mobile / Laptop SoC (APU)"
             arch_key = "soc"
@@ -602,7 +602,78 @@ endmodule"""
             chip_type = "Digital Logic Semiconductor Core"
             arch_key = "digital"
 
-        return {"node": node, "node_key": node_key, "type": chip_type, "arch_key": arch_key}
+        # 3. Dynamic Architectural Parameter Extraction from Prompt
+        specs = {
+            "num_cores": 4,
+            "big_cores": 2,
+            "little_cores": 4,
+            "pe_dim": 8,
+            "hbm_stacks": 4,
+            "cache_mb": 4,
+            "sm_count": 16,
+            "bspdn": ("2nm" in node or "powervia" in p_lower or "bspdn" in p_lower),
+            "analog_type": "Two-Stage Miller OpAmp"
+        }
+
+        m_core = re.search(r"(\d+)[\s-]*(?:core|cpu\s*core)", p_lower)
+        if m_core:
+            specs["num_cores"] = min(32, max(1, int(m_core.group(1))))
+        elif "octa" in p_lower or "8-core" in p_lower: specs["num_cores"] = 8
+        elif "quad" in p_lower or "4-core" in p_lower: specs["num_cores"] = 4
+        elif "dual" in p_lower or "2-core" in p_lower: specs["num_cores"] = 2
+        elif "16-core" in p_lower: specs["num_cores"] = 16
+
+        m_big = re.search(r"(\d+)\s*big", p_lower)
+        m_lit = re.search(r"(\d+)\s*(?:little|small)", p_lower)
+        if m_big and m_lit:
+            specs["big_cores"] = min(16, max(1, int(m_big.group(1))))
+            specs["little_cores"] = min(24, max(1, int(m_lit.group(1))))
+            specs["num_cores"] = specs["big_cores"] + specs["little_cores"]
+        elif specs["num_cores"] > 4:
+            specs["big_cores"] = specs["num_cores"] // 2
+            specs["little_cores"] = specs["num_cores"] - specs["big_cores"]
+
+        m_pe = re.search(r"(\d+)\s*x\s*(\d+)", p_lower)
+        if m_pe:
+            specs["pe_dim"] = min(32, max(2, int(m_pe.group(1))))
+
+        m_hbm = re.search(r"(\d+)[\s-]*(?:hi|high|stack|stacked|layer|die)", p_lower)
+        if m_hbm:
+            specs["hbm_stacks"] = min(16, max(2, int(m_hbm.group(1))))
+
+        m_cache = re.search(r"(\d+)[\s-]*(?:mb|kb|k|m)\s*(?:cache|sram|l2|l3|buffer)", p_lower)
+        if m_cache:
+            specs["cache_mb"] = int(m_cache.group(1))
+
+        m_sm = re.search(r"(\d+)[\s-]*(?:sm|streaming|cu|compute\s*unit)", p_lower)
+        if m_sm:
+            specs["sm_count"] = min(64, max(4, int(m_sm.group(1))))
+
+        if "folded" in p_lower or "cascode" in p_lower:
+            specs["analog_type"] = "Folded-Cascode OTA"
+        elif "telescopic" in p_lower:
+            specs["analog_type"] = "Telescopic Cascode"
+        elif "bandgap" in p_lower:
+            specs["analog_type"] = "Bandgap Voltage Reference"
+        elif "pll" in p_lower:
+            specs["analog_type"] = "Charge-Pump Phase-Locked Loop"
+
+        return {
+            "node": node,
+            "node_key": node_key,
+            "type": chip_type,
+            "arch_key": arch_key,
+            "specs": specs,
+            "pe_dim": specs["pe_dim"],
+            "num_cores": specs["num_cores"],
+            "big_cores": specs["big_cores"],
+            "little_cores": specs["little_cores"],
+            "hbm_stacks": specs["hbm_stacks"],
+            "cache_mb": specs["cache_mb"],
+            "sm_count": specs["sm_count"],
+            "analog_type": specs["analog_type"],
+            "bspdn": specs["bspdn"]
+        }
 
     @staticmethod
     def _clean_chip_title(prompt, chip_type, node):
@@ -633,6 +704,16 @@ endmodule"""
         node_key = chip_meta.get("node_key", "gaafet")
         clean_title = ChipDesignPipeline._clean_chip_title(prompt, chip_type, node_title)
 
+        pe_dim = chip_meta.get("pe_dim", 8)
+        num_cores = chip_meta.get("num_cores", 4)
+        big_cores = chip_meta.get("big_cores", 2)
+        little_cores = chip_meta.get("little_cores", 4)
+        hbm_stacks = chip_meta.get("hbm_stacks", 4)
+        cache_mb = chip_meta.get("cache_mb", 4)
+        sm_count = chip_meta.get("sm_count", 16)
+        analog_type = chip_meta.get("analog_type", "Two-Stage Miller OpAmp")
+        has_bspdn = chip_meta.get("bspdn", True)
+
         return f"""<!--ARTIFACT_HTML-->
 <!DOCTYPE html>
 <html>
@@ -643,7 +724,7 @@ endmodule"""
     html, body {{ margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
     #hud {{ position: absolute; top: 16px; right: 16px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.15); padding: 14px 16px; border-radius: 14px; color: #f8fafc; font-size: 0.76rem; box-shadow: 0 16px 40px rgba(0,0,0,0.85); z-index: 100; max-width: 390px; max-height: calc(100vh - 32px); overflow-y: auto; }}
     #hud h3 {{ margin: 0 0 4px; font-size: 0.92rem; color: #38bdf8; font-weight: 700; display: flex; align-items: center; gap: 6px; }}
-    #hud .badge {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; padding: 2px 8px; border-radius: 6px; font-size: 0.66rem; font-weight: 600; display: inline-block; margin-bottom: 6px; }}
+    #hud .badge {{ background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; padding: 2px 8px; border-radius: 6px; font-size: 0.66rem; font-weight: 600; display: inline-block; margin-bottom: 6px; margin-right: 4px; }}
     
     /* Interactive Clock Simulation Toolbar */
     .clock-toolbar {{ display: flex; align-items: center; justify-content: space-between; background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }}
@@ -695,7 +776,10 @@ endmodule"""
 <body>
   <div id="hud">
     <h3>🔬 {clean_title}</h3>
-    <span class="badge">Process: {node_title}</span>
+    <div>
+      <span class="badge">Process: {node_title}</span>
+      <span class="badge" style="border-color:#10b981; color:#34d399;">Arch: {chip_type.split('/')[0].strip()}</span>
+    </div>
     
     <!-- Real-Time Clock Simulation Toolbar -->
     <div class="clock-toolbar">
@@ -783,6 +867,16 @@ endmodule"""
     document.addEventListener('DOMContentLoaded', function() {{
       var archKey = "{arch_key}";
       var nodeKey = "{node_key}";
+      var peDim = {pe_dim};
+      var numCores = {num_cores};
+      var bigCores = {big_cores};
+      var littleCores = {little_cores};
+      var hbmStacks = {hbm_stacks};
+      var cacheMb = {cache_mb};
+      var smCount = {sm_count};
+      var analogType = "{analog_type}";
+      var hasBspdn = {"true" if has_bspdn else "false"};
+
       var currentDvfsState = 2; // Default: 2 (Ideal)
       var clockRunning = true;
       var currentCycle = 1024;
@@ -839,47 +933,47 @@ endmodule"""
         interactiveObjects.push(mesh);
       }}
 
-      // ── Physical Telemetry Profiles (Calibrated per Architecture) ──
+      // ── Physical Telemetry Profiles ──
       var archTelemetryData = {{
         tpu: {{
-          lbl1: "Array Clock (f_clk)", lbl2: "Compute Throughput", lbl6: "BSPDN IR-Drop",
-          1: {{ f1: "1.20 GHz", f2: "153.6 GFLOPS", v: "0.60 V", temp: "36 °C", p: "1.2 W", f6: "4.2 mV", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Minimum leakage power (0.60V). Zero activity in SRAM buffers." }},
-          2: {{ f1: "2.85 GHz", f2: "364.8 GFLOPS", v: "0.78 V", temp: "52 °C", p: "5.4 W", f6: "11.8 mV", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Sweet spot on V-f curve (0.78V). Maximum Perf/Watt with zero thermal throttling." }},
-          3: {{ f1: "3.60 GHz", f2: "460.8 GFLOPS", v: "0.95 V", temp: "78 °C", p: "14.2 W", f6: "24.6 mV", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full rated boost frequency (0.95V). High-density tensor matrix GEMM." }},
-          4: {{ f1: "4.20 GHz (Throttling)", f2: "537.6 GFLOPS", v: "1.15 V", temp: "98 °C", p: "28.5 W", f6: "48.2 mV", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> Dielectric limit (1.15V). Tj > 95°C forces clock frequency throttling!" }}
+          lbl1: "Array Clock (f_clk)", lbl2: `${{peDim}}x${{peDim}} Compute`, lbl6: hasBspdn ? "BSPDN IR-Drop" : "Power Grid IR-Drop",
+          1: {{ f1: "1.20 GHz", f2: `${{Math.round(peDim*peDim*2.4)}} GFLOPS`, v: "0.60 V", temp: "36 °C", p: "1.2 W", f6: "4.2 mV", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Minimum leakage power (0.60V). Zero activity in SRAM buffers." }},
+          2: {{ f1: "2.85 GHz", f2: `${{Math.round(peDim*peDim*5.7)}} GFLOPS`, v: "0.78 V", temp: "52 °C", p: "5.4 W", f6: "11.8 mV", name: "Ideal Efficiency ⭐", banner: `💠 <strong>Ideal Operating Point:</strong> Sweet spot on V-f curve (0.78V). ${{peDim}}x${{peDim}} Systolic Array with ${{cacheMb}}MB SRAM.` }},
+          3: {{ f1: "3.60 GHz", f2: `${{Math.round(peDim*peDim*7.2)}} GFLOPS`, v: "0.95 V", temp: "78 °C", p: "14.2 W", f6: "24.6 mV", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full rated boost frequency (0.95V). High-density tensor matrix GEMM." }},
+          4: {{ f1: "4.20 GHz (Throttling)", f2: `${{Math.round(peDim*peDim*8.4)}} GFLOPS`, v: "1.15 V", temp: "98 °C", p: "28.5 W", f6: "48.2 mV", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> Dielectric limit (1.15V). Tj > 95°C forces clock frequency throttling!" }}
         }},
         soc: {{
-          lbl1: "Big CPU / GPU", lbl2: "NPU Neural TOPS", lbl6: "LPDDR5X Bandwidth",
-          1: {{ f1: "1.2G / 350M", f2: "8 TOPS", v: "0.60 V", temp: "36 °C", p: "1.4 W", f6: "51.2 GB/s", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Low-voltage background state with Little cores and minimum PHY clocks." }},
-          2: {{ f1: "2.85G / 980M", f2: "24 TOPS", v: "0.78 V", temp: "52 °C", p: "5.8 W", f6: "102.4 GB/s", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Optimal Energy-Delay Product (0.78V). High-efficiency mobile computing." }},
+          lbl1: `${{bigCores}}B+${{littleCores}}L CPU / GPU`, lbl2: "NPU Neural TOPS", lbl6: "LPDDR5X Bandwidth",
+          1: {{ f1: "1.2G / 350M", f2: "8 TOPS", v: "0.60 V", temp: "36 °C", p: "1.4 W", f6: "51.2 GB/s", name: "Eco Standby", banner: `🟢 <strong>Eco Standby:</strong> Low-voltage background state with ${{littleCores}} Little cores active.` }},
+          2: {{ f1: "2.85G / 980M", f2: "24 TOPS", v: "0.78 V", temp: "52 °C", p: "5.8 W", f6: "102.4 GB/s", name: "Ideal Efficiency ⭐", banner: `💠 <strong>Ideal Operating Point:</strong> ${{bigCores}} Big + ${{littleCores}} Little Cores with ${{cacheMb}}MB Shared Cache.` }},
           3: {{ f1: "3.60G / 1.45G", f2: "38 TOPS", v: "0.95 V", temp: "78 °C", p: "15.6 W", f6: "136.5 GB/s", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Peak APU workload (3.6GHz Big CPU, 1.45GHz GPU, 38 TOPS NPU)." }},
           4: {{ f1: "4.20G / 1.85G", f2: "52 TOPS", v: "1.15 V", temp: "98 °C", p: "31.2 W", f6: "153.6 GB/s", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> Peak power saturation. Thermal throttling caps SoC cluster frequencies." }}
         }},
         memory: {{
-          lbl1: "DFI Clock (f_clk)", lbl2: "1024-bit Bandwidth", lbl6: "TSV Latency",
-          1: {{ f1: "800 MHz", f2: "204.8 GB/s", v: "0.65 V", temp: "38 °C", p: "2.1 W", f6: "0.65 ns", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Deep power-down DRAM refresh with low DFI channel frequency." }},
-          2: {{ f1: "1.60 GHz", f2: "409.6 GB/s", v: "0.78 V", temp: "49 °C", p: "6.2 W", f6: "0.42 ns", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Balanced TSV signal integrity with 409.6 GB/s sustained throughput." }},
-          3: {{ f1: "2.40 GHz", f2: "614.4 GB/s", v: "0.95 V", temp: "74 °C", p: "16.8 W", f6: "0.28 ns", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full-rate HBM3 DFI data transfer across 4 stacked DRAM dies." }},
-          4: {{ f1: "3.20 GHz", f2: "819.2 GB/s", v: "1.15 V", temp: "96 °C", p: "29.4 W", f6: "0.22 ns", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> DRAM cell retention limit reached due to thermal junction heat." }}
+          lbl1: "DFI Clock (f_clk)", lbl2: `${{hbmStacks}}-Hi 3D Bandwidth`, lbl6: "TSV Latency",
+          1: {{ f1: "800 MHz", f2: `${{Math.round(hbmStacks * 102.4)}} GB/s`, v: "0.65 V", temp: "38 °C", p: "2.1 W", f6: "0.65 ns", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Deep power-down DRAM refresh with low DFI channel frequency." }},
+          2: {{ f1: "1.60 GHz", f2: `${{Math.round(hbmStacks * 204.8)}} GB/s`, v: "0.78 V", temp: "49 °C", p: "6.2 W", f6: "0.42 ns", name: "Ideal Efficiency ⭐", banner: `💠 <strong>Ideal Operating Point:</strong> ${{hbmStacks}}-Hi Stacked DRAM cube delivering ${{Math.round(hbmStacks * 204.8)}} GB/s bandwidth.` }},
+          3: {{ f1: "2.40 GHz", f2: `${{Math.round(hbmStacks * 307.2)}} GB/s`, v: "0.95 V", temp: "74 °C", p: "16.8 W", f6: "0.28 ns", name: "Max Sustained ⚡", banner: `⚡ <strong>Max Sustained Turbo:</strong> Full-rate HBM3 DFI data transfer across ${{hbmStacks}} stacked DRAM dies.` }},
+          4: {{ f1: "3.20 GHz", f2: `${{Math.round(hbmStacks * 409.6)}} GB/s`, v: "1.15 V", temp: "96 °C", p: "29.4 W", f6: "0.22 ns", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> DRAM cell retention limit reached due to thermal junction heat." }}
         }},
         cpu: {{
-          lbl1: "Core Clock (f_clk)", lbl2: "Superscalar IPC", lbl6: "ROB Retire Rate",
+          lbl1: `${{numCores}}-Core Clock`, lbl2: "Superscalar IPC", lbl6: "ROB Retire Rate",
           1: {{ f1: "1.40 GHz", f2: "1.20 IPC", v: "0.62 V", temp: "37 °C", p: "1.6 W", f6: "1.68 GIPS", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Power-gated execution units with single instruction issue." }},
-          2: {{ f1: "3.20 GHz", f2: "2.85 IPC", v: "0.82 V", temp: "54 °C", p: "7.4 W", f6: "9.12 GIPS", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> 4-wide superscalar pipeline sweet spot with 98% TAGE prediction accuracy." }},
+          2: {{ f1: "3.20 GHz", f2: "2.85 IPC", v: "0.82 V", temp: "54 °C", p: "7.4 W", f6: "9.12 GIPS", name: "Ideal Efficiency ⭐", banner: `💠 <strong>Ideal Operating Point:</strong> ${{numCores}}-Core superscalar pipeline with ${{cacheMb}}MB L3 Cache.` }},
           3: {{ f1: "4.00 GHz", f2: "3.40 IPC", v: "0.98 V", temp: "79 °C", p: "18.2 W", f6: "13.6 GIPS", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full Out-of-Order speculative window (128-entry ROB active)." }},
           4: {{ f1: "4.40 GHz", f2: "3.50 IPC", v: "1.18 V", temp: "99 °C", p: "34.5 W", f6: "15.4 GIPS", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> High-temperature leakage saturation. Dynamic clock stepping engages." }}
         }},
         gpu: {{
-          lbl1: "Shader Clock (f_clk)", lbl2: "FP32 Compute", lbl6: "L2 Crossbar BW",
-          1: {{ f1: "400 MHz", f2: "0.61 TFLOPS", v: "0.60 V", temp: "37 °C", p: "1.8 W", f6: "640 GB/s", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Low-power rasterization standby with idle warp schedulers." }},
-          2: {{ f1: "1.10 GHz", f2: "1.69 TFLOPS", v: "0.78 V", temp: "53 °C", p: "6.8 W", f6: "1.76 TB/s", name: "Ideal Efficiency ⭐", banner: "💠 <strong>Ideal Operating Point:</strong> Optimal SIMT occupancy with balanced thermal footprint." }},
-          3: {{ f1: "1.65 GHz", f2: "2.53 TFLOPS", v: "0.95 V", temp: "79 °C", p: "17.4 W", f6: "2.64 TB/s", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full parallel warp compute with active Tensor Core matrix units." }},
-          4: {{ f1: "1.95 GHz", f2: "2.99 TFLOPS", v: "1.15 V", temp: "98 °C", p: "32.8 W", f6: "3.12 TB/s", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> SIMT thermal limit. High IR-drop triggers frequency stepping." }}
+          lbl1: `${{smCount}} SM Clock`, lbl2: "FP32 Compute", lbl6: "L2 Crossbar BW",
+          1: {{ f1: "400 MHz", f2: `${{Math.round(smCount * 0.08 * 10)/10}} TFLOPS`, v: "0.60 V", temp: "37 °C", p: "1.8 W", f6: "640 GB/s", name: "Eco Standby", banner: "🟢 <strong>Eco Standby:</strong> Low-power rasterization standby with idle warp schedulers." }},
+          2: {{ f1: "1.10 GHz", f2: `${{Math.round(smCount * 0.21 * 10)/10}} TFLOPS`, v: "0.78 V", temp: "53 °C", p: "6.8 W", f6: "1.76 TB/s", name: "Ideal Efficiency ⭐", banner: `💠 <strong>Ideal Operating Point:</strong> ${{smCount}} Streaming Multiprocessors with ${{cacheMb}}MB L2 Cache.` }},
+          3: {{ f1: "1.65 GHz", f2: `${{Math.round(smCount * 0.32 * 10)/10}} TFLOPS`, v: "0.95 V", temp: "79 °C", p: "17.4 W", f6: "2.64 TB/s", name: "Max Sustained ⚡", banner: "⚡ <strong>Max Sustained Turbo:</strong> Full parallel warp compute with active Tensor Core matrix units." }},
+          4: {{ f1: "1.95 GHz", f2: `${{Math.round(smCount * 0.38 * 10)/10}} TFLOPS`, v: "1.15 V", temp: "98 °C", p: "32.8 W", f6: "3.12 TB/s", name: "Thermal Breakpoint ⚠️", banner: "🔴 <strong>Thermal Breakpoint:</strong> SIMT thermal limit. High IR-drop triggers frequency stepping." }}
         }},
         analog: {{
-          lbl1: "GBW Product (f_u)", lbl2: "Open-Loop Gain (Av)", lbl6: "Phase Margin (PM)",
+          lbl1: `${{analogType.split(' ')[0]}} GBW`, lbl2: "Open-Loop Gain (Av)", lbl6: "Phase Margin (PM)",
           1: {{ f1: "45 MHz", f2: "68.2 dB", v: "1.20 V", temp: "32 °C", p: "0.45 mW", f6: "72.4 °", name: "Low Power Bias", banner: "🟢 <strong>Low Power Bias:</strong> Subthreshold bias mirror with minimum static current draw." }},
-          2: {{ f1: "120 MHz", f2: "78.4 dB", v: "1.80 V", temp: "42 °C", p: "1.85 mW", f6: "64.2 °", name: "Ideal Nominal Bias ⭐", banner: "💠 <strong>Nominal Operating Point:</strong> 78.4 dB gain with 64.2° phase margin for stable Miller compensation." }},
+          2: {{ f1: "120 MHz", f2: "78.4 dB", v: "1.80 V", temp: "42 °C", p: "1.85 mW", f6: "64.2 °", name: "Ideal Nominal Bias ⭐", banner: `💠 <strong>Nominal Operating Point:</strong> ${{analogType}} with 78.4 dB gain and 64.2° phase margin.` }},
           3: {{ f1: "185 MHz", f2: "82.1 dB", v: "2.20 V", temp: "58 °C", p: "4.20 mW", f6: "52.8 °", name: "High Speed Bias ⚡", banner: "⚡ <strong>High Speed Bias:</strong> Wide-bandwidth closed-loop tracking with elevated transconductance." }},
           4: {{ f1: "210 MHz", f2: "74.6 dB", v: "2.60 V", temp: "84 °C", p: "8.90 mW", f6: "38.5 °", name: "Breakdown Limit ⚠️", banner: "🔴 <strong>Voltage Breakdown:</strong> Gate oxide stress limit. Output slew degradation and phase margin drop." }}
         }}
@@ -958,15 +1052,14 @@ endmodule"""
         updatePhysicalSimulation(currentDvfsState);
       }});
 
-      // ── Checkbox Layer Toggles ──
+      // Checkbox Layer Toggles
       document.getElementById("cbTransistors").addEventListener("change", function(e) {{ transistorGroup.visible = e.target.checked; }});
       document.getElementById("cbInterconnects").addEventListener("change", function(e) {{ interconnectGroup.visible = e.target.checked; }});
       document.getElementById("cbVias").addEventListener("change", function(e) {{ viaGroup.visible = e.target.checked; }});
       document.getElementById("cbPowerGrid").addEventListener("change", function(e) {{ powerGridGroup.visible = e.target.checked; }});
       document.getElementById("cbParticles").addEventListener("change", function(e) {{ particlesGroup.visible = e.target.checked; }});
 
-      // ── 🌌 1. BUILD MULTI-LAYER BEOL INTERCONNECT MESH (M0 - M15) WITH LOW-K DIELECTRIC ──
-      // Low-k SiCOH Interlayer Dielectric (ILD Glass)
+      // ── 🌌 1. MULTI-LAYER BEOL INTERCONNECT MESH ──
       var ildMat = new THREE.MeshStandardMaterial({{ color: 0x0ea5e9, transparent: true, opacity: 0.12, roughness: 0.1 }});
       for (var d = 0; d < 3; d++) {{
         var ildMesh = new THREE.Mesh(new THREE.BoxGeometry(15.2, 0.28, 15.2), ildMat);
@@ -974,7 +1067,6 @@ endmodule"""
         interconnectGroup.add(ildMesh);
       }}
 
-      // M0-M3: Dual-Damascene Ruthenium / Fine Copper Interconnects
       var mLowerMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.9, roughness: 0.15, transparent: true, opacity: 0.75 }});
       var wireGeomX = new THREE.BoxGeometry(14.5, 0.03, 0.06);
       var wireGeomZ = new THREE.BoxGeometry(0.06, 0.03, 14.5);
@@ -992,7 +1084,6 @@ endmodule"""
         }}
       }}
 
-      // Semi-Global Metal Layers (M4-M8): Clock Trees & AXI NoC Data Buses
       var mMidMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.95, roughness: 0.12, transparent: true, opacity: 0.8 }});
       var midWireX = new THREE.BoxGeometry(15.0, 0.05, 0.16);
       var midWireZ = new THREE.BoxGeometry(0.16, 0.05, 15.0);
@@ -1010,7 +1101,6 @@ endmodule"""
         }}
       }}
 
-      // Top Metal Layers (M9-M15): Global VDD/VSS Power Distribution Mesh
       var mTopMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.95, roughness: 0.1, transparent: true, opacity: 0.85 }});
       var topMeshX = new THREE.BoxGeometry(15.5, 0.08, 0.35);
       var topMeshZ = new THREE.BoxGeometry(0.35, 0.08, 15.5);
@@ -1028,7 +1118,6 @@ endmodule"""
         }}
       }}
 
-      // Vertical Inter-Layer Via Columns (V0 - V14)
       var viaMat = new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.95, roughness: 0.1 }});
       var viaGeom = new THREE.CylinderGeometry(0.04, 0.04, 1.4, 8);
       for (var vx = -5.0; vx <= 5.0; vx += 2.5) {{
@@ -1039,12 +1128,12 @@ endmodule"""
         }}
       }}
 
-      // ── ✨ 2. REAL-TIME ANIMATED DATA FLOW PARTICLE STREAMS ──
+      // ── ✨ 2. ANIMATED DATA FLOW PARTICLE STREAMS ──
       var particleCount = 450;
       var particleGeo = new THREE.BufferGeometry();
       var particlePositions = new Float32Array(particleCount * 3);
       var particleSpeeds = new Float32Array(particleCount);
-      var particleAxes = new Uint8Array(particleCount); // 0 = X, 1 = Z, 2 = Y
+      var particleAxes = new Uint8Array(particleCount);
 
       for (var p = 0; p < particleCount; p++) {{
         particlePositions[p * 3 + 0] = (Math.random() - 0.5) * 14.0;
@@ -1084,12 +1173,10 @@ endmodule"""
         particleGeo.attributes.position.needsUpdate = true;
       }}
 
-      // ── 🏛️ 3. ARCHITECTURE-SPECIFIC SILICON FLOORPLAN ──
-      // Silicon Package Substrate Base with Gold Bond Pads & Guard Ring
+      // ── 🏛️ 3. BESPOKE PROCEDURAL SILICON FLOORPLAN ──
       var subMesh = new THREE.Mesh(new THREE.BoxGeometry(16.5, 0.6, 16.5), new THREE.MeshStandardMaterial({{ color: 0x1e293b, roughness: 0.5 }}));
       transistorGroup.add(subMesh);
 
-      // Gold Perimeter Wire-Bond I/O Pads
       var padMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.95, roughness: 0.1 }});
       for (var pad = -7.0; pad <= 7.0; pad += 1.4) {{
         var pN = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.4), padMat);
@@ -1101,12 +1188,12 @@ endmodule"""
       }}
 
       if (archKey === "tpu") {{
-        // ── 🧠 TPU / 2D SYSTOLIC ARRAY ──
+        // ── 🧠 PROCEDURAL SYSTOLIC TPU ARRAY (peDim x peDim) ──
         document.getElementById("legendGrid").innerHTML = `
-          <div class="legend-item"><span class="box" style="background:#10b981"></span> Systolic PEs</div>
-          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> SRAM Buffers</div>
-          <div class="legend-item"><span class="box" style="background:#f59e0b"></span> Vector / GELU Unit</div>
-          <div class="legend-item"><span class="box" style="background:#dc2626"></span> BSPDN Backside Power</div>
+          <div class="legend-item"><span class="box" style="background:#10b981"></span> ${{peDim}}x${{peDim}} Systolic PEs</div>
+          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> ${{cacheMb}}MB SRAM Buffer</div>
+          <div class="legend-item"><span class="box" style="background:#f59e0b"></span> SIMD Vector Unit</div>
+          <div class="legend-item"><span class="box" style="background:#dc2626"></span> ${{hasBspdn ? "BSPDN Backside Power" : "Power Grid Rails"}}</div>
         `;
 
         var bspdnMat = new THREE.MeshStandardMaterial({{ color: 0xdc2626, metalness: 0.85, roughness: 0.25 }});
@@ -1114,45 +1201,52 @@ endmodule"""
           var bMesh = new THREE.Mesh(new THREE.BoxGeometry(16, 0.35, 0.8), bspdnMat);
           bMesh.position.set(0, -0.9, -5.0 + b * 2.0);
           powerGridGroup.add(bMesh);
-          addInteractiveMesh(bMesh, "BSPDN Buried Power Rails (Vdd/Vss)", "Backside power grid delivering direct IR-drop-free current to PE columns.");
+          addInteractiveMesh(bMesh, hasBspdn ? "BSPDN Buried Power Rails (Vdd/Vss)" : "Global VDD/VSS Power Distribution", "Delivers low-impedance power directly to systolic PE columns.");
         }}
 
+        var peRows = Math.min(peDim, 16);
+        var peCols = Math.min(peDim, 16);
         var peMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.75, roughness: 0.2 }});
-        for (var r = 0; r < 8; r++) {{
-          for (var c = 0; c < 8; c++) {{
-            var peMesh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 1.0), peMat);
-            peMesh.position.set(-4.2 + c * 1.2, 0.55, -4.2 + r * 1.2);
+        var peSize = 8.5 / Math.max(peRows, peCols);
+        var peGap = peSize * 1.15;
+        var startX = -((peCols - 1) * peGap) / 2;
+        var startZ = -((peRows - 1) * peGap) / 2;
+
+        for (var r = 0; r < peRows; r++) {{
+          for (var c = 0; c < peCols; c++) {{
+            var peMesh = new THREE.Mesh(new THREE.BoxGeometry(peSize, 0.45, peSize), peMat);
+            peMesh.position.set(startX + c * peGap, 0.55, startZ + r * peGap);
             transistorGroup.add(peMesh);
-            addInteractiveMesh(peMesh, `Systolic PE [${{r}},${{c}}] (MAC Unit)`, "16-bit Bfloat16 Multiply-Accumulate unit with weight stationary registers.");
+            addInteractiveMesh(peMesh, `Systolic PE [${{r}},${{c}}] (Bfloat16 MAC Unit)`, `Pipelined Multiply-Accumulate unit with weight-stationary registers in ${{peDim}}x${{peDim}} tensor core.`);
           }}
         }}
 
         var sramMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.8, roughness: 0.25 }});
-        var weightBuf = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.55, 1.6), sramMat);
-        weightBuf.position.set(0, 0.6, -6.0);
+        var weightBuf = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.55, 1.5), sramMat);
+        weightBuf.position.set(0, 0.6, -5.8);
         transistorGroup.add(weightBuf);
-        addInteractiveMesh(weightBuf, "Weight Stationary SRAM Buffer", "High-bandwidth 512KB SRAM feeding systolic columns with zero latency.");
+        addInteractiveMesh(weightBuf, `${{cacheMb}}MB Weight Stationary SRAM Buffer`, `High-density multi-bank SRAM feeding ${{peDim}} systolic columns with zero latency.`);
 
-        var actBuf = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 10.0), sramMat);
-        actBuf.position.set(-6.0, 0.6, 0);
+        var actBuf = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 10.5), sramMat);
+        actBuf.position.set(-5.8, 0.6, 0);
         transistorGroup.add(actBuf);
-        addInteractiveMesh(actBuf, "Input Activation SRAM Buffer", "Double-buffered activation feature matrix feeding row PEs.");
+        addInteractiveMesh(actBuf, `${{cacheMb}}MB Activation SRAM Buffer`, "Double-buffered activation feature matrix feeding matrix row inputs.");
 
         var vecMat = new THREE.MeshStandardMaterial({{ color: 0xf59e0b, metalness: 0.8, roughness: 0.2 }});
-        var vecUnit = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.55, 1.6), vecMat);
-        vecUnit.position.set(0, 0.6, 6.0);
+        var vecUnit = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.55, 1.5), vecMat);
+        vecUnit.position.set(0, 0.6, 5.8);
         transistorGroup.add(vecUnit);
-        addInteractiveMesh(vecUnit, "Vector Activation Unit (GELU/Softmax)", "Pipelined SIMD transcendental engine performing activation, LayerNorm, and scaling.");
+        addInteractiveMesh(vecUnit, "SIMD Vector Activation Unit (GELU/Softmax)", "Pipelined transcendental hardware engine performing LayerNorm, Bias add, and activation scaling.");
 
       }} else if (archKey === "soc") {{
-        // ── 📱 HETEROGENEOUS MOBILE APU / SOC ──
+        // ── 📱 PROCEDURAL HETEROGENEOUS SOC (${{bigCores}} Big + ${{littleCores}} Little) ──
         document.getElementById("legendGrid").innerHTML = `
-          <div class="legend-item"><span class="box" style="background:#ef4444"></span> Big CPU Cores</div>
-          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> LITTLE Cores</div>
-          <div class="legend-item"><span class="box" style="background:#a855f7"></span> GPU Shader Array</div>
+          <div class="legend-item"><span class="box" style="background:#ef4444"></span> ${{bigCores}} Big Performance Cores</div>
+          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> ${{littleCores}} Efficiency Little Cores</div>
+          <div class="legend-item"><span class="box" style="background:#a855f7"></span> GPU Shader Compute</div>
           <div class="legend-item"><span class="box" style="background:#10b981"></span> NPU Neural Engine</div>
           <div class="legend-item"><span class="box" style="background:#eab308"></span> LPDDR5X PHY</div>
-          <div class="legend-item"><span class="box" style="background:#f97316"></span> NoC Mesh Router</div>
+          <div class="legend-item"><span class="box" style="background:#f97316"></span> NoC Coherent Mesh</div>
         `;
 
         var pkgMesh = new THREE.Mesh(new THREE.BoxGeometry(17, 0.6, 17), new THREE.MeshStandardMaterial({{ color: 0x0f172a, roughness: 0.7 }}));
@@ -1160,38 +1254,42 @@ endmodule"""
         powerGridGroup.add(pkgMesh);
 
         var bigCpuMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.75, roughness: 0.25 }});
-        for (var c = 0; c < 2; c++) {{
-          var bCore = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 3.2), bigCpuMat);
-          bCore.position.set(-4.0 + c * 3.8, 0.55, -4.5);
+        for (var c = 0; c < bigCores; c++) {{
+          var bSize = bigCores > 4 ? 2.2 : 2.9;
+          var bGap = bSize * 1.18;
+          var bCore = new THREE.Mesh(new THREE.BoxGeometry(bSize, 0.5, bSize), bigCpuMat);
+          bCore.position.set(-5.0 + (c % 4) * bGap, 0.55, -4.5 + Math.floor(c / 4) * bGap);
           transistorGroup.add(bCore);
-          addInteractiveMesh(bCore, `Big Performance CPU Core ${{c}}`, "64-bit Out-of-Order superscalar core with 192KB L1 cache. Ideal: 2.85GHz @ 0.78V | Max: 3.6GHz | Breakpoint: 4.2GHz @ 1.15V.");
+          addInteractiveMesh(bCore, `Big CPU Core ${{c}} (Out-of-Order)`, "64-bit Out-of-Order superscalar core with 192KB L1 cache. Ideal: 2.85GHz @ 0.78V | Max: 3.6GHz.");
         }}
 
         var littleCpuMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.75, roughness: 0.25 }});
-        for (var lc = 0; lc < 4; lc++) {{
-          var lCore = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.6), littleCpuMat);
-          lCore.position.set(4.0 + (lc % 2) * 1.9, 0.55, -5.0 + Math.floor(lc / 2) * 1.9);
+        for (var lc = 0; lc < littleCores; lc++) {{
+          var lSize = littleCores > 8 ? 1.2 : 1.5;
+          var lGap = lSize * 1.2;
+          var lCore = new THREE.Mesh(new THREE.BoxGeometry(lSize, 0.45, lSize), littleCpuMat);
+          lCore.position.set(2.4 + (lc % 3) * lGap, 0.55, -5.2 + Math.floor(lc / 3) * lGap);
           transistorGroup.add(lCore);
-          addInteractiveMesh(lCore, `Efficiency CPU Core ${{lc}}`, "Ultra-low-power in-order core for background OS tasks. Ideal: 1.4GHz @ 0.68V | Max: 2.0GHz.");
+          addInteractiveMesh(lCore, `Efficiency Little Core ${{lc}}`, "Ultra-low-power in-order core for background OS tasks. Ideal: 1.4GHz @ 0.68V.");
         }}
 
         var gpuMat = new THREE.MeshStandardMaterial({{ color: 0xa855f7, metalness: 0.8, roughness: 0.2 }});
-        var gpuMesh = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.5, 5.0), gpuMat);
+        var gpuMesh = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.5, 4.5), gpuMat);
         gpuMesh.position.set(-3.5, 0.55, 2.5);
         transistorGroup.add(gpuMesh);
-        addInteractiveMesh(gpuMesh, "GPU Parallel Compute & Shader Array", "Multi-core SIMT graphics engine. Ideal: 980MHz (2.8 TFLOPS) | Max Turbo: 1.45GHz (4.6 TFLOPS).");
+        addInteractiveMesh(gpuMesh, "GPU Parallel Compute & Shader Array", "Multi-core SIMT graphics engine. Ideal: 980MHz (2.8 TFLOPS) | Max Turbo: 1.45GHz.");
 
         var npuMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.8, roughness: 0.2 }});
-        var npuMesh = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.5, 3.2), npuMat);
+        var npuMesh = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.5, 3.2), npuMat);
         npuMesh.position.set(3.8, 0.55, 0.2);
         transistorGroup.add(npuMesh);
-        addInteractiveMesh(npuMesh, "16-Core NPU Neural Engine", "Dedicated AI matrix processor. Ideal: 24 TOPS INT8 | Max: 38 TOPS @ 1.6GHz.");
+        addInteractiveMesh(npuMesh, "NPU Neural Processing Engine", "Dedicated AI matrix processor. Ideal: 24 TOPS INT8 | Max: 38 TOPS @ 1.6GHz.");
 
         var phyMat = new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.85, roughness: 0.15 }});
         var phyNorth = new THREE.Mesh(new THREE.BoxGeometry(14.0, 0.45, 0.8), phyMat);
         phyNorth.position.set(0, 0.55, 6.8);
         transistorGroup.add(phyNorth);
-        addInteractiveMesh(phyNorth, "LPDDR5X Dual-Channel Memory PHY", "8533 Mbps low-power high-speed memory interface delivering 136 GB/s bandwidth.");
+        addInteractiveMesh(phyNorth, "LPDDR5X Memory PHY Controller", "8533 Mbps low-power high-speed memory interface delivering 136 GB/s bandwidth.");
 
         var nocMat = new THREE.MeshStandardMaterial({{ color: 0xf97316, emissive: 0xf97316, emissiveIntensity: 0.3, metalness: 0.9 }});
         for (var k = -4; k <= 4; k += 4) {{
@@ -1202,11 +1300,11 @@ endmodule"""
         }}
 
       }} else if (archKey === "memory") {{
-        // ── 💾 HBM3 / 3D STACKED DRAM MEMORY CUBE ──
+        // ── 💾 PROCEDURAL HBM3 3D STACKED DRAM (${{hbmStacks}}-Hi Layers) ──
         document.getElementById("legendGrid").innerHTML = `
           <div class="legend-item"><span class="box" style="background:#a855f7"></span> Silicon Interposer</div>
-          <div class="legend-item"><span class="box" style="background:#0284c7"></span> Base Logic Die</div>
-          <div class="legend-item"><span class="box" style="background:#10b981"></span> 3D DRAM Layer 0-3</div>
+          <div class="legend-item"><span class="box" style="background:#0284c7"></span> Base Logic / PHY Die</div>
+          <div class="legend-item"><span class="box" style="background:#10b981"></span> ${{hbmStacks}}-Hi 3D DRAM Layers</div>
           <div class="legend-item"><span class="box" style="background:#eab308"></span> Through-Silicon Vias</div>
         `;
 
@@ -1216,66 +1314,105 @@ endmodule"""
         var logicMesh = new THREE.Mesh(new THREE.BoxGeometry(11, 0.6, 11), new THREE.MeshStandardMaterial({{ color: 0x0284c7, metalness: 0.75, roughness: 0.2 }}));
         logicMesh.position.y = 0.6;
         transistorGroup.add(logicMesh);
-        addInteractiveMesh(logicMesh, "HBM3 Base Logic Controller Die", "Master PHY, DFI interface, Built-in Self Test (BIST), and memory error correction (ECC).");
+        addInteractiveMesh(logicMesh, "HBM3 Base Controller & PHY Die", "Master PHY, DFI 1024-bit interface, Built-in Self Test (BIST), and memory ECC engine.");
 
-        var dramMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, transparent: true, opacity: 0.88, metalness: 0.7, roughness: 0.2 }});
-        for (var d = 0; d < 4; d++) {{
-          var dramDie = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.45, 10.5), dramMat);
-          dramDie.position.y = 1.3 + d * 0.75;
+        var dramMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, transparent: true, opacity: 0.85, metalness: 0.7, roughness: 0.2 }});
+        var stackHeight = 3.6;
+        var stepY = stackHeight / Math.max(1, hbmStacks);
+        for (var d = 0; d < hbmStacks; d++) {{
+          var dramDie = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.35, 10.5), dramMat);
+          dramDie.position.y = 1.15 + d * stepY;
           transistorGroup.add(dramDie);
-          addInteractiveMesh(dramDie, `3D Stacked DRAM Die Layer ${{d}}`, "High-density DRAM cell arrays (16Gb per die) with micro-second refresh timing.");
+          addInteractiveMesh(dramDie, `3D Stacked DRAM Layer ${{d+1}} / ${{hbmStacks}}`, `High-density DRAM cell slice (${{16 * (d+1)}}Gb cumulative) with micro-second refresh timing.`);
         }}
 
       }} else if (archKey === "cpu") {{
-        // ── 🖥️ OUT-OF-ORDER CPU CORE (RV64GC / x86) ──
+        // ── 🖥️ PROCEDURAL OUT-OF-ORDER CPU (${{numCores}} Cores) ──
         document.getElementById("legendGrid").innerHTML = `
-          <div class="legend-item"><span class="box" style="background:#ef4444"></span> OoO Execution Engine</div>
+          <div class="legend-item"><span class="box" style="background:#ef4444"></span> ${{numCores}} Out-of-Order Cores</div>
           <div class="legend-item"><span class="box" style="background:#38bdf8"></span> TAGE Branch Predictor</div>
-          <div class="legend-item"><span class="box" style="background:#10b981"></span> L1/L2 Caches</div>
-          <div class="legend-item"><span class="box" style="background:#eab308"></span> L3 Shared Cache</div>
+          <div class="legend-item"><span class="box" style="background:#10b981"></span> L1/L2 Cache Banks</div>
+          <div class="legend-item"><span class="box" style="background:#eab308"></span> ${{cacheMb}}MB L3 Cache</div>
         `;
 
-        var exeMesh = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.55, 6.5), new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.75, roughness: 0.25 }}));
-        exeMesh.position.set(-3.5, 0.65, -2.5);
-        transistorGroup.add(exeMesh);
-        addInteractiveMesh(exeMesh, "Out-of-Order Execution Units & ROB", "4 Integer ALUs, 2 Vector FPUs, Load/Store units, and 128-entry Reorder Buffer. Ideal: 3.2GHz @ 0.82V | Breakpoint: 4.4GHz @ 1.18V.");
+        var cpuMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.75, roughness: 0.25 }});
+        var cRows = numCores > 8 ? 4 : (numCores > 2 ? 2 : 1);
+        var cCols = Math.ceil(numCores / cRows);
+        var cSize = 9.0 / Math.max(cRows, cCols);
 
-        var feMesh = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.55, 6.5), new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.8, roughness: 0.2 }}));
-        feMesh.position.set(3.5, 0.65, -2.5);
-        transistorGroup.add(feMesh);
-        addInteractiveMesh(feMesh, "TAGE Branch Predictor & Instruction Fetch", "Multi-table conditional branch prediction with 4-wide instruction decoder.");
+        for (var i = 0; i < numCores; i++) {{
+          var cr = Math.floor(i / cCols);
+          var cc = i % cCols;
+          var coreMesh = new THREE.Mesh(new THREE.BoxGeometry(cSize * 0.85, 0.55, cSize * 0.85), cpuMat);
+          coreMesh.position.set(-4.5 + cc * (cSize * 1.1), 0.65, -4.5 + cr * (cSize * 1.1));
+          transistorGroup.add(coreMesh);
+          addInteractiveMesh(coreMesh, `CPU Core Unit #${{i}}`, "4 Integer ALUs, 2 Vector FPUs, Load/Store units, and 128-entry Reorder Buffer (ROB).");
+        }}
 
-        var l2Mesh = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.55, 4.0), new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.75, roughness: 0.25 }}));
-        l2Mesh.position.set(-3.5, 0.65, 4.0);
-        transistorGroup.add(l2Mesh);
-        addInteractiveMesh(l2Mesh, "L1/L2 Non-Blocking Cache Banks", "64KB L1 Data/Inst cache and 1MB private L2 cache with hardware prefetchers.");
-
-        var l3Mesh = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.55, 4.0), new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.85, roughness: 0.2 }}));
-        l3Mesh.position.set(3.5, 0.65, 4.0);
+        var l3Mesh = new THREE.Mesh(new THREE.BoxGeometry(11.0, 0.55, 2.5), new THREE.MeshStandardMaterial({{ color: 0xeab308, metalness: 0.85, roughness: 0.2 }}));
+        l3Mesh.position.set(0, 0.65, 5.0);
         transistorGroup.add(l3Mesh);
-        addInteractiveMesh(l3Mesh, "Shared L3 SRAM Cache Slice", "High-density 8MB shared L3 cache with MESI/MOESI hardware coherence.");
+        addInteractiveMesh(l3Mesh, `Shared ${{cacheMb}}MB L3 Cache Slice`, "High-density multi-bank shared L3 cache with MESI/MOESI hardware coherence.");
+
+      }} else if (archKey === "analog") {{
+        // ── ⚡ PROCEDURAL ANALOG / MIXED-SIGNAL MACRO (${{analogType}}) ──
+        document.getElementById("legendGrid").innerHTML = `
+          <div class="legend-item"><span class="box" style="background:#ef4444"></span> Differential Pair M1/M2</div>
+          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> Current Mirror M3/M4</div>
+          <div class="legend-item"><span class="box" style="background:#f59e0b"></span> Output Stage / Cascodes</div>
+          <div class="legend-item"><span class="box" style="background:#10b981"></span> On-Die MIM Cap (Cc)</div>
+        `;
+
+        var diffMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, metalness: 0.85, roughness: 0.2 }});
+        var m1 = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.55, 4.0), diffMat);
+        m1.position.set(-3.2, 0.65, -2.5);
+        transistorGroup.add(m1);
+        addInteractiveMesh(m1, "Differential Input Pair M1 (NMOS)", "Matched differential pair with high transconductance (gm = 14.2 mS).");
+
+        var m2 = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.55, 4.0), diffMat);
+        m2.position.set(3.2, 0.65, -2.5);
+        transistorGroup.add(m2);
+        addInteractiveMesh(m2, "Differential Input Pair M2 (NMOS)", "Complementary matched transistor for symmetric low-noise amplification.");
+
+        var mirrorMat = new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.85, roughness: 0.2 }});
+        var mLoad = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.55, 2.2), mirrorMat);
+        mLoad.position.set(0, 0.65, -5.5);
+        transistorGroup.add(mLoad);
+        addInteractiveMesh(mLoad, "Active Current Mirror Load M3/M4 (PMOS)", "High-impedance active load establishing first-stage voltage gain.");
+
+        var capMat = new THREE.MeshStandardMaterial({{ color: 0x10b981, metalness: 0.75, roughness: 0.15 }});
+        var mimCap = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.6, 3.5), capMat);
+        mimCap.position.set(0, 0.65, 3.0);
+        transistorGroup.add(mimCap);
+        addInteractiveMesh(mimCap, "On-Die MIM Miller Compensation Cap (Cc)", "Pole-splitting capacitor providing 64.2° phase margin for stable closed-loop operation.");
 
       }} else {{
-        // ── 🎮 GPU SIMT / GENERAL DIGITAL ASIC ──
+        // ── 🎮 GPU SIMT / GENERAL ASIC (${{smCount}} SMs) ──
         document.getElementById("legendGrid").innerHTML = `
-          <div class="legend-item"><span class="box" style="background:#a855f7"></span> Streaming Multiprocessors</div>
+          <div class="legend-item"><span class="box" style="background:#a855f7"></span> ${{smCount}} Streaming Multiprocessors</div>
           <div class="legend-item"><span class="box" style="background:#10b981"></span> Tensor Cores</div>
-          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> L2 Cache Partition</div>
+          <div class="legend-item"><span class="box" style="background:#38bdf8"></span> L2 Cache (${{cacheMb}}MB)</div>
           <div class="legend-item"><span class="box" style="background:#eab308"></span> Memory Controllers</div>
         `;
 
         var smMat = new THREE.MeshStandardMaterial({{ color: 0xa855f7, metalness: 0.8, roughness: 0.2 }});
-        for (var s = 0; s < 6; s++) {{
-          var smMesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.55, 3.2), smMat);
-          smMesh.position.set(-4.0 + (s % 3) * 4.0, 0.65, -3.5 + Math.floor(s / 3) * 4.0);
+        var smRows = smCount > 16 ? 4 : (smCount > 4 ? 3 : 2);
+        var smCols = Math.ceil(smCount / smRows);
+        var smSize = 8.5 / Math.max(smRows, smCols);
+
+        for (var s = 0; s < smCount; s++) {{
+          var sr = Math.floor(s / smCols);
+          var sc = s % smCols;
+          var smMesh = new THREE.Mesh(new THREE.BoxGeometry(smSize * 0.85, 0.55, smSize * 0.85), smMat);
+          smMesh.position.set(-4.5 + sc * (smSize * 1.1), 0.65, -4.5 + sr * (smSize * 1.1));
           transistorGroup.add(smMesh);
-          addInteractiveMesh(smMesh, `Streaming Multiprocessor (SM ${{s}})`, "128 CUDA compute cores, SIMT warp scheduler, and Tensor Core matrix units. Ideal: 1.1GHz | Max Turbo: 1.65GHz.");
+          addInteractiveMesh(smMesh, `Streaming Multiprocessor SM #${{s}}`, "128 CUDA compute cores, SIMT warp scheduler, and Tensor Core matrix units.");
         }}
 
         var l2Gpu = new THREE.Mesh(new THREE.BoxGeometry(12.0, 0.5, 2.0), new THREE.MeshStandardMaterial({{ color: 0x38bdf8, metalness: 0.75, roughness: 0.2 }}));
         l2Gpu.position.set(0, 0.65, 5.0);
         transistorGroup.add(l2Gpu);
-        addInteractiveMesh(l2Gpu, "Shared High-Speed L2 Cache (32MB)", "Unified crossbar-connected cache with high-throughput multi-channel routing.");
+        addInteractiveMesh(l2Gpu, `Shared High-Speed L2 Cache (${{cacheMb}}MB)`, "Unified crossbar-connected cache with high-throughput multi-channel routing.");
       }}
 
       // Exploded Layer Offsets

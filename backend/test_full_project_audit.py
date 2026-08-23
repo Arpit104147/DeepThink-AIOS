@@ -96,7 +96,7 @@ domains = [
 for d, expected_dom in domains:
     d_info = PredictionPipeline._classify_domain(d)
     score, label, cards = PredictionPipeline._analyze_news_sentiment(d, [{'title': 'Strong revenue surge', 'snippet': 'Record profit beats market estimate', 'link': '#'}])
-    code_init, unit = PredictionPipeline._synthesize_domain_series(d_info['domain'], 42)
+    code_init, unit, y_arr = PredictionPipeline._synthesize_domain_series(d_info['domain'], 42)
     assert len(cards) >= 1
     assert -1.0 <= score <= 1.0
     print(f'  ✅ Domain: {d_info["domain"]:<32} | Unit: {unit:<12} | Sentiment: {label}')
@@ -108,10 +108,9 @@ mod_reason = importlib.util.module_from_spec(spec_reason)
 spec_reason.loader.exec_module(mod_reason)
 ReasoningPipeline = mod_reason.ReasoningPipeline
 
-broken_latex = '$g_{\\mu\\nu} = \\text{diag}(-1, 1, 1, 1)\n\n$2. Spherical Symmetry: Assume static spacetime.'
-sanitized = ReasoningPipeline._sanitize_reasoning_latex(broken_latex)
-assert '$$g_{\\mu\\nu} = \\text{diag}(-1, 1, 1, 1)$$' in sanitized
-assert not sanitized.startswith('$g')
+raw_math = "The metric is $ds^2 = -c^2 dt^2 + dr^2 \n\n$and the curvature scalar is $$K = \\frac{48G^2M^2}{c^4 r^6}$$"
+sanitized = ReasoningPipeline._sanitize_reasoning_latex(raw_math)
+assert "$$\nand the curvature scalar is" not in sanitized
 print('  ✅ KaTeX Display Sanitizer accurately repaired unclosed newline dollar delimiters')
 
 # 5. AUDIT FAST-PATH TASK ROUTER

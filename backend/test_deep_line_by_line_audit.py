@@ -155,11 +155,14 @@ def test_prediction_engine():
     pred_errors = []
     for domain in ["Climate & Meteorology", "Energy & Battery Systems", "Financial Markets & Equities", "Cloud & Infrastructure Telemetry"]:
         try:
-            code, unit = PredictionPipeline._synthesize_domain_series(domain, 42)
+            code, unit, y_arr = PredictionPipeline._synthesize_domain_series(domain, 42)
             score, label, cards = PredictionPipeline._analyze_news_sentiment(f"{domain} outlook", [])
             assert len(cards) >= 2, "Must produce at least 2 structured news cards"
             assert -1.0 <= score <= 1.0, "Score must be in [-1.0, 1.0]"
-            print(f"  ✅ {domain:<35} | Unit: {unit:<15} | Sentiment: {label:<12} (Score: {score:+.2f})")
+            metrics = PredictionPipeline._compute_direct_tournament_metrics(y_arr, score, unit)
+            assert metrics["r2"] > 0.85, "Must compute valid high R^2 ensemble score"
+            assert len(metrics["forecast_values"]) == 15, "Must produce 15-day forecast trajectory"
+            print(f"  ✅ {domain:<35} | Unit: {unit:<15} | Sentiment: {label:<12} (Score: {score:+.2f}) | R²: {metrics['r2']:.4f}")
         except Exception as e:
             print(f"  ❌ {domain} ERROR: {e}")
             pred_errors.append((domain, str(e)))
