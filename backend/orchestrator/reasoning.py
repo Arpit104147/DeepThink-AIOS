@@ -104,7 +104,11 @@ class ReasoningPipeline:
             is_corrupted = (
                 bool(re.search(r"([a-z0-9\(\)\=\+\-\^]{10,})\.\1", full_derivation, re.I))
                 or ("gtt=" in full_derivation and "$$" not in full_derivation)
+                or ("gtt" in full_derivation and "•" in full_derivation and "$$" not in full_derivation)
                 or ("Γ" in full_derivation and "Γttt=0" in full_derivation)
+                or ("Γ" in full_derivation and "\\Gamma" not in full_derivation)
+                or ("R_{tt}" in full_derivation and "$$" not in full_derivation)
+                or (any(k in prompt.lower() for k in ["schwarzschild", "christoffel", "kretschmann"]) and "\\Gamma^t_{tr}" not in full_derivation)
                 or len(full_derivation.strip()) < 300
             )
 
@@ -309,7 +313,7 @@ print("Status: 100% Mathematically Verified & Invariant Checked")
         """
         Sanitizes LaTeX formatting in mathematical proofs to ensure pristine KaTeX rendering.
         Fixes broken single-dollar spanning across newlines, standardizes display equations ($$ ... $$),
-        replaces unicode minus signs, and ensures proper mathematical spacing.
+        replaces unicode minus signs, wraps bare tensors in $...$, and ensures proper mathematical spacing.
         """
         if not text:
             return ""
@@ -317,13 +321,26 @@ print("Status: 100% Mathematically Verified & Invariant Checked")
         # 1. Replace raw unicode minus signs in math context
         text = text.replace("−", "-")
 
-        # 2. Fix single dollar signs that span across newlines (e.g. "$formula \n\n$Next")
+        # 2. Fix concatenated numbered list items (e.g. "= 02. Radial-radial" -> "= 0\n\n2. Radial-radial")
+        text = re.sub(r"([^\n\d])(\d{1,2}\.\s+[A-Z])", r"\1\n\n\2", text)
+
+        # 3. Separate words or colons glued to backslash LaTeX commands (e.g. "definition:\Gamma" -> "definition: \Gamma")
+        text = re.sub(r"([a-zA-Z0-9\):])(\\([a-zA-Z]+|[^\s\w]))", r"\1 \2", text)
+
+        # 4. Separate LaTeX formulas glued to following words
+        text = re.sub(r"(\)[,\.]?)([a-zA-Z])", r"\1 \2", text)
+        text = re.sub(r"([a-zA-Z0-9\}\)])(Given|The|To|We|Where|When|Then|Thus|Hence)", r"\1 \2", text)
+
+        # 5. Wrap bare tensor notations in $...$: R_{tt}, R_{rr}, R_{\phi\phi}, R_{\mu\nu}=0, g_{tt}, g_{rr}
+        text = re.sub(r"(?<![\$\`\\a-zA-Z0-9])([RgT]\_\{[a-zA-Z0-9\\\,\s]+\}(?:\s*=\s*[^,\n\s\)]+)?)(?![\$\`])", r"$\1$", text)
+
+        # 6. Fix single dollar signs that span across newlines (e.g. "$formula \n\n$Next")
         text = re.sub(r"(?<!\$)\$([^\$]+?)\s*\n\n\$", r"$$\1$$\n\n", text)
         
-        # 3. Fix cases where an opening $$ is on its own line and formula starts on next line
+        # 7. Fix cases where an opening $$ is on its own line and formula starts on next line
         text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
 
-        # 4. Standardize standalone unformatted equations (e.g. "ds^2 = ...") into display math blocks
+        # 8. Standardize standalone unformatted equations (e.g. "ds^2 = ...") into display math blocks
         text = re.sub(
             r"(?<!\$)\b(ds\^2\s*=\s*-[^\n]+|R_\\mu\\nu\s*=\s*0|K\s*=\s*R\^\{[^}]+\}\s*R_\{[^}]+\}[^\n]+)(?!\$)",
             r"$$\1$$",

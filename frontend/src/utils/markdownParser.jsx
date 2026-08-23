@@ -30,13 +30,46 @@ export const renderMath = (tex, isBlock) => {
 };
 
 /**
+ * Normalizes text to ensure all mathematical expressions and LaTeX commands render with KaTeX:
+ * 1. Separates LaTeX macros and math formulas glued directly to words/punctuation.
+ * 2. Wraps bare tensor notations (R_{tt}, R_{rr}, R_{\mu\nu}=0, g_{tt}, g_{rr}) in $ ... $.
+ * 3. Fixes concatenated numbered list items (e.g. "= 02. Radial-radial" -> "= 0\n\n2. Radial-radial").
+ */
+export const normalizeMarkdownMath = (text) => {
+  if (!text) return "";
+  let result = text;
+
+  // 1. Replace raw unicode minus signs
+  result = result.replace(/−/g, "-");
+
+  // 2. Fix concatenated numbered list items (e.g. "= 02. Radial-radial" -> "= 0\n\n2. Radial-radial")
+  result = result.replace(/([^\n\d])(\d{1,2}\.\s+[A-Z])/g, "$1\n\n$2");
+
+  // 3. Separate words or colons glued to backslash LaTeX commands (e.g. "definition:\Gamma" -> "definition: \Gamma")
+  result = result.replace(/([a-zA-Z0-9\):])(\\([a-zA-Z]+|[^\s\w]))/g, "$1 $2");
+
+  // 4. Separate LaTeX formulas glued to following words (e.g. "\phi^2),we compute" -> "\phi^2), we compute")
+  result = result.replace(/(\)[,\.]?)([a-zA-Z])/g, "$1 $2");
+  result = result.replace(/([a-zA-Z0-9\}\)])(Given|The|To|We|Where|When|Then|Thus|Hence)/g, "$1 $2");
+
+  // 5. Wrap bare tensor notations in $...$: R_{tt}, R_{rr}, R_{\phi\phi}, R_{\mu\nu}=0, g_{tt}, g_{rr}
+  result = result.replace(/(?<![\$\`\\a-zA-Z0-9])([RgT]\_\{[a-zA-Z0-9\\\,\s]+\}(?:\s*=\s*[^,\n\s\)]+)?)(?![\$\`])/g, "$$$1$$");
+
+  // 6. Wrap equation lines starting with ds^2 = or gtt = in display math $$ ... $$
+  result = result.replace(/(?<![\$\`])\b(ds\^2\s*=\s*-[^\n,]+)(?![\$\`])/g, "$$$$$1$$$$");
+
+  return result;
+};
+
+/**
  * Parse a line of text and render inline elements: math, bold, inline code.
  * Handles both \\( ... \\) and $ ... $ math delimiters.
  */
 export const renderInlineElements = (text) => {
   if (!text) return null;
+  const normalized = normalizeMarkdownMath(text);
   // Split on inline math (\( ... \) or $...$), bold (**...**), or inline code (`...`).
-  const inlineParts = text.split(/(\\\([\s\S]*?\\\)|\$[^$\n]+\$|\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  const inlineParts = normalized.split(/(\\\([\s\S]*?\\\)|\$[^$\n]+\$|\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
   return inlineParts.map((chunk, index) => {
     if (chunk == null || chunk === "") return null;
     if (chunk.startsWith("\\(") && chunk.endsWith("\\)")) {
@@ -135,9 +168,9 @@ export const renderMarkdownTable = (tableLines, tableKey) => {
  * block math, headings, tables, lists, horizontal rules, paragraphs.
  */
 export const parseAndRenderSegment = (segment) => {
-  // Normalize: collapse $$ that are on their own line with content on the next line
-  // e.g. "$$\n\\sum_{n=1}...\n$$" → "$$\\sum_{n=1}...$$"
-  let normalized = segment.replace(/\$\$\s*\n\s*/g, "$$").replace(/\s*\n\s*\$\$/g, "$$");
+  // Normalize math and LaTeX spacing across the segment
+  let normalized = normalizeMarkdownMath(segment);
+  normalized = normalized.replace(/\$\$\s*\n\s*/g, "$$").replace(/\s*\n\s*\$\$/g, "$$");
 
   // Split on block math \[ ... \] or $$ ... $$
   const parts = normalized.split(/(\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$)/g);
@@ -216,7 +249,7 @@ export const parseAndRenderSegment = (segment) => {
         continue;
       }
 
-      const listMatch = trimmed.match(/^([-*]|\d+\.)\s+(.*)/);
+      const listMatch = trimmed.match(/^([-*•]|\d+\.)\s*(.*)/);
       if (listMatch) {
         const indent = line.length - line.trimStart().length;
         const marker = listMatch[1];
