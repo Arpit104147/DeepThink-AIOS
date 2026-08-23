@@ -305,34 +305,16 @@ class StudyPipeline:
         if not text:
             return text
 
-        # 1. Fix single dollar signs that span across newlines (e.g. "$formula \n\n$Next")
-        text = re.sub(r"(?<!\$)\$([^\$]+?)\s*\n\n\$", r"$$\1$$\n\n", text)
-        
-        # 2. Fix cases where an opening $$ is on its own line and formula starts on next line
+        # 1. Replace raw unicode minus signs
+        text = text.replace("−", "-")
+
+        # 2. Fix double escaped LaTeX commands in text (\\command -> \command)
+        text = re.sub(r"\\\\([a-zA-Z]+)", r"\\\1", text)
+
+        # 3. Fix cases where an opening $$ is on its own line and formula starts on next line
         text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
 
-        # 3. Convert unclosed inline math followed by English text into display blocks
-        text = re.sub(
-            r"\$([^\$\n]{10,})\s+(where|with|and|such that|in which)\s+",
-            r"$$\1$$\n\2 ",
-            text,
-            flags=re.IGNORECASE
-        )
-
-        # Fix missing double dollar closings
-        lines = text.split("\n")
-        fixed_lines = []
-        in_display_math = False
-        for line in lines:
-            if line.strip().startswith("$$") and line.strip().endswith("$$") and len(line.strip()) > 4:
-                fixed_lines.append(line)
-            elif line.strip().startswith("$$"):
-                in_display_math = not in_display_math
-                fixed_lines.append(line)
-            else:
-                fixed_lines.append(line)
-        
-        return "\n".join(fixed_lines)
+        return text
 
     @staticmethod
     def _extract_document_text(payload):

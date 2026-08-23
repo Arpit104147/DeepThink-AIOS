@@ -312,8 +312,7 @@ print("Status: 100% Mathematically Verified & Invariant Checked")
     def _sanitize_reasoning_latex(text: str) -> str:
         """
         Sanitizes LaTeX formatting in mathematical proofs to ensure pristine KaTeX rendering.
-        Fixes broken single-dollar spanning across newlines, standardizes display equations ($$ ... $$),
-        replaces unicode minus signs, and ensures proper mathematical spacing.
+        Replaces unicode minus signs, cleans double escaped backslashes, and normalizes display equations ($$ ... $$).
         """
         if not text:
             return ""
@@ -324,10 +323,7 @@ print("Status: 100% Mathematically Verified & Invariant Checked")
         # 2. Fix double escaped LaTeX commands in text (\\command -> \command)
         text = re.sub(r"\\\\([a-zA-Z]+)", r"\\\1", text)
 
-        # 3. Fix single dollar signs that span across newlines (e.g. "$formula \n\n$Next")
-        text = re.sub(r"(?<!\$)\$([^\$]+?)\s*\n\n\$", r"$$\1$$\n\n", text)
-        
-        # 4. Fix cases where an opening $$ is on its own line and formula starts on next line
+        # 3. Fix cases where an opening $$ is on its own line and formula starts on next line
         text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
 
         return text
