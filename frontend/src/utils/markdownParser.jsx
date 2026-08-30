@@ -6,14 +6,24 @@ import React from "react";
  * @param {boolean} isBlock - Whether to render as display math
  */
 export const renderMath = (tex, isBlock) => {
+  if (!tex) return null;
   if (window.katex) {
     try {
       // Clean up double-escaped backslashes before passing to KaTeX
-      const cleanTex = tex.replace(/\\\\([a-zA-Z]+)/g, "\\$1");
+      let cleanTex = tex.replace(/\\\\([a-zA-Z]+)/g, "\\$1");
+      
+      // Clean up redundant equation/displaymath environments inside math mode (illegal in KaTeX)
+      cleanTex = cleanTex.replace(/\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g, "$1");
+      cleanTex = cleanTex.replace(/\\begin\{displaymath\}([\s\S]*?)\\end\{displaymath\}/g, "$1");
+      
+      // Convert align/gather to aligned/gathered for robust KaTeX displayMode compatibility
+      cleanTex = cleanTex.replace(/\\begin\{align\*?\}/g, "\\begin{aligned}").replace(/\\end\{align\*?\}/g, "\\end{aligned}");
+      cleanTex = cleanTex.replace(/\\begin\{gather\*?\}/g, "\\begin{gathered}").replace(/\\end\{gather\*?\}/g, "\\end{gathered}");
+
       return (
         <span
           dangerouslySetInnerHTML={{
-            __html: window.katex.renderToString(cleanTex, {
+            __html: window.katex.renderToString(cleanTex.trim(), {
               displayMode: isBlock,
               throwOnError: false,
               strict: false,
@@ -48,7 +58,16 @@ export const normalizeMarkdownMath = (text) => {
   // 3. Fix concatenated numbered list items: "... = 02. Radial" -> "... = 0\n\n2. Radial"
   result = result.replace(/([^\n\d])(\d{1,2}\.\s+[A-Z])/g, "$1\n\n$2");
 
-  // 4. Ensure proper spacing around $$ display blocks
+  // 4. Normalize bracket delimiters: \[ ... \] -> $$ ... $$ and \( ... \) -> $ ... $
+  result = result.replace(/\\\[\s*([\s\S]*?)\s*\\\]/g, "$$\n$1\n$$");
+  result = result.replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, "$$1$");
+
+  // 5. Convert standalone \begin{equation} and \begin{align*} environments to $$ blocks
+  result = result.replace(/\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g, "$$\n$1\n$$");
+  result = result.replace(/\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}/g, "$$\n\\begin{aligned}$1\\end{aligned}\n$$");
+  result = result.replace(/\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}/g, "$$\n\\begin{gathered}$1\\end{gathered}\n$$");
+
+  // 6. Ensure proper spacing around $$ display blocks
   result = result.replace(/\$\$\s*\n\s*/g, "$$\n").replace(/\s*\n\s*\$\$/g, "\n$$");
 
   return result;
@@ -172,7 +191,7 @@ export const parseAndRenderSegment = (segment) => {
       const tex = part.slice(2, -2).trim();
       return <div key={index} className="math-block">{renderMath(tex, true)}</div>;
     }
-    if (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) {
+    if (part.startsWith("$$") && part.endsWith("$$") && part.length >= 4) {
       const tex = part.slice(2, -2).trim();
       return <div key={index} className="math-block">{renderMath(tex, true)}</div>;
     }

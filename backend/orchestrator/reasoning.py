@@ -397,8 +397,8 @@ print("Status: 100% Mathematically Verified via SymPy CAS")
     def _sanitize_reasoning_latex(text: str) -> str:
         """
         Sanitizes LaTeX formatting in mathematical proofs to ensure pristine KaTeX rendering.
-        Replaces unicode minus signs, cleans double escaped backslashes, formats standalone equation lines in $$,
-        and normalizes display equations ($$ ... $$).
+        Normalizes display/inline delimiters, aligns environments, cleans double escaped backslashes,
+        formats standalone equation lines in $$, and protects isolated Greek and math symbols in prose.
         """
         if not text:
             return ""
@@ -406,32 +406,75 @@ print("Status: 100% Mathematically Verified via SymPy CAS")
         # 1. Replace raw unicode minus signs in math context
         text = text.replace("−", "-")
 
-        # 2. Fix double escaped LaTeX commands in text (\\command -> \command)
+        # 2. Normalize bracket delimiters: \[ ... \] -> $$ ... $$ and \( ... \) -> $ ... $
+        text = re.sub(r"\\\[\s*([\s\S]*?)\s*\\\]", r"$$\n\1\n$$", text)
+        text = re.sub(r"\\\(\s*([\s\S]*?)\s*\\\)", r"$\1$", text)
+
+        # 3. Normalize LaTeX environment blocks to KaTeX-compatible forms
+        text = re.sub(r"\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}", r"$$\n\1\n$$", text)
+        text = re.sub(r"\\begin\{displaymath\}([\s\S]*?)\\end\{displaymath\}", r"$$\n\1\n$$", text)
+        text = re.sub(r"\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}", r"$$\n\\begin{aligned}\1\\end{aligned}\n$$", text)
+        text = re.sub(r"\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}", r"$$\n\\begin{gathered}\1\\end{gathered}\n$$", text)
+
+        # 4. Clean double-nested environments inside $$ ... $$
+        text = re.sub(r"\$\$\s*\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}\s*\$\$", r"$$\n\1\n$$", text)
+        text = re.sub(r"\$\$\s*\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}\s*\$\$", r"$$\n\\begin{aligned}\1\\end{aligned}\n$$", text)
+        text = re.sub(r"\$\$\s*\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}\s*\$\$", r"$$\n\\begin{gathered}\1\\end{gathered}\n$$", text)
+
+        # 5. Fix double escaped LaTeX commands in text (\\command -> \command)
         text = re.sub(r"\\\\([a-zA-Z]+)", r"\\\1", text)
 
-        # 3. Fix cases where an opening $$ is on its own line and formula starts on next line
-        text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
+        # 6. Clean consecutive blank lines inside $$ blocks to prevent KaTeX paragraph-break errors
+        def _clean_display_math(match):
+            inner = match.group(1).strip()
+            inner = re.sub(r"\n\s*\n+", r"\n", inner)
+            return f"$$\n{inner}\n$$"
 
-        # 4. Auto-format standalone unformatted mathematical lines into display math blocks
+        text = re.sub(r"\$\$([\s\S]*?)\$\$", _clean_display_math, text)
+
+        # 7. Regex for isolated raw LaTeX symbols in prose that need $...$
+        isolated_symbols_re = re.compile(
+            r"(?<![\$\\a-zA-Z0-9])\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|partial|nabla|hbar|infty|approx|neq|le|ge|cdot|pm|mp|to|implies|iff|in|notin)(?![a-zA-Z\$])"
+        )
+
+        # 8. Auto-format standalone unformatted mathematical lines into display math blocks
         lines = text.split("\n")
         fixed_lines = []
+        in_code_block = False
+
         for line in lines:
             stripped = line.strip()
+            if stripped.startswith("```"):
+                in_code_block = not in_code_block
+                fixed_lines.append(line)
+                continue
+
+            if in_code_block:
+                fixed_lines.append(line)
+                continue
+
+            # Handle standalone \boxed{...} lines
+            if re.match(r"^\\boxed\{[^\n]+\}$", stripped):
+                fixed_lines.append(f"$${stripped}$$")
+                continue
+
+            # Check for unformatted mathematical formula lines
             if (
-                not stripped.startswith("#")
+                stripped
+                and not stripped.startswith("#")
                 and not stripped.startswith("---")
-                and not stripped.startswith("```")
                 and not stripped.startswith("$$")
-                and ("=" in stripped or "\\int" in stripped or "\\sum" in stripped or "\\Sigma" in stripped)
+                and not stripped.startswith(">")
+                and not stripped.startswith("|")
+                and not stripped.startswith("- ")
+                and not stripped.startswith("* ")
+                and not re.match(r"^\d+\.\s", stripped)
             ):
-                is_math_eqn = bool(
-                    re.search(
-                        r"(\\int|\\sum|\\Sigma|\\zeta|\\Gamma|\\partial|\\frac|\b1\s*/\s*\(|e\^\{|\^\\infty|e\^\{-)",
-                        stripped,
-                    )
-                )
+                has_math_op = any(op in stripped for op in ["=", "\\int", "\\sum", "\\Sigma", "\\prod", "\\approx", "\\equiv", "\\le", "\\ge", "\\to", "\\implies"])
+                has_math_tokens = bool(re.search(r"(\\int|\\sum|\\Sigma|\\zeta|\\Gamma|\\partial|\\frac|\b1\s*/\s*\(|e\^\{|\^\\infty|e\^\{-|\^2|\^3|_\{|_0|_1|_r|_t|\\mu|\\nu|\\lambda|\\alpha|\\beta|\\theta|\\phi|\\nabla|\\sqrt|\\boxed|\\text\{|\\hat|\\vec)", stripped))
                 is_prose = len(re.findall(r"\b[A-Za-z]{4,}\b", stripped)) > 3
-                if is_math_eqn and not is_prose and not stripped.startswith("$"):
+
+                if has_math_op and has_math_tokens and not is_prose and not (stripped.startswith("$") and stripped.endswith("$")):
                     clean = re.sub(r"\\Sigma\_", r"\\sum_", stripped)
                     clean = re.sub(r"1\s*/\s*\(\s*e\^x\s*-\s*1\s*\)", r"\\frac{1}{e^x - 1}", clean)
                     clean = re.sub(
@@ -441,6 +484,11 @@ print("Status: 100% Mathematically Verified via SymPy CAS")
                     )
                     fixed_lines.append(f"$${clean}$$")
                     continue
+
+            # Wrap isolated raw LaTeX symbols in prose lines
+            if not stripped.startswith("$$"):
+                line = isolated_symbols_re.sub(r"$\\\1$", line)
+
             fixed_lines.append(line)
 
         return "\n".join(fixed_lines)

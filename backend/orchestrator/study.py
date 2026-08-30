@@ -308,11 +308,31 @@ class StudyPipeline:
         # 1. Replace raw unicode minus signs
         text = text.replace("−", "-")
 
-        # 2. Fix double escaped LaTeX commands in text (\\command -> \command)
+        # 2. Normalize bracket delimiters: \[ ... \] -> $$ ... $$ and \( ... \) -> $ ... $
+        text = re.sub(r"\\\[\s*([\s\S]*?)\s*\\\]", r"$$\n\1\n$$", text)
+        text = re.sub(r"\\\(\s*([\s\S]*?)\s*\\\)", r"$\1$", text)
+
+        # 3. Normalize LaTeX environment blocks to KaTeX-compatible forms
+        text = re.sub(r"\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}", r"$$\n\1\n$$", text)
+        text = re.sub(r"\\begin\{displaymath\}([\s\S]*?)\\end\{displaymath\}", r"$$\n\1\n$$", text)
+        text = re.sub(r"\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}", r"$$\n\\begin{aligned}\1\\end{aligned}\n$$", text)
+        text = re.sub(r"\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}", r"$$\n\\begin{gathered}\1\\end{gathered}\n$$", text)
+
+        # 4. Clean double-nested environments inside $$ ... $$
+        text = re.sub(r"\$\$\s*\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}\s*\$\$", r"$$\n\1\n$$", text)
+        text = re.sub(r"\$\$\s*\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}\s*\$\$", r"$$\n\\begin{aligned}\1\\end{aligned}\n$$", text)
+        text = re.sub(r"\$\$\s*\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}\s*\$\$", r"$$\n\\begin{gathered}\1\\end{gathered}\n$$", text)
+
+        # 5. Fix double escaped LaTeX commands in text (\\command -> \command)
         text = re.sub(r"\\\\([a-zA-Z]+)", r"\\\1", text)
 
-        # 3. Fix cases where an opening $$ is on its own line and formula starts on next line
-        text = re.sub(r"\$\$\s*\n\s*([^$]+?)\s*\n\s*\$\$", r"$$\n\1\n$$", text)
+        # 6. Clean consecutive blank lines inside $$ blocks to prevent KaTeX paragraph-break errors
+        def _clean_display_math(match):
+            inner = match.group(1).strip()
+            inner = re.sub(r"\n\s*\n+", r"\n", inner)
+            return f"$$\n{inner}\n$$"
+
+        text = re.sub(r"\$\$([\s\S]*?)\$\$", _clean_display_math, text)
 
         return text
 
