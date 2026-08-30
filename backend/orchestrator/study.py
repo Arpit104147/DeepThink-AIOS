@@ -308,6 +308,9 @@ class StudyPipeline:
         # 1. Replace raw unicode minus signs
         text = text.replace("−", "-")
 
+        # 1b. Convert lone $ on its own line to $$ (small models use single $ for display math)
+        text = re.sub(r"(?m)^\$\s*$", "$$", text)
+
         # 2. Normalize bracket delimiters: \[ ... \] -> $$ ... $$ and \( ... \) -> $ ... $
         text = re.sub(r"\\\[\s*([\s\S]*?)\s*\\\]", r"$$\n\1\n$$", text)
         text = re.sub(r"\\\(\s*([\s\S]*?)\s*\\\)", r"$\1$", text)

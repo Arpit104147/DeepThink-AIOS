@@ -191,8 +191,28 @@ def test_latex_sanitizer():
     clean_s = StudyPipeline._sanitize_study_latex(raw_test_math)
 
     assert "$$\nand the curvature scalar is" not in clean_r
+
+    # Test _detect_reasoning_category
+    assert ReasoningPipeline._detect_reasoning_category("Derive the Schwarzschild metric from Einstein field equations") == "gr"
+    assert ReasoningPipeline._detect_reasoning_category("Compute the exact integral of x^3/(e^x-1) from 0 to infinity") == "analysis"
+    assert ReasoningPipeline._detect_reasoning_category("Derive the energy spectrum of the quantum harmonic oscillator") == "quantum"
+    assert ReasoningPipeline._detect_reasoning_category("Prove the Cayley-Hamilton theorem for square matrices") == "general"
+
+    # Test single $ display math fix
+    single_dollar = "$\nds^2 = -c^2 dt^2\n$"
+    fixed = ReasoningPipeline._sanitize_reasoning_latex(single_dollar)
+    assert "$$" in fixed
+
+    # Test environment normalization
+    align_env = "\\begin{align*}\n a &= b \\\\\n c &= d\n\\end{align*}"
+    fixed_align = ReasoningPipeline._sanitize_reasoning_latex(align_env)
+    assert "\\begin{aligned}" in fixed_align and "$$" in fixed_align
+
     print("  ✅ Reasoning Pipeline KaTeX Sanitizer Verified")
     print("  ✅ Study Pipeline KaTeX Sanitizer Verified")
+    print("  ✅ Category Detection (GR / Analysis / Quantum / General) Verified")
+    print("  ✅ Single-$ Display Math Fix Verified")
+    print("  ✅ LaTeX Environment Normalization Verified")
     return []
 
 def test_frontend_build():

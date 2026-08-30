@@ -48,59 +48,46 @@ class ReasoningPipeline:
         ds_display = orchestrator._get_display_model_name(reasoning_key)
 
         if not use_playground:
-            if status_callback:
-                status_callback(f"⚡ Reasoning mode: Theoretical Derivation & Invariant Validation with {ds_display}...", "info", reasoning_key, 20)
+            # ── Detect problem category to use appropriate system prompts ──
+            category = ReasoningPipeline._detect_reasoning_category(prompt)
 
-            # Stage 1: Foundational Framework, Symmetry Ansatz & Field Equations
-            stage1_sys = (
-                "You are a Distinguished Theoretical Physicist and Professor of General Relativity.\n"
-                "Your task is to author Part 1 of a rigorous, publication-grade academic derivation.\n\n"
-                + ReasoningPipeline.LATEX_RULES + "\n\n"
-                "STRUCTURAL REQUIREMENTS FOR PART 1:\n"
-                "1. Define the physical postulates, coordinate system $(ct, r, \\theta, \\phi)$, and symmetry principles (spherical symmetry, static spacetime, time-reversal invariance).\n"
-                "2. Formulate the general metric tensor ansatz $g_{\\mu\\nu}$ with line element:\n"
-                "   $$ds^2 = -e^{\\nu(r)} c^2 dt^2 + e^{\\lambda(r)} dr^2 + r^2 (d\\theta^2 + \\sin^2\\theta d\\phi^2)$$\n"
-                "3. State the governing vacuum field equations $R_{\\mu\\nu} = 0$ and metric compatibility condition $\\nabla_\\sigma g_{\\mu\\nu} = 0$."
-            )
-            stage1_p = (
-                f"THEORETICAL DERIVATION REQUEST:\n{prompt}\n\n"
-                "INSTRUCTION: Write Part 1 (Physical Postulates, Symmetry Principles, Metric Line Element Ansatz, and Field Equations) with complete display KaTeX equations ($$ ... $$)."
+            if status_callback:
+                cat_label = {"gr": "Theoretical Derivation & Invariant Validation",
+                             "analysis": "Analytical Integration & Special Functions",
+                             "quantum": "Quantum Eigenvalue Derivation",
+                             "general": "Rigorous Mathematical Derivation"}.get(category, "Rigorous Mathematical Derivation")
+                status_callback(f"⚡ Reasoning mode: {cat_label} with {ds_display}...", "info", reasoning_key, 20)
+
+            stage1_sys, stage1_p, stage2_sys, stage2_p = ReasoningPipeline._build_stage_prompts(
+                category, prompt, ReasoningPipeline.LATEX_RULES
             )
             raw_stage1 = orchestrator._call_model(ds_llm, stage1_p, max_tokens=reasoning_gen_tokens, temperature=reasoning_temp, system_prompt=stage1_sys)
             clean_stage1 = orchestrator._strip_thinking(raw_stage1)
 
             if status_callback:
-                status_callback(f"⚡ Reasoning mode: Algebraic Curvature Tensors & Kretschmann Invariant with {ds_display}...", "info", reasoning_key, 60)
+                cat_label2 = {"gr": "Algebraic Curvature Tensors & Kretschmann Invariant",
+                              "analysis": "Series Evaluation & Closed-Form Result",
+                              "quantum": "Operator Algebra & Eigenspectrum",
+                              "general": "Step-by-Step Algebraic Derivation"}.get(category, "Step-by-Step Algebraic Derivation")
+                status_callback(f"⚡ Reasoning mode: {cat_label2} with {ds_display}...", "info", reasoning_key, 60)
 
-            # Stage 2: Step-by-Step Curvature Tensors, Newtonian Matching & Kretschmann Scalar Invariant
-            stage2_sys = (
-                "You are a Distinguished Theoretical Physicist and Professor of General Relativity.\n"
-                "Your task is to author Part 2 of the mathematical derivation with zero algebraic shortcuts.\n\n"
-                + ReasoningPipeline.LATEX_RULES + "\n\n"
-                "STRUCTURAL REQUIREMENTS FOR PART 2:\n"
-                "1. Explicitly compute all 9 non-zero Christoffel symbols $\\Gamma^\\mu_{\\alpha\\beta}$ with step-by-step metric derivatives.\n"
-                "2. Explicitly compute the non-zero Ricci curvature tensor components ($R_{tt}, R_{rr}, R_{\\theta\\theta}, R_{\\phi\\phi}$).\n"
-                "3. Set up the differential equations $R_{\\mu\\nu} = 0$ and show that $e^{-\\nu} R_{tt} + e^{-\\lambda} R_{rr} = 0 \\implies \\nu'(r) + \\lambda'(r) = 0 \\implies \\nu(r) = -\\lambda(r)$.\n"
-                "4. Integrate the $R_{\\theta\\theta} = 0$ equation to obtain $e^{\\nu(r)} = 1 - \\frac{C}{r}$.\n"
-                "5. Boundary Condition 1 — Newtonian Weak-Field Limit ($r \\to \\infty$): Match to Newtonian potential $\\Phi = -\\frac{GM}{r}$ using $g_{00} \\approx -(1 + 2\\Phi/c^2)$ to fix integration constant $C = \\frac{2GM}{c^2} = r_s$.\n"
-                "6. Boundary Condition 2 — Flat Spacetime Limit ($M \\to 0$): Prove metric reduces identically to Minkowski spacetime $ds^2 = -c^2 dt^2 + dr^2 + r^2 d\\Omega^2$.\n"
-                "7. Kretschmann Curvature Scalar Invariant Proof:\n"
-                "   Compute $K = R^{\\alpha\\beta\\gamma\\delta} R_{\\alpha\\beta\\gamma\\delta} = \\frac{48 G^2 M^2}{c^4 r^6} = \\frac{12 r_s^2}{r^6}$.\n"
-                "   Prove mathematically that $\\lim_{r \\to r_s} K = \\frac{12}{r_s^4} < \\infty$ (removable coordinate singularity via Eddington-Finkelstein/Kruskal-Szekeres coordinates), whereas $\\lim_{r \\to 0} K = \\infty$ (true physical curvature singularity).\n"
-                "8. Conclude with the complete final metric in a prominent summary theorem box."
-            )
-            stage2_p = (
-                f"ORIGINAL DERIVATION REQUEST:\n{prompt}\n\n"
-                f"PART 1 FOUNDATION:\n{clean_stage1[:1800]}\n\n"
-                "INSTRUCTION: Write Part 2 (Step-by-Step Christoffel Symbols, Ricci Tensor, Differential Equations, Newtonian Matching, Flat-Space Limit, and Kretschmann Invariant Proof) with complete display KaTeX equations ($$ ... $$)."
-            )
+            # Inject Part 1 context into Stage 2 prompt
+            stage2_p = stage2_p.replace("{STAGE1_CONTEXT}", clean_stage1[:1800])
             raw_stage2 = orchestrator._call_model(ds_llm, stage2_p, max_tokens=reasoning_gen_tokens, temperature=reasoning_temp, system_prompt=stage2_sys)
             clean_stage2 = orchestrator._strip_thinking(raw_stage2)
 
             full_derivation = f"{clean_stage1}\n\n{clean_stage2}"
-            
-            # Check if output is missing LaTeX formatting or corrupted by small quantized model
+
+            # ── Comprehensive corruption detection ──
             has_display_latex = "$$" in full_derivation or "\\[" in full_derivation
+            # Count $1$ placeholder tokens (small quantized models emit these)
+            placeholder_count = len(re.findall(r"\$1\$", full_derivation))
+            # Detect topic mismatch: GR content when question is about integrals/analysis
+            topic_mismatch = (
+                category != "gr"
+                and any(k in full_derivation.lower() for k in ["christoffel", "kretschmann", "schwarzschild", "ricci tensor", "metric tensor ansatz"])
+                and not any(k in prompt.lower() for k in ["schwarzschild", "christoffel", "kretschmann", "metric", "ricci"])
+            )
             is_corrupted = (
                 bool(re.search(r"([a-z0-9\(\)\=\+\-\^]{10,})\.\1", full_derivation, re.I))
                 or ("gtt=" in full_derivation and "$$" not in full_derivation)
@@ -110,6 +97,8 @@ class ReasoningPipeline:
                 or ("R_{tt}" in full_derivation and "$$" not in full_derivation)
                 or (any(k in prompt.lower() for k in ["schwarzschild", "christoffel", "kretschmann"]) and "\\Gamma^t_{tr}" not in full_derivation)
                 or len(full_derivation.strip()) < 300
+                or placeholder_count >= 3
+                or topic_mismatch
             )
 
             if not has_display_latex or is_corrupted:
@@ -161,6 +150,170 @@ class ReasoningPipeline:
                 parts.append(f"\n```\n{str(pg_out).strip()[:1500]}\n```")
 
         return "".join(parts)
+
+    @staticmethod
+    def _detect_reasoning_category(prompt: str) -> str:
+        """Classify the reasoning problem to select appropriate stage prompts."""
+        p = prompt.lower()
+        if any(k in p for k in ["schwarzschild", "einstein field", "christoffel", "kretschmann",
+                                 "general relativity", "r_uv", "r_{uv}", "metric tensor",
+                                 "spacetime metric", "riemann tensor", "geodesic equation",
+                                 "eddington", "penrose", "hawking radiation"]):
+            return "gr"
+        if any(k in p for k in ["integral", "integrate", "\\int", "zeta function", "gamma function",
+                                 "series expansion", "convergence", "bose-einstein", "bose einstein",
+                                 "planck radiation", "e^x", "x^3", "x^2", "definite integral",
+                                 "improper integral", "riemann zeta", "euler sum", "bernoulli",
+                                 "fourier", "laplace transform", "residue theorem", "contour integral"]):
+            return "analysis"
+        if any(k in p for k in ["quantum", "schrödinger", "schrodinger", "hamiltonian",
+                                 "wave function", "wavefunction", "eigenvalue", "eigenstate",
+                                 "harmonic oscillator", "ladder operator", "creation operator",
+                                 "annihilation operator", "commutator", "spin", "angular momentum",
+                                 "dirac equation", "pauli matrix"]):
+            return "quantum"
+        return "general"
+
+    @staticmethod
+    def _build_stage_prompts(category: str, prompt: str, latex_rules: str):
+        """Build category-appropriate Stage 1 and Stage 2 system + user prompts."""
+
+        if category == "gr":
+            s1_sys = (
+                "You are a Distinguished Theoretical Physicist and Professor of General Relativity.\n"
+                "Your task is to author Part 1 of a rigorous, publication-grade academic derivation.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 1:\n"
+                "1. Define the physical postulates, coordinate system $(ct, r, \\theta, \\phi)$, and symmetry principles (spherical symmetry, static spacetime, time-reversal invariance).\n"
+                "2. Formulate the general metric tensor ansatz $g_{\\mu\\nu}$ with line element:\n"
+                "   $$ds^2 = -e^{\\nu(r)} c^2 dt^2 + e^{\\lambda(r)} dr^2 + r^2 (d\\theta^2 + \\sin^2\\theta d\\phi^2)$$\n"
+                "3. State the governing vacuum field equations $R_{\\mu\\nu} = 0$ and metric compatibility condition $\\nabla_\\sigma g_{\\mu\\nu} = 0$."
+            )
+            s1_p = (
+                f"THEORETICAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "INSTRUCTION: Write Part 1 (Physical Postulates, Symmetry Principles, Metric Line Element Ansatz, and Field Equations) with complete display KaTeX equations ($$ ... $$)."
+            )
+            s2_sys = (
+                "You are a Distinguished Theoretical Physicist and Professor of General Relativity.\n"
+                "Your task is to author Part 2 of the mathematical derivation with zero algebraic shortcuts.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 2:\n"
+                "1. Explicitly compute all 9 non-zero Christoffel symbols $\\Gamma^\\mu_{\\alpha\\beta}$ with step-by-step metric derivatives.\n"
+                "2. Explicitly compute the non-zero Ricci curvature tensor components ($R_{tt}, R_{rr}, R_{\\theta\\theta}, R_{\\phi\\phi}$).\n"
+                "3. Set up the differential equations $R_{\\mu\\nu} = 0$ and show that $e^{-\\nu} R_{tt} + e^{-\\lambda} R_{rr} = 0 \\implies \\nu'(r) + \\lambda'(r) = 0 \\implies \\nu(r) = -\\lambda(r)$.\n"
+                "4. Integrate the $R_{\\theta\\theta} = 0$ equation to obtain $e^{\\nu(r)} = 1 - \\frac{C}{r}$.\n"
+                "5. Boundary Condition 1 — Newtonian Weak-Field Limit ($r \\to \\infty$): Match to Newtonian potential $\\Phi = -\\frac{GM}{r}$ using $g_{00} \\approx -(1 + 2\\Phi/c^2)$ to fix integration constant $C = \\frac{2GM}{c^2} = r_s$.\n"
+                "6. Boundary Condition 2 — Flat Spacetime Limit ($M \\to 0$): Prove metric reduces identically to Minkowski spacetime $ds^2 = -c^2 dt^2 + dr^2 + r^2 d\\Omega^2$.\n"
+                "7. Kretschmann Curvature Scalar Invariant Proof:\n"
+                "   Compute $K = R^{\\alpha\\beta\\gamma\\delta} R_{\\alpha\\beta\\gamma\\delta} = \\frac{48 G^2 M^2}{c^4 r^6} = \\frac{12 r_s^2}{r^6}$.\n"
+                "   Prove $\\lim_{r \\to r_s} K = \\frac{12}{r_s^4} < \\infty$ (removable coordinate singularity), whereas $\\lim_{r \\to 0} K = \\infty$ (true curvature singularity).\n"
+                "8. Conclude with the complete final metric in a prominent summary theorem box."
+            )
+            s2_p = (
+                f"ORIGINAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "PART 1 FOUNDATION:\n{STAGE1_CONTEXT}\n\n"
+                "INSTRUCTION: Write Part 2 (Step-by-Step Christoffel Symbols, Ricci Tensor, Differential Equations, Newtonian Matching, Flat-Space Limit, and Kretschmann Invariant Proof) with complete display KaTeX equations ($$ ... $$)."
+            )
+
+        elif category == "analysis":
+            s1_sys = (
+                "You are a Distinguished Professor of Pure Mathematics and Mathematical Analysis.\n"
+                "Your task is to author Part 1 of a rigorous, publication-grade analytical derivation.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 1:\n"
+                "1. State the exact integral, series, or analytical problem to be evaluated.\n"
+                "2. Identify convergence conditions and the domain of validity.\n"
+                "3. Expand the integrand or summand using appropriate series representations (geometric series, power series, Taylor expansion).\n"
+                "4. Justify all interchanges of summation and integration via the monotone convergence theorem, Fubini-Tonelli theorem, or dominated convergence theorem.\n"
+                "5. Show ALL intermediate algebraic manipulations in display KaTeX equations ($$ ... $$)."
+            )
+            s1_p = (
+                f"ANALYTICAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "INSTRUCTION: Write Part 1 (Problem Formulation, Integrand/Summand Expansion, and Convergence Justification) with complete display KaTeX equations ($$ ... $$)."
+            )
+            s2_sys = (
+                "You are a Distinguished Professor of Pure Mathematics and Mathematical Analysis.\n"
+                "Your task is to author Part 2 of the analytical derivation with zero algebraic shortcuts.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 2:\n"
+                "1. Evaluate each term of the series or integral using the Euler Gamma function $\\Gamma(s) = \\int_0^\\infty u^{s-1} e^{-u} du$.\n"
+                "2. Express the result as a product of special functions: $\\Gamma(s) \\cdot \\zeta(s)$ or equivalent closed form.\n"
+                "3. Compute the exact values of $\\Gamma(s)$ and $\\zeta(s)$ at the required arguments using Euler's formulas and Bernoulli numbers.\n"
+                "4. State the exact closed-form result in a prominent boxed theorem: $$\\boxed{\\text{Result}}$$\n"
+                "5. Provide a numerical verification (decimal approximation) of the result.\n"
+                "6. Include a SymPy CAS verification script in a Python code block."
+            )
+            s2_p = (
+                f"ORIGINAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "PART 1 FOUNDATION:\n{STAGE1_CONTEXT}\n\n"
+                "INSTRUCTION: Write Part 2 (Term-by-Term Evaluation via Gamma Function, Connection to Riemann Zeta Function, Exact Closed-Form Result, Numerical Verification, and SymPy Verification Script) with complete display KaTeX equations ($$ ... $$)."
+            )
+
+        elif category == "quantum":
+            s1_sys = (
+                "You are a Distinguished Professor of Theoretical Physics and Quantum Mechanics.\n"
+                "Your task is to author Part 1 of a rigorous, publication-grade quantum mechanical derivation.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 1:\n"
+                "1. Define the physical system, Hilbert space, and relevant operators.\n"
+                "2. Write the Hamiltonian $\\hat{H}$ in terms of fundamental operators.\n"
+                "3. State the time-independent Schrödinger equation $\\hat{H}|\\psi\\rangle = E|\\psi\\rangle$.\n"
+                "4. Define ladder/creation/annihilation operators if applicable.\n"
+                "5. Show ALL commutator algebra in display KaTeX equations ($$ ... $$)."
+            )
+            s1_p = (
+                f"QUANTUM MECHANICS DERIVATION REQUEST:\n{prompt}\n\n"
+                "INSTRUCTION: Write Part 1 (System Definition, Hamiltonian, Operator Algebra) with complete display KaTeX equations ($$ ... $$)."
+            )
+            s2_sys = (
+                "You are a Distinguished Professor of Theoretical Physics and Quantum Mechanics.\n"
+                "Your task is to author Part 2 of the quantum derivation with zero algebraic shortcuts.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 2:\n"
+                "1. Solve the eigenvalue problem step by step.\n"
+                "2. Derive the complete energy spectrum and normalized eigenstates.\n"
+                "3. Verify orthonormality and completeness.\n"
+                "4. State the final result in a prominent boxed theorem.\n"
+                "5. Include position-space wavefunctions if applicable."
+            )
+            s2_p = (
+                f"ORIGINAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "PART 1 FOUNDATION:\n{STAGE1_CONTEXT}\n\n"
+                "INSTRUCTION: Write Part 2 (Eigenvalue Solution, Energy Spectrum, Normalized Wavefunctions) with complete display KaTeX equations ($$ ... $$)."
+            )
+
+        else:  # general
+            s1_sys = (
+                "You are a Distinguished Professor of Mathematics.\n"
+                "Your task is to author Part 1 of a rigorous, publication-grade mathematical derivation.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 1:\n"
+                "1. State the problem formally with precise mathematical definitions.\n"
+                "2. Identify the key theorems, lemmas, and identities that will be needed.\n"
+                "3. Set up the foundational framework and notation.\n"
+                "4. Show ALL intermediate steps in display KaTeX equations ($$ ... $$)."
+            )
+            s1_p = (
+                f"MATHEMATICAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "INSTRUCTION: Write Part 1 (Problem Formulation, Key Definitions, and Foundational Framework) with complete display KaTeX equations ($$ ... $$)."
+            )
+            s2_sys = (
+                "You are a Distinguished Professor of Mathematics.\n"
+                "Your task is to author Part 2 of the mathematical derivation with zero algebraic shortcuts.\n\n"
+                + latex_rules + "\n\n"
+                "STRUCTURAL REQUIREMENTS FOR PART 2:\n"
+                "1. Execute the complete step-by-step derivation.\n"
+                "2. Justify every algebraic manipulation with the relevant theorem or identity.\n"
+                "3. State the final result in a prominent boxed theorem: $$\\boxed{\\text{Result}}$$\n"
+                "4. Verify the result independently (numerical check, limiting case, or alternative method)."
+            )
+            s2_p = (
+                f"ORIGINAL DERIVATION REQUEST:\n{prompt}\n\n"
+                "PART 1 FOUNDATION:\n{STAGE1_CONTEXT}\n\n"
+                "INSTRUCTION: Write Part 2 (Complete Step-by-Step Derivation, Final Boxed Result, and Independent Verification) with complete display KaTeX equations ($$ ... $$)."
+            )
+
+        return s1_sys, s1_p, s2_sys, s2_p
 
     @staticmethod
     def _synthesize_verified_derivation(prompt: str, raw_text: str) -> str:
@@ -405,6 +558,9 @@ print("Status: 100% Mathematically Verified via SymPy CAS")
 
         # 1. Replace raw unicode minus signs in math context
         text = text.replace("−", "-")
+
+        # 1b. Convert lone $ on its own line to $$ (small models use single $ for display math)
+        text = re.sub(r"(?m)^\$\s*$", "$$", text)
 
         # 2. Normalize bracket delimiters: \[ ... \] -> $$ ... $$ and \( ... \) -> $ ... $
         text = re.sub(r"\\\[\s*([\s\S]*?)\s*\\\]", r"$$\n\1\n$$", text)
