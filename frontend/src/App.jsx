@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Menu } from "lucide-react";
 import "./index.css";
 
 import Sidebar from "./components/layout/Sidebar";
@@ -188,7 +189,7 @@ export default function App() {
       <div className="main">
         {!sidebarOpen && (
           <button className="floating-open-btn" onClick={() => setSidebarOpen(true)}>
-            ☰
+            <Menu size={18} />
           </button>
         )}
 
@@ -199,6 +200,10 @@ export default function App() {
             currentLogs={currentLogs}
             currentStream={currentStream}
             displayText={displayText}
+            onStarterClick={(text) => {
+              setPrompt(text);
+              setTimeout(() => handleSend(text, null, setPrompt, setAttachedImage, textareaRef), 50);
+            }}
           />
         </div>
 

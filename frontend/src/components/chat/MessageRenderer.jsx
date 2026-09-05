@@ -1,9 +1,29 @@
 import React, { useState, useEffect } from "react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { Clipboard, ClipboardCheck, ChevronDown } from "lucide-react";
 import useKatexReady from "../../hooks/useKatexReady";
 import { splitSpecialSegments, parseAndRenderSegment } from "../../utils/markdownParser";
 import PredictiveMetricsCard from "../visualizations/PredictiveMetrics";
 import PlotlyChart from "../visualizations/PlotlyChart";
 import ArtifactSandbox from "../visualizations/ArtifactSandbox";
+
+const syntaxThemeOverrides = {
+  ...vscDarkPlus,
+  'pre[class*="language-"]': {
+    ...vscDarkPlus['pre[class*="language-"]'],
+    background: "#1a1a2e",
+    borderRadius: "0 0 8px 8px",
+    margin: 0,
+    fontSize: "13px",
+    lineHeight: "1.6",
+  },
+  'code[class*="language-"]': {
+    ...vscDarkPlus['code[class*="language-"]'],
+    background: "none",
+    fontSize: "13px",
+  },
+};
 
 /**
  * @component CodeBlock
@@ -18,6 +38,7 @@ const CodeBlock = ({ lang, code }) => {
   };
 
   const displayLang = (lang || "code").toUpperCase();
+  const highlightLang = (lang || "text").toLowerCase();
 
   return (
     <div className="code-block-wrapper">
@@ -27,7 +48,15 @@ const CodeBlock = ({ lang, code }) => {
           {copied ? "Copied! ✓" : "Copy"}
         </button>
       </div>
-      <pre><code>{code}</code></pre>
+      <SyntaxHighlighter
+        language={highlightLang}
+        style={syntaxThemeOverrides}
+        showLineNumbers={code.split("\n").length > 5}
+        wrapLongLines={true}
+        customStyle={{ margin: 0 }}
+      >
+        {code}
+      </SyntaxHighlighter>
     </div>
   );
 };
@@ -37,16 +66,18 @@ const CodeBlock = ({ lang, code }) => {
  * Renders AI response text with support for:
  * - Markdown (headings, lists, bold, code blocks)
  * - LaTeX math (block and inline via KaTeX)
+ * - Syntax-highlighted code blocks
  * - Embedded Plotly charts
  * - Embedded HTML artifact sandboxes
  * - Predictive metrics cards
- * - Multi-volume textbook quick navigation
+ * - Generic heading-based section navigation
  * - Quick copy full response
  */
 const MessageRenderer = ({ text, animate = false }) => {
   useKatexReady();
   const [displayedText, setDisplayedText] = useState(animate ? "" : text);
   const [copiedFull, setCopiedFull] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     if (!animate) {
@@ -86,7 +117,9 @@ const MessageRenderer = ({ text, animate = false }) => {
 
   if (!displayedText) return null;
 
-  const isMultiVolume = displayedText.includes("Volume I:") && displayedText.includes("Volume II:");
+  // Extract ## and ### headings for generic section navigation
+  const headingMatches = displayedText.match(/^#{2,3}\s+.+$/gm) || [];
+  const hasNavigation = headingMatches.length >= 3 && displayedText.length > 500;
 
   const handleCopyFull = () => {
     navigator.clipboard.writeText(displayedText);
@@ -94,80 +127,58 @@ const MessageRenderer = ({ text, animate = false }) => {
     setTimeout(() => setCopiedFull(false), 2000);
   };
 
+  const scrollToHeading = (headingText) => {
+    const cleanText = headingText.replace(/^#{2,3}\s+/, "").trim();
+    const headings = document.querySelectorAll(".message-renderer .md-content h2, .message-renderer .md-content h3");
+    for (const el of headings) {
+      if (el.textContent.trim() === cleanText) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        setNavOpen(false);
+        break;
+      }
+    }
+  };
+
   const segments = splitSpecialSegments(displayedText);
 
   return (
     <div className="message-renderer">
-      {/* Response Action Bar for long academic/computational outputs */}
+      {/* Response Action Bar */}
       {displayedText.length > 500 && (
-        <div style={{
-          display: "flex",
-          justifyContent: isMultiVolume ? "space-between" : "flex-end",
-          alignItems: "center",
-          marginBottom: "12px",
-          paddingBottom: "8px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          flexWrap: "wrap",
-          gap: "8px"
-        }}>
-          {isMultiVolume && (
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "11px", color: "var(--color-text-muted, #888)", alignSelf: "center", marginRight: "4px" }}>
-                Jump to:
-              </span>
+        <div className="response-action-bar">
+          {hasNavigation && (
+            <div className="section-nav-wrap">
               <button
-                className="study-nav-btn"
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: "6px",
-                  fontSize: "11px",
-                  background: "rgba(59, 130, 246, 0.15)",
-                  color: "#60a5fa",
-                  border: "1px solid rgba(59, 130, 246, 0.3)",
-                  cursor: "pointer"
-                }}
-                onClick={() => {
-                  const el = document.querySelector(".message-renderer h2, .message-renderer h1");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }}
+                className="section-nav-toggle"
+                onClick={() => setNavOpen(!navOpen)}
               >
-                📚 Volume I
+                <ChevronDown size={14} style={{ transform: navOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                Jump to Section
               </button>
-              <button
-                className="study-nav-btn"
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: "6px",
-                  fontSize: "11px",
-                  background: "rgba(16, 185, 129, 0.15)",
-                  color: "#34d399",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
-                  cursor: "pointer"
-                }}
-                onClick={() => {
-                  const el = document.querySelectorAll(".message-renderer h2");
-                  if (el && el[1]) el[1].scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                📝 Volume II (Exam)
-              </button>
+              {navOpen && (
+                <div className="section-nav-dropdown">
+                  {headingMatches.map((h, i) => (
+                    <button
+                      key={i}
+                      className="section-nav-item"
+                      onClick={() => scrollToHeading(h)}
+                    >
+                      {h.replace(/^#{2,3}\s+/, "")}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <button
             className={`copy-full-btn ${copiedFull ? "copied" : ""}`}
-            style={{
-              padding: "4px 10px",
-              borderRadius: "6px",
-              fontSize: "11px",
-              background: copiedFull ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.06)",
-              color: copiedFull ? "#34d399" : "var(--color-text-muted, #aaa)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              cursor: "pointer",
-              transition: "all 0.2s ease"
-            }}
             onClick={handleCopyFull}
           >
-            {copiedFull ? "Copied Markdown ✓" : "📋 Copy Full Output"}
+            {copiedFull ? (
+              <><ClipboardCheck size={13} /> Copied Markdown</>
+            ) : (
+              <><Clipboard size={13} /> Copy Full Output</>
+            )}
           </button>
         </div>
       )}

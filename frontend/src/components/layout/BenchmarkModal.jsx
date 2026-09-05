@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Zap, X, Play, Square, Download, Copy, Check, Loader } from "lucide-react";
+import Modal from "../common/Modal";
 
 /**
  * @component BenchmarkModal
@@ -158,47 +160,32 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
     deepthink_aios: 91.5
   };
 
-  if (!open) return null;
-
   return (
-    <div className="modal-backdrop" onClick={() => setOpen(false)}>
-      <div className="modal-content benchmark-modal" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="benchmark-header">
-          <div className="benchmark-header-title">
-            <span className="benchmark-icon">⚡</span>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <h2>DeepThink AIOS Benchmark Studio</h2>
-                {status.active && (
-                  <span
-                    style={{
-                      background: "rgba(239, 68, 68, 0.15)",
-                      border: "1px solid rgba(239, 68, 68, 0.4)",
-                      color: "#f87171",
-                      padding: "2px 8px",
-                      borderRadius: "12px",
-                      fontSize: "0.72rem",
-                      fontWeight: "700",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "5px"
-                    }}
-                  >
-                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444", display: "inline-block", animation: "pulse 1.5s infinite" }}></span>
-                    LIVE EVALUATION
-                  </span>
-                )}
-              </div>
-              <p className="benchmark-subtitle">
-                Parallel Hardware Telemetry, Real-time Code Execution & Published Baselines
-              </p>
-            </div>
-          </div>
-          <button className="modal-close-btn" onClick={() => setOpen(false)}>
-            ✕
-          </button>
-        </div>
+    <Modal open={open} onClose={() => setOpen(false)} title="DeepThink AIOS Benchmark Studio" maxWidth="960px">
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "18px" }}>
+        <p className="benchmark-subtitle" style={{ margin: 0 }}>
+          Parallel Hardware Telemetry, Real-time Code Execution & Published Baselines
+        </p>
+        {status.active && (
+          <span
+            style={{
+              background: "rgba(239, 68, 68, 0.15)",
+              border: "1px solid rgba(239, 68, 68, 0.4)",
+              color: "#f87171",
+              padding: "2px 8px",
+              borderRadius: "12px",
+              fontSize: "0.72rem",
+              fontWeight: "700",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px"
+            }}
+          >
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444", display: "inline-block", animation: "pulse 1.5s infinite" }}></span>
+            LIVE EVALUATION
+          </span>
+        )}
+      </div>
 
         {/* Category Selector Pills */}
         <div style={{ marginBottom: "18px" }}>
@@ -263,7 +250,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
                   onClick={() => handleStart(activeCategory)}
                   disabled={loading}
                 >
-                  {loading ? "Starting..." : `▶ Run ${activeCategory.split(" ")[0]}`}
+                  {loading ? "Starting..." : <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Play size={13} /> Run {activeCategory.split(" ")[0]}</span>}
                 </button>
                 <button
                   className="btn-run-all-benchmark"
@@ -282,12 +269,12 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
                     transition: "transform 0.2s ease, box-shadow 0.2s ease"
                   }}
                 >
-                  ⚡ Run All 11 Suites
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Zap size={13} /> Run All 11 Suites</span>
                 </button>
               </>
             ) : (
               <button className="btn-stop-benchmark" onClick={handleStop}>
-                ⏹ Cancel Evaluation
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Square size={13} /> Cancel Evaluation</span>
               </button>
             )}
 
@@ -304,7 +291,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
               }}
               title="Export complete benchmark history & logs as JSON"
             >
-              📥 Export Report
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={13} /> Export Report</span>
             </button>
           </div>
         </div>
@@ -498,7 +485,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
                   cursor: "pointer"
                 }}
               >
-                {copiedLogs ? "✅ Copied" : "📋 Copy Logs"}
+                {copiedLogs ? <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={13} /> Copied</span> : <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Copy size={13} /> Copy Logs</span>}
               </button>
             </div>
           </div>
@@ -527,8 +514,7 @@ export default function BenchmarkModal({ open, setOpen, serverUrl }) {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

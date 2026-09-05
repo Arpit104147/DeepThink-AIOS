@@ -1,4 +1,5 @@
 import React from "react";
+import { Menu, Plus, Trash2, Box, BarChart3, Loader, Zap, MessageSquare, X, Settings } from "lucide-react";
 
 /**
  * @component Sidebar
@@ -25,7 +26,9 @@ const Sidebar = ({
   return (
     <div className={`sidebar ${!sidebarOpen ? "closed" : ""}`}>
       <div className="sidebar-top">
-        <button className="sidebar-toggle" onClick={() => setSidebarOpen(false)}>☰</button>
+        <button className="sidebar-toggle" onClick={() => setSidebarOpen(false)}>
+          <Menu size={18} />
+        </button>
         {/* Connection Status Badge */}
         <div className={`connection-badge ${isConnected ? "connected" : "disconnected"}`}>
           <span className="connection-dot"></span>
@@ -34,18 +37,18 @@ const Sidebar = ({
       </div>
 
       <button className="new-chat-btn" onClick={createNewChat}>
-        <span>＋</span> New chat
+        <Plus size={16} /> New chat
       </button>
 
       <div className="sidebar-nav">
         <button className="nav-item" onClick={handleOffload}>
-          <span className="nav-icon">🧹</span> Offload Memory
+          <span className="nav-icon"><Trash2 size={15} /></span> Offload Memory
         </button>
         <button className="nav-item" onClick={() => setModelHubOpen(true)}>
-          <span className="nav-icon">📦</span> Model Hub
+          <span className="nav-icon"><Box size={15} /></span> Model Hub
         </button>
         <button className="nav-item" onClick={() => setBenchmarkOpen(true)}>
-          <span className="nav-icon">📊</span> Benchmark Studio
+          <span className="nav-icon"><BarChart3 size={15} /></span> Benchmark Studio
         </button>
         <button
           className="nav-item"
@@ -59,7 +62,7 @@ const Sidebar = ({
                 : "Load all models into System RAM"
           }
         >
-          <span className="nav-icon">{isPreloading ? "⏳" : "⚡"}</span>
+          <span className="nav-icon">{isPreloading ? <Loader size={15} className="spin" /> : <Zap size={15} />}</span>
           {isPreloading ? "Loading Swarm..." : "Load All Models"}
         </button>
       </div>
@@ -72,8 +75,10 @@ const Sidebar = ({
             className={`history-item ${s.id === currentSessionId ? "active" : ""}`}
             onClick={() => loadSession(s.id)}
           >
-            <span className="history-item-title">💬 {s.title}</span>
-            <button className="delete-btn" onClick={(e) => deleteSession(s.id, e)}>✕</button>
+            <span className="history-item-title"><MessageSquare size={13} /> {s.title}</span>
+            <button className="delete-btn" onClick={(e) => deleteSession(s.id, e)}>
+              <X size={14} />
+            </button>
           </div>
         ))}
         {sessions.length === 0 && (
@@ -90,7 +95,7 @@ const Sidebar = ({
             onClick={(e) => { e.stopPropagation(); setSettingsOpen(true); }}
             title="Settings"
           >
-            ⚙️
+            <Settings size={16} />
           </button>
         </div>
       </div>

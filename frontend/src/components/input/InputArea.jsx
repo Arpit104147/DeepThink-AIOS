@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { Plus, ArrowUp, Square, ImagePlus, Settings, X, FileText } from "lucide-react";
 import { SEARCH_MODES, SEARCH_MODE_LABELS, SEARCH_MODE_COLORS } from "../../utils/constants";
 
 /**
@@ -26,7 +27,7 @@ const InputArea = ({
   const handleTextareaInput = (e) => {
     setPrompt(e.target.value);
     e.target.style.height = "auto";
-    e.target.style.height = e.target.scrollHeight + "px";
+    e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
   };
 
   const handleFileUpload = (e) => {
@@ -100,7 +101,7 @@ const InputArea = ({
           {attachedImage && (
             <span className="image-badge">
               {attachedImage.includes("application/pdf") ? (
-                <span style={{ fontSize: "1.1rem" }}>📄</span>
+                <FileText size={16} />
               ) : (
                 <img src={attachedImage} alt="Attached" className="image-badge-preview" />
               )}
@@ -112,7 +113,7 @@ const InputArea = ({
                 className="image-badge-remove"
                 title="Remove attachment"
               >
-                ✕
+                <X size={14} />
               </button>
             </span>
           )}
@@ -121,11 +122,11 @@ const InputArea = ({
           {menuOpen && (
             <div className="popup-menu">
               <button className="popup-item" onClick={() => { setMenuOpen(false); setTimeout(() => fileInputRef.current?.click(), 50); }}>
-                <span className="popup-icon">📷</span> Upload photo or file
+                <span className="popup-icon"><ImagePlus size={16} /></span> Upload photo or file
               </button>
               <div className="popup-divider" />
               <button className="popup-item" onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}>
-                <span className="popup-icon">⚙️</span> Settings
+                <span className="popup-icon"><Settings size={16} /></span> Settings
               </button>
             </div>
           )}
@@ -134,7 +135,7 @@ const InputArea = ({
             className={`input-plus-btn ${menuOpen ? "active" : ""}`}
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            ＋
+            <Plus size={18} />
           </button>
 
           <textarea
@@ -158,7 +159,9 @@ const InputArea = ({
           />
 
           {isGenerating ? (
-            <button className="send-btn stop" onClick={handleStop} title="Stop">■</button>
+            <button className="send-btn stop" onClick={handleStop} title="Stop">
+              <Square size={14} />
+            </button>
           ) : (
             <button
               className="send-btn"
@@ -166,7 +169,7 @@ const InputArea = ({
               disabled={!prompt.trim() && !attachedImage}
               title="Send"
             >
-              ↑
+              <ArrowUp size={18} />
             </button>
           )}
         </div>

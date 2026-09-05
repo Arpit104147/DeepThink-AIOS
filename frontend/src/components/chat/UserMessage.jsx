@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { ChevronUp, ChevronDown, Copy, Check } from "lucide-react";
 import MessageRenderer from "./MessageRenderer";
 
 /**
@@ -52,20 +53,14 @@ const UserMessage = ({ text, image }) => {
             className="user-message-toggle"
             onClick={() => setIsExpanded(!isExpanded)}
           >
-            {isExpanded ? "Show Less ▲" : "Show More ▼"}
+            {isExpanded ? (<><ChevronUp size={13} /> Show Less</>) : (<><ChevronDown size={13} /> Show More</>)}
           </button>
         )}
         <button className="user-copy-btn" onClick={handleCopy} title="Copy prompt">
           {copied ? (
-            <>Copied! ✓</>
+            <><Check size={12} /> Copied!</>
           ) : (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              Copy
-            </>
+            <><Copy size={12} /> Copy</>
           )}
         </button>
       </div>

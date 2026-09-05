@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { Settings, Zap, Shield, FolderOpen, RefreshCw, Gpu, Monitor, HardDrive, Check, Loader, Lock, Globe } from "lucide-react";
+import Modal from "../common/Modal";
 
 /**
  * @component SettingsModal
@@ -27,7 +29,6 @@ const SettingsModal = ({
 
   // Pre-compiled Vulkan Engine & Diagnostics states
   const [vulkanStatus, setVulkanStatus] = useState(null);
-  const [vulkanMsg, setVulkanMsg] = useState("");
   const [diagnostics, setDiagnostics] = useState(null);
   const [loadingDiag, setLoadingDiag] = useState(false);
 
@@ -53,7 +54,7 @@ const SettingsModal = ({
         setDiagnostics(data);
       }
     } catch (e) {
-      setVulkanMsg(`Diagnostics error: ${e.message}`);
+      console.warn(`Diagnostics error: ${e.message}`);
     } finally {
       setLoadingDiag(false);
     }
@@ -68,8 +69,6 @@ const SettingsModal = ({
     }
   }, [settingsOpen, serverUrl]);
 
-  if (!settingsOpen) return null;
-
   const handleSetupGpuEngine = async (engineTarget = "auto") => {
     if (vulkanStatus?.progress?.status === "updating") return;
     const targetKey = engineTarget === "nvidia" ? "cuda" : (engineTarget === "apple" ? "metal" : engineTarget);
@@ -79,22 +78,20 @@ const SettingsModal = ({
       (targetKey === "metal" && (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal")));
     
     if (isAlreadyInstalled) {
-      setVulkanMsg(`✅ Engine ${targetKey.toUpperCase()} is already installed and active.`);
+      console.log(`✅ Engine ${targetKey.toUpperCase()} is already installed and active.`);
       return;
     }
 
     try {
-      setVulkanMsg(`🚀 Initiating ${targetKey.toUpperCase()} GPU Acceleration Setup...`);
+      console.log(`🚀 Initiating ${targetKey.toUpperCase()} GPU Acceleration Setup...`);
       const res = await fetch(`${serverUrl}/api/gpu/setup?engine=${targetKey}`, { method: "POST" });
       if (res.ok) {
         fetchVulkanStatus();
       }
     } catch (e) {
-      setVulkanMsg(`Engine setup error: ${e.message}`);
+      console.warn(`Engine setup error: ${e.message}`);
     }
   };
-
-  const handleUpdateVulkan = () => handleSetupGpuEngine("vulkan");
 
   const handleSave = () => {
     let finalUrl = serverUrl.trim();
@@ -132,20 +129,14 @@ const SettingsModal = ({
   };
 
   const tabs = [
-    { id: "general", label: "General", icon: "⚙️" },
-    { id: "vulkan", label: "Vulkan GPU Status", icon: "⚡" },
-    { id: "security", label: "Security", icon: "🛡️" },
-    { id: "workspace", label: "Workspace", icon: "📁" },
+    { id: "general", label: "General", icon: <Settings size={15} /> },
+    { id: "vulkan", label: "GPU Acceleration", icon: <Zap size={15} /> },
+    { id: "security", label: "Security", icon: <Shield size={15} /> },
+    { id: "workspace", label: "Workspace", icon: <FolderOpen size={15} /> },
   ];
 
   return (
-    <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
-      <div className="modal settings-modal-enhanced" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "800px", width: "95%" }}>
-        <div className="modal-header-enhanced">
-          <h2>System Settings & GPU Acceleration</h2>
-          <button className="modal-close-btn" onClick={() => setSettingsOpen(false)}>✕</button>
-        </div>
-
+    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="System Settings & GPU Acceleration" maxWidth="800px">
         {/* Tab Navigation */}
         <div className="settings-tabs">
           {tabs.map((tab) => (
@@ -198,181 +189,77 @@ const SettingsModal = ({
           )}
 
           {/* TAB: Pre-Compiled Vulkan Engine & Hardware Diagnostics */}
-          {activeTab === "vulkan" && (
+                    {activeTab === "vulkan" && (
             <div className="tab-panel">
               {/* Hardware GPU Engine Status Banner */}
-              <div style={{ background: "rgba(0,0,0,0.4)", padding: "16px", borderRadius: "12px", border: "1px solid rgba(139, 92, 246, 0.25)", marginBottom: "14px" }}>
+              <div className="gpu-status-banner" style={{ background: "var(--dt-surface-1)", padding: "16px", borderRadius: "var(--dt-radius-lg)", border: "1px solid rgba(139, 92, 246, 0.25)", marginBottom: "14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                   <div>
-                    <div style={{ fontWeight: "600", fontSize: "1rem", color: "#f8fafc", display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span>⚡ Hardware Acceleration Engine</span>
-                      <span style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: "6px", background: "rgba(52, 211, 153, 0.2)", color: "#34d399", border: "1px solid rgba(52, 211, 153, 0.3)" }}>
-                        🟢 Active ({vulkanStatus?.detected_platform?.toUpperCase() || "AUTO"} GPU Detected)
+                    <div style={{ fontWeight: "600", fontSize: "1rem", color: "var(--dt-text)", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Zap size={16} /> Hardware Acceleration Engine
+                      <span style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: "6px", background: "var(--dt-success-bg)", color: "var(--dt-success)", border: "1px solid var(--dt-success-border)" }}>
+                        Active ({vulkanStatus?.detected_platform?.toUpperCase() || "AUTO"} GPU Detected)
                       </span>
                     </div>
-                    <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "4px" }}>
+                    <div style={{ fontSize: "0.78rem", color: "var(--dt-text-muted)", marginTop: "4px" }}>
                       Auto-detects active hardware. Select your GPU engine to compile or download the backend driver.
                     </div>
                   </div>
                 </div>
 
-                {/* 3 SEPARATE HARDWARE ENGINE BUTTONS */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
-                  
-                  {/* ENGINE 1: NVIDIA CUDA */}
-                  {(() => {
-                    const isCudaActive = vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda");
+                {/* GPU Engine Cards */}
+                <div className="gpu-engine-grid">
+                  {[{
+                    key: "nvidia", platform: "nvidia", target: "cuda",
+                    title: "NVIDIA CUDA", desc: "CUDA / cu122 driver for RTX/GTX/T4 GPUs.",
+                    engineCheck: vulkanStatus?.engines?.nvidia?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "cuda"),
+                    labels: { installing: "Installing...", installed: "Installed & Active", activate: "Activate CUDA", setup: "Setup CUDA" },
+                  }, {
+                    key: "vulkan", platform: "vulkan", target: "vulkan",
+                    title: "Intel / AMD Vulkan", desc: "Vulkan SPIR-V engine for Radeon & Arc GPUs.",
+                    engineCheck: vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"),
+                    labels: { installing: "Downloading...", installed: "Installed & Active", activate: "Activate Vulkan", setup: "Download Vulkan" },
+                  }, {
+                    key: "metal", platform: "apple", target: "metal",
+                    title: "Apple Metal", desc: "Metal MPS backend for M1/M2/M3/M4 Macs.",
+                    engineCheck: vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal"),
+                    labels: { installing: "Compiling...", installed: "Installed & Active", activate: "Activate Metal", setup: "Setup Metal" },
+                  }].map((engine) => {
+                    const isDetected = vulkanStatus?.detected_platform === engine.platform;
+                    const isInstalled = engine.engineCheck;
+                    const isUpdating = vulkanStatus?.progress?.status === "updating";
                     return (
-                      <div style={{
-                        background: vulkanStatus?.detected_platform === "nvidia" ? "rgba(16, 185, 129, 0.12)" : "rgba(15, 23, 42, 0.5)",
-                        border: vulkanStatus?.detected_platform === "nvidia" ? "2px solid #10b981" : "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "10px",
-                        padding: "12px",
-                        opacity: vulkanStatus?.detected_platform === "nvidia" ? 1 : 0.7,
-                        boxShadow: vulkanStatus?.detected_platform === "nvidia" ? "0 0 16px rgba(16, 185, 129, 0.25)" : "none"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                          <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#34d399" }}>🟢 NVIDIA CUDA</span>
-                          {vulkanStatus?.detected_platform === "nvidia" && (
-                            <span style={{ fontSize: "0.62rem", background: "#10b981", color: "#000", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
+                      <div key={engine.key} className={`gpu-engine-card ${engine.key} ${isDetected ? "detected" : ""}`}>
+                        <div className="gpu-engine-card-header">
+                          <span className={`gpu-engine-card-title ${engine.key}`}>
+                            <Monitor size={14} /> {engine.title}
+                          </span>
+                          {isDetected && (
+                            <span className={`gpu-detected-badge ${engine.key}`}>DETECTED</span>
                           )}
                         </div>
-                        <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
-                          CUDA / cu122 driver for RTX/GTX/T4 GPUs.
-                        </div>
+                        <div className="gpu-engine-card-desc">{engine.desc}</div>
                         <button
-                          className="hub-save-btn"
-                          onClick={() => handleSetupGpuEngine("cuda")}
-                          disabled={isCudaActive || vulkanStatus?.progress?.status === "updating"}
-                          style={{
-                            width: "100%",
-                            background: isCudaActive
-                              ? "rgba(16, 185, 129, 0.2)"
-                              : (vulkanStatus?.detected_platform === "nvidia" ? "#10b981" : "rgba(255,255,255,0.08)"),
-                            color: isCudaActive
-                              ? "#34d399"
-                              : (vulkanStatus?.detected_platform === "nvidia" ? "#000" : "#ccc"),
-                            border: isCudaActive ? "1px solid #10b981" : "none",
-                            padding: "6px 10px",
-                            fontSize: "0.75rem",
-                            fontWeight: "700",
-                            cursor: (isCudaActive || vulkanStatus?.progress?.status === "updating") ? "default" : "pointer",
-                            opacity: isCudaActive ? 0.9 : 1
-                          }}
+                          className={`gpu-engine-btn ${engine.key} ${isInstalled ? "installed" : (!isDetected ? "inactive" : "")}`}
+                          onClick={() => handleSetupGpuEngine(engine.target)}
+                          disabled={isInstalled || isUpdating}
                         >
-                          {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "cuda"
-                            ? "⏳ Installing..."
-                            : (isCudaActive
-                                ? "✅ Installed & Active"
-                                : (vulkanStatus?.detected_platform === "nvidia" ? "⚡ Activate CUDA" : "Setup CUDA"))}
+                          {isUpdating && vulkanStatus?.active_target === engine.target
+                            ? (<><Loader size={12} className="spin" /> {engine.labels.installing}</>)
+                            : isInstalled
+                              ? (<><Check size={12} /> {engine.labels.installed}</>)
+                              : isDetected
+                                ? (<><Zap size={12} /> {engine.labels.activate}</>)
+                                : engine.labels.setup}
                         </button>
                       </div>
                     );
-                  })()}
-
-                  {/* ENGINE 2: INTEL / AMD VULKAN */}
-                  {(() => {
-                    const isVulkanActive = vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan");
-                    return (
-                      <div style={{
-                        background: vulkanStatus?.detected_platform === "vulkan" ? "rgba(99, 102, 241, 0.12)" : "rgba(15, 23, 42, 0.5)",
-                        border: vulkanStatus?.detected_platform === "vulkan" ? "2px solid #6366f1" : "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "10px",
-                        padding: "12px",
-                        opacity: vulkanStatus?.detected_platform === "vulkan" ? 1 : 0.7,
-                        boxShadow: vulkanStatus?.detected_platform === "vulkan" ? "0 0 16px rgba(99, 102, 241, 0.25)" : "none"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                          <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#818cf8" }}>🔵 Intel / AMD Vulkan</span>
-                          {vulkanStatus?.detected_platform === "vulkan" && (
-                            <span style={{ fontSize: "0.62rem", background: "#6366f1", color: "#fff", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
-                          Vulkan SPIR-V engine for Radeon & Arc GPUs.
-                        </div>
-                        <button
-                          className="hub-save-btn"
-                          onClick={() => handleSetupGpuEngine("vulkan")}
-                          disabled={isVulkanActive || vulkanStatus?.progress?.status === "updating"}
-                          style={{
-                            width: "100%",
-                            background: isVulkanActive
-                              ? "rgba(99, 102, 241, 0.2)"
-                              : (vulkanStatus?.detected_platform === "vulkan" ? "#6366f1" : "rgba(255,255,255,0.08)"),
-                            color: isVulkanActive ? "#a5b4fc" : "#fff",
-                            border: isVulkanActive ? "1px solid #6366f1" : "none",
-                            padding: "6px 10px",
-                            fontSize: "0.75rem",
-                            fontWeight: "700",
-                            cursor: (isVulkanActive || vulkanStatus?.progress?.status === "updating") ? "default" : "pointer",
-                            opacity: isVulkanActive ? 0.9 : 1
-                          }}
-                        >
-                          {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "vulkan"
-                            ? "⏳ Downloading..."
-                            : (isVulkanActive
-                                ? "✅ Installed & Active"
-                                : (vulkanStatus?.detected_platform === "vulkan" ? "⚡ Activate Vulkan" : "Download Vulkan"))}
-                        </button>
-                      </div>
-                    );
-                  })()}
-
-                  {/* ENGINE 3: APPLE SILICON METAL */}
-                  {(() => {
-                    const isMetalActive = vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal");
-                    return (
-                      <div style={{
-                        background: vulkanStatus?.detected_platform === "apple" ? "rgba(168, 85, 247, 0.12)" : "rgba(15, 23, 42, 0.5)",
-                        border: vulkanStatus?.detected_platform === "apple" ? "2px solid #a855f7" : "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "10px",
-                        padding: "12px",
-                        opacity: vulkanStatus?.detected_platform === "apple" ? 1 : 0.7,
-                        boxShadow: vulkanStatus?.detected_platform === "apple" ? "0 0 16px rgba(168, 85, 247, 0.25)" : "none"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                          <span style={{ fontWeight: "700", fontSize: "0.85rem", color: "#c084fc" }}>🍎 Apple Metal</span>
-                          {vulkanStatus?.detected_platform === "apple" && (
-                            <span style={{ fontSize: "0.62rem", background: "#a855f7", color: "#fff", fontWeight: "800", padding: "1px 6px", borderRadius: "4px" }}>DETECTED</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: "10px" }}>
-                          Metal MPS backend for M1/M2/M3/M4 Macs.
-                        </div>
-                        <button
-                          className="hub-save-btn"
-                          onClick={() => handleSetupGpuEngine("metal")}
-                          disabled={isMetalActive || vulkanStatus?.progress?.status === "updating"}
-                          style={{
-                            width: "100%",
-                            background: isMetalActive
-                              ? "rgba(168, 85, 247, 0.2)"
-                              : (vulkanStatus?.detected_platform === "apple" ? "#a855f7" : "rgba(255,255,255,0.08)"),
-                            color: isMetalActive ? "#c084fc" : "#fff",
-                            border: isMetalActive ? "1px solid #a855f7" : "none",
-                            padding: "6px 10px",
-                            fontSize: "0.75rem",
-                            fontWeight: "700",
-                            cursor: (isMetalActive || vulkanStatus?.progress?.status === "updating") ? "default" : "pointer",
-                            opacity: isMetalActive ? 0.9 : 1
-                          }}
-                        >
-                          {vulkanStatus?.progress?.status === "updating" && vulkanStatus?.active_target === "metal"
-                            ? "⏳ Compiling..."
-                            : (isMetalActive
-                                ? "✅ Installed & Active"
-                                : (vulkanStatus?.detected_platform === "apple" ? "⚡ Activate Metal" : "Setup Metal"))}
-                        </button>
-                      </div>
-                    );
-                  })()}
-
+                  })}
                 </div>
 
-                <div style={{ display: "flex", gap: "16px", fontSize: "0.78rem", color: "#cbd5e1" }}>
+                <div style={{ display: "flex", gap: "16px", fontSize: "0.78rem", color: "var(--dt-text-secondary)" }}>
                   <div>
-                    Installed Engine: <strong style={{ color: "#34d399" }}>{vulkanStatus?.installed_version || "Ready"}</strong>
+                    Installed Engine: <strong style={{ color: "var(--dt-success)" }}>{vulkanStatus?.installed_version || "Ready"}</strong>
                   </div>
                   <div>
                     Latest GitHub Release: <strong style={{ color: "#818cf8" }}>{vulkanStatus?.latest_version || "b10441"}</strong>
@@ -381,7 +268,7 @@ const SettingsModal = ({
 
                 {/* Progress bar when updating */}
                 {vulkanStatus?.progress?.status === "updating" && (
-                  <div style={{ marginTop: "12px", background: "rgba(0,0,0,0.5)", padding: "10px", borderRadius: "8px", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
+                  <div style={{ marginTop: "12px", background: "rgba(0,0,0,0.5)", padding: "10px", borderRadius: "var(--dt-radius-md)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "#818cf8", marginBottom: "4px" }}>
                       <span>{vulkanStatus.progress.message}</span>
                       <span>{vulkanStatus.progress.percent}%</span>
@@ -393,48 +280,46 @@ const SettingsModal = ({
                 )}
               </div>
 
-              {/* Hardware & GPU Diagnostics Verification Box */}
-              <div style={{ background: "rgba(15, 23, 42, 0.6)", padding: "16px", borderRadius: "12px", border: "1px solid rgba(52, 211, 153, 0.3)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                  <div style={{ fontWeight: "600", fontSize: "0.95rem", color: "#f8fafc", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span>🔍 Hardware & VRAM Diagnostics</span>
+              {/* Hardware Diagnostics */}
+              <div className="diagnostics-panel">
+                <div className="diagnostics-panel-header">
+                  <div className="diagnostics-panel-title">
+                    <HardDrive size={16} /> Hardware & VRAM Diagnostics
                   </div>
                   <button
                     onClick={runGpuDiagnostics}
                     disabled={loadingDiag}
-                    style={{ padding: "6px 14px", borderRadius: "8px", background: "rgba(52, 211, 153, 0.15)", border: "1px solid rgba(52, 211, 153, 0.3)", color: "#34d399", cursor: "pointer", fontSize: "0.78rem", fontWeight: "600" }}
+                    className="diagnostics-refresh-btn"
                   >
-                    {loadingDiag ? "Scanning Hardware..." : "🔄 Refresh GPU Diagnostics"}
+                    {loadingDiag ? (<><Loader size={13} className="spin" /> Scanning...</>) : (<><RefreshCw size={13} /> Refresh GPU Diagnostics</>)}
                   </button>
                 </div>
 
                 {diagnostics ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.82rem" }}>
-                    <div style={{ background: "rgba(0,0,0,0.3)", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div style={{ color: "#94a3b8", fontSize: "0.74rem" }}>Detected GPU Adapter</div>
-                      <div style={{ fontWeight: "600", color: "#f8fafc", marginTop: "2px" }}>
-                        🎮 {diagnostics.gpu_name}
+                  <div className="diagnostics-grid">
+                    <div className="diagnostics-card">
+                      <div className="diagnostics-card-label">Detected GPU Adapter</div>
+                      <div className="diagnostics-card-value">
+                        <Gpu size={14} /> {diagnostics.gpu_name}
                       </div>
                     </div>
-
-                    <div style={{ background: "rgba(0,0,0,0.3)", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div style={{ color: "#94a3b8", fontSize: "0.74rem" }}>VRAM / Shared GPU Memory</div>
-                      <div style={{ fontWeight: "600", color: "#34d399", marginTop: "2px" }}>
-                        💾 {diagnostics.vram_free_gb} GB Free / {diagnostics.vram_total_gb} GB Total
+                    <div className="diagnostics-card">
+                      <div className="diagnostics-card-label">VRAM / Shared GPU Memory</div>
+                      <div className="diagnostics-card-value" style={{ color: "var(--dt-success)" }}>
+                        <HardDrive size={14} /> {diagnostics.vram_free_gb} GB Free / {diagnostics.vram_total_gb} GB Total
                       </div>
                     </div>
-
-                    <div style={{ gridColumn: "1 / -1", background: "rgba(52, 211, 153, 0.1)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(52, 211, 153, 0.25)" }}>
-                      <div style={{ fontWeight: "600", color: "#34d399", fontSize: "0.86rem", marginBottom: "4px" }}>
+                    <div className="diagnostics-summary">
+                      <div className="diagnostics-summary-title">
                         {diagnostics.execution_target}
                       </div>
-                      <div style={{ color: "#cbd5e1", fontSize: "0.78rem" }}>
-                        ✓ {diagnostics.offload_info}
+                      <div className="diagnostics-summary-detail">
+                        <Check size={13} /> {diagnostics.offload_info}
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: "0.82rem" }}>
+                  <div className="diagnostics-loading">
                     Scanning graphics adapter and verifying Vulkan GPU memory...
                   </div>
                 )}
@@ -442,21 +327,21 @@ const SettingsModal = ({
             </div>
           )}
 
-          {activeTab === "security" && (
+                    {activeTab === "security" && (
             <div className="tab-panel">
               <div className="security-status-card">
                 <div className="security-item">
-                  <span className="security-icon">🛡️</span>
+                  <span className="security-icon"><Shield size={16} /></span>
                   <span className="security-label">SAST Code Scanning</span>
                   <span className="security-badge active">Active</span>
                 </div>
                 <div className="security-item">
-                  <span className="security-icon">🔒</span>
+                  <span className="security-icon"><Lock size={16} /></span>
                   <span className="security-label">Sandbox Isolation</span>
                   <span className="security-badge active">Active</span>
                 </div>
                 <div className="security-item">
-                  <span className="security-icon">🌐</span>
+                  <span className="security-icon"><Globe size={16} /></span>
                   <span className="security-label">Air-Gap Mode</span>
                   <span className="security-badge">Set via ENV</span>
                 </div>
@@ -492,8 +377,7 @@ const SettingsModal = ({
           <button onClick={() => setSettingsOpen(false)}>Close</button>
           <button className="primary-btn" onClick={handleSave}>Save Settings</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

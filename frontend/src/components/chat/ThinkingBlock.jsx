@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 
 /**
  * @component ThinkingBlock
@@ -27,11 +28,11 @@ const ThinkingBlock = ({ logs = [], isActive }) => {
   return (
     <div className="thinking-block">
       <div className="thinking-header" onClick={() => setIsOpen(!isOpen)}>
-        {isActive ? <div className="thinking-spinner" /> : <span className="thinking-done-icon">✅</span>}
+        {isActive ? <div className="thinking-spinner" /> : <CheckCircle2 size={15} className="thinking-done-icon" style={{ color: "#34d399" }} />}
         <span className="thinking-label">
           {isActive ? "Thinking..." : `Thought for ${logs.length} steps`}
         </span>
-        <span className={`thinking-chevron ${isOpen ? "open" : ""}`}>▼</span>
+        <ChevronDown size={14} className={`thinking-chevron ${isOpen ? "open" : ""}`} />
       </div>
       {isOpen && (
         <div className="thinking-content">

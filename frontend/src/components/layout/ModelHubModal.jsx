@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { Search, X, Bot, Target, Layers, Eye, Brain, Code, Zap, Dna, Save, RefreshCw, Download, Trash2, StopCircle, Loader, Check, AlertTriangle, ExternalLink } from "lucide-react";
+import Modal from "../common/Modal";
 
 const ModelHubModal = ({ open, setOpen, serverUrl }) => {
   const [activeTab, setActiveTab] = useState("explorer");
@@ -193,8 +195,6 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
     }
   }, [downloadBannerMsg]);
 
-  if (!open) return null;
-
   const handleRoleChange = (roleKey, modelKey) => {
     setRoles((prev) => ({ ...prev, [roleKey]: modelKey }));
   };
@@ -306,43 +306,27 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
   const currentRepoId = selectedRepo ? (selectedRepo.id || selectedRepo.model_id || selectedRepo.repo_id) : "";
 
   return (
-    <div className="modal-overlay" onClick={() => setOpen(false)}>
-      <div className="modal hub-modal-wrapper" onClick={(e) => e.stopPropagation()}>
-        {/* Modal Header */}
-        <div className="hub-header">
-          <div className="hub-title-group">
-            <span className="hub-title-icon">🤖</span>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <h2 className="hub-title">Model Hub & Discovery</h2>
-                <span className="hub-subtitle-badge">AIOS Engine</span>
-              </div>
-              <p className="hub-description">Search HuggingFace GGUF repository cards, choose quantization variants, and monitor live download progress.</p>
-            </div>
-          </div>
-          <button className="modal-close-btn" onClick={() => setOpen(false)}>✕</button>
+    <Modal open={open} onClose={() => setOpen(false)} title="DeepThink Model Hub" maxWidth="1240px">
+      {/* Global Download Banner Notification */}
+      {downloadBannerMsg && (
+        <div style={{ background: "rgba(99, 102, 241, 0.2)", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px", fontSize: "0.8rem", color: "#a5b4fc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{downloadBannerMsg}</span>
+          <button onClick={() => setDownloadBannerMsg("")} style={{ background: "none", border: "none", color: "#a5b4fc", cursor: "pointer", display: "flex", alignItems: "center" }}><X size={14} /></button>
         </div>
+      )}
 
-        {/* Global Download Banner Notification */}
-        {downloadBannerMsg && (
-          <div style={{ background: "rgba(99, 102, 241, 0.2)", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px", fontSize: "0.8rem", color: "#a5b4fc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>{downloadBannerMsg}</span>
-            <button onClick={() => setDownloadBannerMsg("")} style={{ background: "none", border: "none", color: "#a5b4fc", cursor: "pointer" }}>✕</button>
-          </div>
-        )}
-
-        {/* Navigation Tab Bar */}
-        <div className="hub-nav-tabs">
-          <button className={`hub-tab-btn ${activeTab === "explorer" ? "active" : ""}`} onClick={() => setActiveTab("explorer")}>
-            🔍 HuggingFace Model Explorer
-          </button>
-          <button className={`hub-tab-btn ${activeTab === "swarm" ? "active" : ""}`} onClick={() => setActiveTab("swarm")}>
-            🎯 Swarm Role Assignment
-          </button>
-          <button className={`hub-tab-btn ${activeTab === "models" ? "active" : ""}`} onClick={() => setActiveTab("models")}>
-            🍱 Installed Library
-          </button>
-        </div>
+      {/* Navigation Tab Bar */}
+      <div className="hub-nav-tabs">
+        <button className={`hub-tab-btn ${activeTab === "explorer" ? "active" : ""}`} onClick={() => setActiveTab("explorer")} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Search size={14} /> HuggingFace Model Explorer
+        </button>
+        <button className={`hub-tab-btn ${activeTab === "swarm" ? "active" : ""}`} onClick={() => setActiveTab("swarm")} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Target size={14} /> Swarm Role Assignment
+        </button>
+        <button className={`hub-tab-btn ${activeTab === "models" ? "active" : ""}`} onClick={() => setActiveTab("models")} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Layers size={14} /> Installed Library
+        </button>
+      </div>
 
         {/* Tab Content Container */}
         <div className="hub-tab-content" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -352,7 +336,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
               {/* Sidebar Search List */}
               <div className="lmstudio-sidebar">
                 <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="lmstudio-search-bar">
-                  <span className="search-icon">🔍</span>
+                  <span className="search-icon"><Search size={14} /></span>
                   <input
                     type="text"
                     value={searchQuery}
@@ -361,7 +345,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                     className="lmstudio-search-input"
                   />
                   {searchQuery && (
-                    <button type="button" onClick={() => { setSearchQuery(""); handleSearch(""); }} className="clear-search-btn">✕</button>
+                    <button type="button" onClick={() => { setSearchQuery(""); handleSearch(""); }} className="clear-search-btn"><X size={14} /></button>
                   )}
                 </form>
 
@@ -463,7 +447,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                         className="hub-save-btn"
                         style={{ padding: "6px 12px", fontSize: "0.78rem", background: "rgba(255,255,255,0.06)", textDecoration: "none" }}
                       >
-                        🤗 Model Card ↗
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ExternalLink size={12} /> Model Card</span>
                       </a>
                     </div>
 
@@ -506,7 +490,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                             <div style={{ background: "rgba(0,0,0,0.4)", padding: "14px", borderRadius: "12px", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                 <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "#818cf8" }}>
-                                  🚀 Downloading {currentKeyClean === "qwen_vl" ? "Qwen 2.5-VL + mmproj Vision Projector" : currentFile?.quant}... {currentModelStatus.progress.percent}%
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={13} /> Downloading {currentKeyClean === "qwen_vl" ? "Qwen 2.5-VL + mmproj Vision Projector" : currentFile?.quant}... {currentModelStatus.progress.percent}%</span>
                                 </div>
                                 <button
                                   onClick={() => handleCancelDownload(currentKeyClean)}
@@ -521,7 +505,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                                     fontWeight: "600"
                                   }}
                                 >
-                                  ⏹️ Cancel Download
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><StopCircle size={13} /> Cancel Download</span>
                                 </button>
                               </div>
 
@@ -556,7 +540,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
 
                                 {currentModelStatus?.downloaded ? (
                                   <div style={{ background: "rgba(52, 211, 153, 0.15)", border: "1px solid #34d399", color: "#34d399", padding: "8px 18px", borderRadius: "8px", fontWeight: "600", fontSize: "0.88rem" }}>
-                                    ✅ Downloaded & Ready in Library ({currentFile?.size_gb || currentModelStatus.size} GB)
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={13} /> Downloaded & Ready in Library ({currentFile?.size_gb || currentModelStatus.size} GB)</span>
                                   </div>
                                 ) : (
                                   <button
@@ -568,7 +552,10 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                                       fontSize: "0.92rem"
                                     }}
                                   >
-                                    {currentFit.status === "oom_risk" ? "⚠️ Download Anyway" : "📥 Download"} {currentFile ? `${currentFile.size_gb} GB` : ""}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      {currentFit.status === "oom_risk" ? <><AlertTriangle size={13} /> Download Anyway</> : <><Download size={13} /> Download</>}
+                                      {currentFile ? ` ${currentFile.size_gb} GB` : ""}
+                                    </div>
                                   </button>
                                 )}
                               </div>
@@ -647,7 +634,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
 
               <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
                 <button className="hub-save-btn" onClick={handleSaveRoles}>
-                  💾 Save Swarm Role Mapping
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Save size={14} /> Save Swarm Role Mapping</span>
                 </button>
               </div>
             </div>
@@ -660,7 +647,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
                 <span style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
                   Installed GGUF model library on local system ({Object.values(modelsStatus).filter(m => m.downloaded).length} ready).
                 </span>
-                <button onClick={fetchStatus} style={{ padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}>🔄 Refresh</button>
+                <button onClick={fetchStatus} style={{ padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", cursor: "pointer", fontSize: "0.78rem", display: 'flex', alignItems: 'center', gap: '4px' }}><RefreshCw size={14} /> Refresh</button>
               </div>
 
               {Object.keys(modelsStatus).length === 0 ? (
@@ -759,8 +746,7 @@ const ModelHubModal = ({ open, setOpen, serverUrl }) => {
             Close
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

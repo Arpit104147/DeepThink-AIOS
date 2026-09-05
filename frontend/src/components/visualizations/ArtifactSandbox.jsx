@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { RotateCw, ExternalLink, Minimize2, Maximize2, Terminal, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 
 /**
  * @component ArtifactSandbox
@@ -152,7 +153,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
   if (!htmlCode) {
     return (
       <div className="artifact-error">
-        <span>⚠️</span> Failed to render sandbox
+        <AlertTriangle size={16} /> Failed to render sandbox
       </div>
     );
   }
@@ -171,7 +172,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
             onClick={() => setReloadKey((prev) => prev + 1)}
             title="Reload simulation"
           >
-            ↻
+            <RotateCw size={14} />
           </button>
           <button
             className="artifact-btn"
@@ -183,14 +184,14 @@ const ArtifactSandbox = ({ htmlCode }) => {
             }}
             title="Open in new tab"
           >
-            ↗
+            <ExternalLink size={14} />
           </button>
           <button
             className="artifact-btn"
             onClick={() => setIsExpanded(!isExpanded)}
             title={isExpanded ? "Collapse" : "Expand"}
           >
-            {isExpanded ? "⊖" : "⊕"}
+            {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
       </div>
@@ -210,7 +211,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
             onClick={() => setShowConsole(!showConsole)}
           >
             <span className="sandbox-console-title">
-              <span>🛠️</span> Console Output {consoleLogs.length > 0 && `(${consoleLogs.length})`}
+              <Terminal size={14} /> Console Output {consoleLogs.length > 0 && `(${consoleLogs.length})`}
             </span>
             <div className="sandbox-console-actions">
               {consoleLogs.length > 0 && (
@@ -222,7 +223,7 @@ const ArtifactSandbox = ({ htmlCode }) => {
                   Clear
                 </button>
               )}
-              <span>{showConsole ? "▼" : "▲"}</span>
+              {showConsole ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </div>
           </div>
 
