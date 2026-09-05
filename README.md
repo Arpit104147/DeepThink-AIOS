@@ -9,7 +9,7 @@
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![React 18](https://img.shields.io/badge/React-18.0%2B-blue)
 ![Vite 8](https://img.shields.io/badge/Vite-8.0%2B-646CFF)
-![License MIT](https://img.shields.io/badge/License-MIT-green)
+![License AGPL 3.0](https://img.shields.io/badge/License-AGPL%203.0-blue)
 ![Architecture Multi-Agent](https://img.shields.io/badge/Architecture-Multi--Agent-purple)
 ![Semiconductor 2nm](https://img.shields.io/badge/Semiconductor-2nm%20GAAFET-orange)
 ![Benchmarks 11 Suites](https://img.shields.io/badge/Benchmarks-11%20Suites-emerald)
@@ -246,4 +246,6 @@ npm run build --prefix frontend
 
 ## 📄 License
 
-MIT License — see [LICENSE](LICENSE) for details.
+GNU Affero General Public License v3.0 (AGPL-3.0) — see [LICENSE](LICENSE) for details.
+
+This project is licensed under the **GNU AGPLv3**. Any modification, redistribution, or remote network interaction (e.g., deploying or running DeepThink AIOS over a computer network, demoing as a service, or participating in hackathons/competitions) strictly requires providing access to the complete Corresponding Source code of the modified version to all users under the exact same AGPL-3.0 terms, with all original copyright and attribution notices preserved.
