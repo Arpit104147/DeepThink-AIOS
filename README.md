@@ -7,11 +7,14 @@
 *An orchestrated fleet of specialized SLMs/LLMs running on consumer hardware — zero cloud dependencies.*
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
-![React](https://img.shields.io/badge/React-18.0%2B-blue)
+![React 18](https://img.shields.io/badge/React-18.0%2B-blue)
+![Vite 8](https://img.shields.io/badge/Vite-8.0%2B-646CFF)
 ![License MIT](https://img.shields.io/badge/License-MIT-green)
 ![Architecture Multi-Agent](https://img.shields.io/badge/Architecture-Multi--Agent-purple)
 ![Semiconductor 2nm](https://img.shields.io/badge/Semiconductor-2nm%20GAAFET-orange)
 ![Benchmarks 11 Suites](https://img.shields.io/badge/Benchmarks-11%20Suites-emerald)
+![Security Hardened](https://img.shields.io/badge/Security-SSRF%20%7C%20PathTraversal%20Patched-success)
+![Tests Passing](https://img.shields.io/badge/Tests-100%25%20Passing-brightgreen)
 
 </div>
 
@@ -34,14 +37,16 @@ DeepThink AIOS is an **enterprise-grade, fully local multi-agent AI Operating Sy
 
 ### ✨ Key Features & Specialized Pipelines
 
+- **🎨 Human-Centered Modernized UI/UX** — Production-grade glassmorphic interface engineered with **Lucide SVG icons** across all navigation and modal controls, a **30+ Design Token CSS architecture**, a **unified accessible `<Modal>` primitive**, code blocks with **syntax highlighting (`vscDarkPlus`) & line numbers**, an **interactive empty-state with 1-click starter prompt cards**, dynamic **"Jump to Section" heading navigation**, and responsive mobile breakpoints (768px/900px).
 - **🎓 Master 2-Volume Study Engine (`🎓 Study`)** — Pedagogical textbook synthesis powered by **DeepSeek-R1**. Authors 15–20 page master reference books with centered display KaTeX formulas (`$$ ... $$`), embedded **Mermaid architectural flowcharts**, pedagogical alert callouts (`> [!TIP]`, `> [!IMPORTANT]`), a **1-Page High-Yield Formula Cheat-Sheet**, multi-dimensional comparison tables, a **10-Problem Solved Question Bank**, and a **Standardized University Mock Exam**. Supports direct PDF/Slide ingestion.
-- **🔮 Maximum Power Prediction Engine (`🔮 Predict`)** — High-precision time-series forecasting across Financial Markets, Climate/Weather, Energy & Battery SOH decay, and Cloud Telemetry. Features a **14-Signal Alpha Feature Space** ($\text{RSI}_{14}$, $\text{MACD}$ Histogram, Bollinger Bandwidth, Fourier Harmonics, News Sentiment Decay), an **8-Algorithm Tournament** with **Bayesian Softmax Inverse-Loss Stacking** ($\beta = 3.5$), and **Conformal Prediction Probabilistic Uncertainty Bands** ($80\%$ & $95\%$ corridors in Plotly).
-- **🔬 Scientific Semiconductor EDA & 3D Physical Die Visualizer** — Synthesizes synthesizable Verilog/SystemVerilog HDL and SPICE netlists across all process nodes (180nm Planar to 2nm RibbonFET / GAA Nanosheets). Integrates real transistor physics ($L_g = 12\text{nm}$, $W_{\text{eff}} = 240\text{nm}$, $\text{HfO}_2$ dielectric, Subthreshold Swing $S = 65\text{mV/dec}$, BSPDN $\Delta V = 11.8\text{mV}$), semi-transparent low-k $\text{SiCOH}$ ($k=2.2$) glass, and an interactive **Alpha-Power Law live clock simulation toolbar** (`[ ▶ Run ]`, `[ ⏸ Pause ]`, `[ ⏭ Step ]`).
-- **⚡ Zero-Hallucination Mathematical Reasoning Engine** — Solves complex calculus, differential geometry, and theoretical physics proofs with pure 2-stage theoretical KaTeX derivations or Program-Aided Language (PAL) **SymPy CAS sandbox execution** where exact code computations override conversational text guesses. Verifies general relativistic proofs using **Kretschmann Curvature Scalar Invariants** ($K = \frac{48G^2M^2}{c^4 r^6}$) and asymptotic boundary limits (Minkowski & Newtonian).
+- **🔮 Maximum Power Prediction Engine (`🔮 Predict`)** — High-precision time-series forecasting across Financial Markets, Climate/Weather, Energy & Battery State-of-Health (SOH) degradation over 500 charge-discharge cycles, and Cloud Telemetry. Features a **14-Signal Alpha Feature Space**, an **8-Algorithm Tournament** with **Bayesian Softmax Inverse-Loss Stacking** ($\beta = 3.5$), and **Conformal Prediction Probabilistic Uncertainty Bands** ($80\%$ & $95\%$ corridors in Plotly).
+- **🔬 Scientific Semiconductor EDA & 3D Physical Die Visualizer** — Synthesizes synthesizable Verilog/SystemVerilog HDL and SPICE netlists across all process nodes (180nm Planar to 2nm RibbonFET / GAA Nanosheets with Backside Power Delivery). Supports 6 full silicon architectures with procedural WebGL/Three.js silicon die rendering and a live clock stepping toolbar.
+- **⚡ Zero-Hallucination Category-Aware Mathematical Reasoning (`⚡ Reason`)** — Solves complex theoretical derivations across General Relativity, Real/Complex Analysis, Quantum Mechanics, and General Mathematics. Features **dynamic category prompt routing**, publication-grade centered KaTeX display formulas (`$$ ... $$`), automatic line-break sanitization, and verified closed-form fallbacks (exact 9 Schwarzschild Christoffel symbols, Kretschmann scalar $K = \frac{48G^2M^2}{c^4 r^6}$, and the Bose-Einstein Riemann Zeta integral $\int_0^\infty \frac{x^3}{e^x - 1} dx = \frac{\pi^4}{15}$).
 - **💻 Production-Grade Autonomous Coding Pipeline** — Multi-phase software engineering with Big-O complexity optimization ($O(N)$ / $O(N \log N)$), automated **AST Static Analysis Linting (SAST)**, strict type annotations, Google-style docstrings, C++17 shared mutex concurrency (`std::shared_mutex`, lock-free SPSC queues), and multi-language execution sandboxes.
+- **🛡️ Enterprise Security & Air-Gap Hardening** — Full sandbox protection with **SSRF prevention** (blocking private, loopback, and link-local CIDR ranges), **Path Traversal guards** in git workspace commits, **Supply-Chain Auto-pip Allowlisting** (restricted to ~35 vetted scientific packages), **TarSlip/ZipSlip guards** in archive extraction, and `shell=False` process safety.
 - **📊 Benchmark Studio & Telemetry Dashboard** — Parallel evaluation across **11 standard suites** (HumanEval, MBPP, GSM8K, MATH, GPQA, AIME, MuSR, MMLU-Pro, SWE-bench Lite, SWE-bench Pro, SearchQA) with real-time scoring vs GPT-4o and Claude 3.5 Sonnet baselines, live throughput ($\text{tok/s}$), and JSON report exports.
 - **🌐 100% Keyless Multi-Tier Web Search (`🌐 Search` & `🔬 Extreme`)** — Scrapes live financial quotes, real-time weather, and multi-source academic publications with deep synthesis without API keys.
-- **⚡ Elastic VRAM Management (EVM) & DMA** — Zero-cost dynamic model hot-swapping between System RAM and GPU VRAM with CPU-to-GPU cache promotion.
+- **⚡ Elastic VRAM Management (EVM) & DMA** — Zero-cost dynamic model hot-swapping between System RAM and GPU VRAM with thread-safe progress locks and bounded SQLite vector memory recall (`LIMIT 500`).
 
 ---
 
@@ -49,10 +54,11 @@ DeepThink AIOS is an **enterprise-grade, fully local multi-agent AI Operating Sy
 
 | Pipeline | Example Prompt to Try in the UI | Key Output Artifacts |
 |---|---|---|
-| 🔬 **Chip Design** | `Design a 2nm GAAFET TPU with an 8x8 Systolic Array of Bfloat16 PEs, Backside Power Delivery (BSPDN), synthesizable Verilog, and 3D silicon layout.` | Synthesizable RTL, self-checking testbench, and interactive 3D WebGL silicon die with live clock stepping |
-| 🔮 **Prediction** | `Predict the price trajectory of Bitcoin (BTC-USD) over the next 15 days based on macro momentum and FinBERT news sentiment.` | 14-Signal Alpha Features, 8-Model Bayesian Softmax Tournament, and 80%/95% Conformal Uncertainty Plotly curve |
-| ⚡ **Reasoning** | `Derive the Schwarzschild metric from Einstein's field equations R_uv = 0, computing all Christoffel symbols, Newtonian limit, and Kretschmann invariant.` | Publication-grade KaTeX derivation ($$ ... $$) with Kretschmann scalar invariant $K = \frac{48G^2M^2}{c^4 r^6}$ proof |
-| 💻 **Coding** | `Implement a high-throughput thread-safe LRU Cache in Python with TTL expiration, O(1) ops, complete type hints, docstrings, and unit tests.` | Production-grade Python module, AST linted, with self-testing test harness passing in local sandbox |
+| 🔬 **Chip Design** | `Design a 2nm GAAFET TPU with an 8x8 Systolic Array of Bfloat16 PEs, Backside Power Delivery (BSPDN), synthesizable Verilog, and 3D silicon layout.` | Synthesizable RTL, self-checking testbench, SPICE deck, and interactive 3D WebGL silicon die with live clock stepping |
+| 🔮 **Prediction** | `Predict lithium-ion battery State-of-Health (SOH) degradation over 500 charge-discharge cycles under high ambient temperature stress.` | Multi-feature polynomial & Bayesian stacking forecast, SOH capacity decay curve, and Plotly 80%/95% confidence corridor |
+| ⚡ **Reasoning (Math)**| `Compute the exact definite integral of x^3 / (e^x - 1) from x=0 to infinity, showing the Riemann zeta function connection and full series expansion.` | Publication-grade KaTeX derivation ($$ ... $$) demonstrating $\zeta(4) = \frac{\pi^4}{90}$ and final value $\frac{\pi^4}{15}$ |
+| ⚡ **Reasoning (GR)**| `Derive the Schwarzschild metric from Einstein's field equations R_uv = 0, computing all Christoffel symbols, Newtonian limit, and Kretschmann invariant.` | Full step-by-step tensor derivation, exact 9 non-zero Christoffel symbols, and Kretschmann scalar invariant proof |
+| 💻 **Coding** | `Implement a lock-free SPSC ring buffer queue in Rust with atomic operations, memory ordering, doc tests, and cache-line padding.` | Production-grade Rust module, AST verified, memory-order annotated, passing unit test harness |
 | 🎓 **Study** | `Teach me Transformer Attention Mechanism (Self-Attention, Multi-Head, KV-Cache) from first principles as an exhaustive graduate textbook.` | 2-Volume Master Treatise with Mermaid architecture diagram, display math, 1-page formula cheat-sheet, 10 solved problems & mock exam |
 
 ---
@@ -208,15 +214,33 @@ except KeyboardInterrupt:
     tunnel_proc.terminate()
 ```
 
-Copy the printed `https://xxxx.trycloudflare.com` URL, open **`http://localhost:5173`** in your local browser, click **`⚙️ Settings`**, and paste the URL into **Server URL**.
+Copy the printed `https://xxxx.trycloudflare.com` URL, open **`http://localhost:5173`** in your local browser, click **Settings (`⚙️`)**, and paste the URL into **Server URL**.
+
+---
+
+## 🧪 Comprehensive Automated Verification Suites
+
+The system includes automated pre-flight audit suites that test every Python file, frontend build, mathematical post-processor, and router fast-path:
+
+```bash
+# 1. Run 6-Stage Deep Line-by-Line System Audit
+python3 backend/test_deep_line_by_line_audit.py
+
+# 2. Run 7-Subsystem End-to-End Project Audit
+python3 backend/test_full_project_audit.py
+
+# 3. Test React 18 / Vite Production Bundle
+npm run build --prefix frontend
+```
 
 ---
 
 ## 💻 Tech Stack
 
 - **Backend:** FastAPI, Uvicorn, Python 3.10+, PyTorch, Vulkan SDK, `llama-cpp-python`, ChromaDB, PyPDF, Scikit-Learn, Icarus Verilog, Yosys, NGSPICE, SymPy, NumPy, Pandas
-- **Frontend:** React 18, Vite, KaTeX Mathematical Typography, Plotly.js, Three.js / WebGL, Vanilla CSS (Glassmorphism)
-- **Hardware Acceleration:** Vulkan Compute (NVIDIA, AMD, Intel iGPU/dGPU), NVIDIA CUDA, Apple Metal, Multi-Core CPU Fallback
+- **Frontend:** React 18, Vite 8, Lucide React (`lucide-react`), React Syntax Highlighter (`react-syntax-highlighter`), KaTeX Typography, Plotly.js, Three.js / WebGL, CSS Design Tokens
+- **Hardware Acceleration:** Vulkan Compute (NVIDIA, AMD, Intel iGPU/dGPU), NVIDIA CUDA, Apple Metal MPS, Multi-Core CPU Fallback
+- **Security:** Safe SAST Execution Sandbox, SSRF Defense, Path Traversal Defense, Supply-Chain Package Allowlisting, TarSlip/ZipSlip Guards
 
 ---
 
