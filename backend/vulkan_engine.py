@@ -46,13 +46,28 @@ def get_vulkan_binary_path():
     return None
 
 def get_installed_version():
-    """Read installed version tag from version.txt."""
+    """Read installed version tag from version.txt or llama_cpp package metadata."""
     if os.path.exists(VERSION_FILE):
         try:
             with open(VERSION_FILE, "r") as f:
-                return f.read().strip()
+                v = f.read().strip()
+                if v:
+                    return v
         except Exception:
-            return None
+            pass
+    try:
+        import importlib.metadata
+        ver = importlib.metadata.version("llama-cpp-python")
+        if ver:
+            return f"v{ver}"
+    except Exception:
+        pass
+    try:
+        import llama_cpp
+        if hasattr(llama_cpp, "__version__"):
+            return f"v{llama_cpp.__version__}"
+    except Exception:
+        pass
     return None
 
 def get_vulkan_gpu_diagnostics():
@@ -203,11 +218,28 @@ def check_vulkan_engine_status():
     has_update = False
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        res = requests.get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", headers=headers, timeout=5)
-        if res.ok:
-            data = res.json()
-            latest_tag = data.get("tag_name")
-            if installed_ver and latest_tag and installed_ver != latest_tag:
+        if detected in ["nvidia", "apple"]:
+            # Check PyPI / llama-cpp-python for CUDA and Metal python engines
+            try:
+                res = requests.get("https://pypi.org/pypi/llama-cpp-python/json", headers=headers, timeout=5)
+                if res.ok:
+                    latest_tag = f"v{res.json().get('info', {}).get('version')}"
+            except Exception:
+                pass
+            if not latest_tag:
+                res = requests.get("https://api.github.com/repos/abetlen/llama-cpp-python/releases/latest", headers=headers, timeout=5)
+                if res.ok:
+                    latest_tag = res.json().get("tag_name")
+        else:
+            # Check ggml-org/llama.cpp for precompiled Vulkan engine binary
+            res = requests.get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", headers=headers, timeout=5)
+            if res.ok:
+                latest_tag = res.json().get("tag_name")
+
+        if installed_ver and latest_tag:
+            clean_inst = installed_ver.split()[0].replace("v", "")
+            clean_lat = latest_tag.split()[0].replace("v", "")
+            if clean_inst != clean_lat:
                 has_update = True
     except Exception:
         pass
@@ -262,13 +294,23 @@ def setup_target_gpu_engine(engine_target="auto"):
             env = os.environ.copy()
             env["CMAKE_ARGS"] = "-DGGML_CUDA=on"
             env["FORCE_CMAKE"] = "1"
-            cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--force-reinstall", "--no-cache-dir"]
+            cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--upgrade", "--force-reinstall", "--no-cache-dir"]
             subprocess.check_call(cmd, env=env)
             state = load_installed_state()
             state["cuda"] = True
             save_installed_state(state)
+            pkg_ver = None
+            try:
+                import importlib.metadata
+                pkg_ver = importlib.metadata.version("llama-cpp-python")
+                os.makedirs(VULKAN_DIR, exist_ok=True)
+                with open(VERSION_FILE, "w") as f:
+                    f.write(f"v{pkg_ver}")
+            except Exception:
+                pass
+            ver_label = f" (v{pkg_ver})" if pkg_ver else ""
             with VULKAN_PROGRESS_LOCK:
-                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA GPU engine compiled & ready!"}
+                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": f"✅ NVIDIA CUDA GPU engine{ver_label} compiled & ready!"}
         except Exception as e:
             try:
                 with VULKAN_PROGRESS_LOCK:
@@ -282,13 +324,23 @@ def setup_target_gpu_engine(engine_target="auto"):
                             cuda_tag = f"cu{ver.replace('.', '')[:3]}"
                 except Exception:
                     pass
-                cmd2 = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--extra-index-url", f"https://abetlen.github.io/llama-cpp-python/wheels/{cuda_tag}", "--force-reinstall", "--no-cache-dir"]
+                cmd2 = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--extra-index-url", f"https://abetlen.github.io/llama-cpp-python/wheels/{cuda_tag}", "--upgrade", "--force-reinstall", "--no-cache-dir"]
                 subprocess.check_call(cmd2)
                 state = load_installed_state()
                 state["cuda"] = True
                 save_installed_state(state)
+                pkg_ver = None
+                try:
+                    import importlib.metadata
+                    pkg_ver = importlib.metadata.version("llama-cpp-python")
+                    os.makedirs(VULKAN_DIR, exist_ok=True)
+                    with open(VERSION_FILE, "w") as f:
+                        f.write(f"v{pkg_ver}")
+                except Exception:
+                    pass
+                ver_label = f" (v{pkg_ver})" if pkg_ver else ""
                 with VULKAN_PROGRESS_LOCK:
-                    VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA wheel installed & ready!"}
+                    VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": f"✅ NVIDIA CUDA wheel{ver_label} installed & ready!"}
             except Exception as e2:
                 with VULKAN_PROGRESS_LOCK:
                     VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "cuda", "percent": 0, "message": f"CUDA setup failed: {str(e2)}"}
@@ -299,13 +351,23 @@ def setup_target_gpu_engine(engine_target="auto"):
         try:
             env = os.environ.copy()
             env["CMAKE_ARGS"] = "-DGGML_METAL=on"
-            cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--force-reinstall", "--no-cache-dir"]
+            cmd = [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--upgrade", "--force-reinstall", "--no-cache-dir"]
             subprocess.check_call(cmd, env=env)
             state = load_installed_state()
             state["metal"] = True
             save_installed_state(state)
+            pkg_ver = None
+            try:
+                import importlib.metadata
+                pkg_ver = importlib.metadata.version("llama-cpp-python")
+                os.makedirs(VULKAN_DIR, exist_ok=True)
+                with open(VERSION_FILE, "w") as f:
+                    f.write(f"v{pkg_ver}")
+            except Exception:
+                pass
+            ver_label = f" (v{pkg_ver})" if pkg_ver else ""
             with VULKAN_PROGRESS_LOCK:
-                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "metal", "percent": 100, "message": "✅ Apple Silicon Metal engine compiled & ready!"}
+                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "metal", "percent": 100, "message": f"✅ Apple Silicon Metal engine{ver_label} compiled & ready!"}
         except Exception as e:
             with VULKAN_PROGRESS_LOCK:
                 VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "metal", "percent": 0, "message": f"Metal setup failed: {str(e)}"}

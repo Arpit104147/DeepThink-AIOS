@@ -69,7 +69,25 @@ const SettingsModal = ({
     }
   }, [settingsOpen, serverUrl]);
 
-  const handleSetupGpuEngine = async (engineTarget = "auto") => {
+  const activeEngineTarget = (() => {
+    if (vulkanStatus?.engines?.nvidia?.installed) return "cuda";
+    if (vulkanStatus?.engines?.vulkan?.installed) return "vulkan";
+    if (vulkanStatus?.engines?.apple?.installed) return "metal";
+    const detected = vulkanStatus?.detected_platform;
+    if (detected === "nvidia") return "cuda";
+    if (detected === "apple") return "metal";
+    if (detected === "vulkan") return "vulkan";
+    return "auto";
+  })();
+
+  const activeEngineTitle = (() => {
+    if (activeEngineTarget === "cuda") return "NVIDIA CUDA";
+    if (activeEngineTarget === "metal") return "Apple Metal";
+    if (activeEngineTarget === "vulkan") return "Intel / AMD Vulkan";
+    return "GPU Acceleration";
+  })();
+
+  const handleSetupGpuEngine = async (engineTarget = "auto", forceUpdate = false) => {
     if (vulkanStatus?.progress?.status === "updating") return;
     const targetKey = engineTarget === "nvidia" ? "cuda" : (engineTarget === "apple" ? "metal" : engineTarget);
     const isAlreadyInstalled = 
@@ -77,13 +95,13 @@ const SettingsModal = ({
       (targetKey === "vulkan" && (vulkanStatus?.engines?.vulkan?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "vulkan"))) ||
       (targetKey === "metal" && (vulkanStatus?.engines?.apple?.installed || (vulkanStatus?.progress?.status === "completed" && vulkanStatus?.active_target === "metal")));
     
-    if (isAlreadyInstalled) {
+    if (isAlreadyInstalled && !forceUpdate) {
       console.log(`✅ Engine ${targetKey.toUpperCase()} is already installed and active.`);
       return;
     }
 
     try {
-      console.log(`🚀 Initiating ${targetKey.toUpperCase()} GPU Acceleration Setup...`);
+      console.log(`🚀 Initiating ${targetKey.toUpperCase()} GPU Acceleration ${forceUpdate ? "Update" : "Setup"}...`);
       const res = await fetch(`${serverUrl}/api/gpu/setup?engine=${targetKey}`, { method: "POST" });
       if (res.ok) {
         fetchVulkanStatus();
@@ -239,31 +257,73 @@ const SettingsModal = ({
                           )}
                         </div>
                         <div className="gpu-engine-card-desc">{engine.desc}</div>
-                        <button
-                          className={`gpu-engine-btn ${engine.key} ${isInstalled ? "installed" : (!isDetected ? "inactive" : "")}`}
-                          onClick={() => handleSetupGpuEngine(engine.target)}
-                          disabled={isInstalled || isUpdating}
-                        >
-                          {isUpdating && vulkanStatus?.active_target === engine.target
-                            ? (<><Loader size={12} className="spin" /> {engine.labels.installing}</>)
-                            : isInstalled
-                              ? (<><Check size={12} /> {engine.labels.installed}</>)
+                        {isInstalled ? (
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <div
+                              className={`gpu-engine-btn installed ${engine.key}`}
+                              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                            >
+                              <Check size={12} /> Active
+                            </div>
+                            <button
+                              className={`gpu-engine-btn update ${engine.key}`}
+                              style={{ flex: 1 }}
+                              onClick={() => handleSetupGpuEngine(engine.target, true)}
+                              disabled={isUpdating}
+                              title={`Update ${engine.title} to latest release`}
+                            >
+                              {isUpdating && vulkanStatus?.active_target === engine.target ? (
+                                <><Loader size={12} className="spin" /> Updating</>
+                              ) : (
+                                <><RefreshCw size={12} /> Update</>
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className={`gpu-engine-btn ${engine.key} ${!isDetected ? "inactive" : ""}`}
+                            onClick={() => handleSetupGpuEngine(engine.target)}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating && vulkanStatus?.active_target === engine.target
+                              ? (<><Loader size={12} className="spin" /> {engine.labels.installing}</>)
                               : isDetected
                                 ? (<><Zap size={12} /> {engine.labels.activate}</>)
                                 : engine.labels.setup}
-                        </button>
+                          </button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
 
-                <div style={{ display: "flex", gap: "16px", fontSize: "0.78rem", color: "var(--dt-text-secondary)" }}>
-                  <div>
-                    Installed Engine: <strong style={{ color: "var(--dt-success)" }}>{vulkanStatus?.installed_version || "Ready"}</strong>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", padding: "10px 14px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "var(--dt-radius-md)", border: "1px solid var(--dt-border-subtle)", flexWrap: "wrap", gap: "10px" }}>
+                  <div style={{ display: "flex", gap: "16px", fontSize: "0.8rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      Installed Engine: <strong style={{ color: "var(--dt-success)" }}>{vulkanStatus?.installed_version || "Ready"}</strong>
+                    </div>
+                    <div>
+                      Latest GitHub Release: <strong style={{ color: "#818cf8" }}>{vulkanStatus?.latest_version || "Latest"}</strong>
+                    </div>
+                    {vulkanStatus?.has_update && (
+                      <span style={{ fontSize: "0.7rem", padding: "2px 8px", borderRadius: "12px", background: "var(--dt-warning-bg)", color: "var(--dt-warning)", border: "1px solid var(--dt-warning-border)", fontWeight: "600" }}>
+                        Update Available
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    Latest GitHub Release: <strong style={{ color: "#818cf8" }}>{vulkanStatus?.latest_version || "b10441"}</strong>
-                  </div>
+
+                  <button
+                    className="gpu-update-btn"
+                    onClick={() => handleSetupGpuEngine(activeEngineTarget, true)}
+                    disabled={vulkanStatus?.progress?.status === "updating"}
+                    title={`Update installed ${activeEngineTitle} (${activeEngineTarget.toUpperCase()})`}
+                  >
+                    {vulkanStatus?.progress?.status === "updating" ? (
+                      <><Loader size={13} className="spin" /> Updating...</>
+                    ) : (
+                      <><RefreshCw size={13} /> Update {activeEngineTarget.toUpperCase()} Engine</>
+                    )}
+                  </button>
                 </div>
 
                 {/* Progress bar when updating */}

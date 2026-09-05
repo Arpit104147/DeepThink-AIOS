@@ -3121,6 +3121,43 @@ html, body {
 .gpu-engine-btn.metal { background: var(--dt-metal); color: #fff; }
 .gpu-engine-btn.metal.installed { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid var(--dt-metal); }
 .gpu-engine-btn.inactive { background: rgba(255, 255, 255, 0.08); color: #ccc; }
+.gpu-engine-btn.update {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dt-text-secondary);
+  border: 1px solid var(--dt-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.gpu-engine-btn.update:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: var(--dt-accent);
+  color: #fff;
+}
+.gpu-update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--dt-radius-md);
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--dt-accent);
+  color: #fff;
+  border: 1px solid var(--dt-accent-hover);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px var(--dt-accent-glow);
+}
+.gpu-update-btn:hover:not(:disabled) {
+  background: var(--dt-accent-hover);
+  transform: translateY(-1px);
+}
+.gpu-update-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .diagnostics-panel {
   background: var(--dt-surface-3);
