@@ -34,6 +34,24 @@ class WebSearch:
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0"})
 
+    @staticmethod
+    def _clean_search_query(query: str) -> str:
+        """Strip conversational fluff and search prefixes from raw queries."""
+        if not query:
+            return ""
+        q = query.strip()
+        fluff_patterns = [
+            r"^(?:ok|okay|please|can you|could you|tell me|give me|find me|search for|what is|what are|do you know|latest news on|news on|information on|updates on|show me|look up|search the web for)\s+",
+            r"^(?:give me some latest news on|can you give me the latest news on|tell me the latest news on|what is the latest news on|give me some news on)\s+",
+            r"\s+(?:today|now|recently|right now|please)$",
+        ]
+        prev = ""
+        while prev != q:
+            prev = q
+            for pat in fluff_patterns:
+                q = re.sub(pat, "", q, flags=re.IGNORECASE).strip()
+        return q if len(q) >= 3 else query.strip()
+
     def search(self, query, max_results=5):
         """
         Search the web with robust 100% free, keyless multi-tier failover:
@@ -42,26 +60,34 @@ class WebSearch:
         3. Public SearXNG instances (with fast timeout)
         4. Wikipedia Search API (factual information fallback)
         """
+        clean_q = self._clean_search_query(query)
+
         # 1. Try DuckDuckGo API library
-        res = self._ddg_search_api(query, max_results)
+        res = self._ddg_search_api(clean_q, max_results)
         if res:
             return res
 
         # 2. Try DuckDuckGo Lite/HTML direct scraper
-        res = self._ddg_html_scraper(query, max_results)
+        res = self._ddg_html_scraper(clean_q, max_results)
         if res:
             return res
 
         # 3. Try SearXNG fallback instances
         if self.searxng_url:
-            res = self._searxng_search(query, max_results)
+            res = self._searxng_search(clean_q, max_results)
             if res:
                 return res
 
         # 4. Try Wikipedia encyclopedic fallback
-        res = self._wikipedia_search(query, max_results)
+        res = self._wikipedia_search(clean_q, max_results)
         if res:
             return res
+
+        # Fallback to raw query if cleaned query had 0 results and differed
+        if clean_q != query:
+            res = self._ddg_search_api(query, max_results) or self._ddg_html_scraper(query, max_results)
+            if res:
+                return res
 
         return []
 
@@ -342,9 +368,8 @@ class WebSearch:
             scored.append((overlap + density, p))
 
         if not scored:
-            # Nothing matched — return the head of the page as a last resort
-            # (better than empty; still capped).
-            return cleaned_text[:PER_SOURCE_CHAR_CAP]
+            # If nothing matched the query keywords, drop this page to prevent irrelevant content injection
+            return ""
 
         scored.sort(key=lambda x: x[0], reverse=True)
         chosen = []
@@ -390,10 +415,11 @@ class WebSearch:
         if max_scrapes is None:
             max_scrapes = MAX_SCRAPE_ATTEMPTS
 
-        raw = self.search(query, max_results=max_results) or []
+        clean_q = self._clean_search_query(query)
+        raw = self.search(clean_q, max_results=max_results) or []
         deduped = self._dedup_by_domain(raw)[:max_scrapes]
 
-        keywords = self._query_keywords(query)
+        keywords = self._query_keywords(clean_q)
         parts = []
         sources_meta = []
         sources_scraped = 0

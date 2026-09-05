@@ -434,14 +434,37 @@ class AgentOrchestrator:
     def _clean_cutoff_notes(self, text):
         if not text:
             return text
+
+        # 1. Strip simulated dialogue preambles (e.g. "User: hi\n\nAssistant: Hi there!...")
+        echo_match = re.search(r"^\s*User:[^\n]*\n+\s*(?:Assistant|AI|Response):\s*", text, flags=re.IGNORECASE)
+        if echo_match:
+            text = text[echo_match.end():].strip()
+        elif re.match(r"^\s*(?:Assistant|AI|Response):\s*", text, flags=re.IGNORECASE):
+            text = re.sub(r"^\s*(?:Assistant|AI|Response):\s*", "", text, flags=re.IGNORECASE).strip()
+
+        # 2. Strip conversational self-intro preambles
+        intro_patterns = [
+            r"^\s*(?:Hi there!|Hello!|Hey there!)?\s*It's great to start our conversation\.[^\n]*\n*",
+            r"^\s*I'?m an artificial intelligence assistant,[^\n]*\n*",
+            r"^\s*However, I can provide you with [^\n]*based on my available data as of [^\n]*\n*",
+            r"^\s*Regarding skills-based hiring[^\n]*\n*",
+            r"^\s*To address your question about current user requests,[^\n]*\n*",
+        ]
+        for ipat in intro_patterns:
+            text = re.sub(ipat, '', text, flags=re.IGNORECASE).strip()
+
+        # 3. Strip knowledge cutoff notes and disclaimers
         patterns = [
             r'\(Note:\s*my\s+training\s+data\s+only\s+goes\s+up\s+to\s+[^)]+\)',
             r'\(As\s+an\s+AI,\s*my\s+knowledge\s+cutoff\s+is\s+[^)]+\)',
+            r'As\s+per\s+my\s+knowledge\s+cutoff\s+on\s+[^,.\n]+[,.]?',
+            r'based\s+on\s+my\s+available\s+data\s+as\s+of\s+[^,.\n]+[,.]?',
             r'Always\s+verify\s+with\s+official\s+sources[^.]*\.?',
             r'Please\s+verify\s+with\s+official\s+sources[^.]*\.?',
             r'Knowledge cutoff:.*?\n',
             r'Note: My knowledge cutoff is.*?\n',
-            r'As an AI developed by.*?\n'
+            r'As an AI developed by.*?\n',
+            r'Please let me know how I can assist you further!?\s*$',
         ]
         cleaned = text
         for pat in patterns:
@@ -727,25 +750,31 @@ class AgentOrchestrator:
                 pass
 
         if task_type == "SIMPLE":
+            # For conversational Q&A and web synthesis, prioritize instruction-tuned model (router / phi-3.5)
+            ans_model = "router"
             try:
-                vt = self._get_model("vibethinker", required_ctx=2048)
-                ans_model = "vibethinker" if self._is_model_valid(vt) else "router"
+                rt = self._get_model("router", required_ctx=2048)
+                if not self._is_model_valid(rt):
+                    ans_model = "vibethinker"
             except (FileNotFoundError, Exception):
-                ans_model = "router"
+                ans_model = "vibethinker"
             llm = self._get_model(ans_model, required_ctx=2048)
             final_p = prompt
             sys_prompt = None
             if web_context:
                 sys_prompt = (
-                    "You are a helpful, knowledgeable AI assistant with direct access to live real-time internet search and meteorological feeds.\n"
-                    "Provide a thorough, accurate, and helpful response to the user's inquiry based on the live data context.\n"
-                    "Always present the live metrics, current conditions, exact numbers, and temperatures directly.\n"
-                    "Never say 'I cannot provide real-time information' or tell the user to check external apps because live data is provided to you."
+                    "You are a factual, concise AI assistant synthesizing live search results.\n"
+                    "CRITICAL INSTRUCTIONS:\n"
+                    "1. Directly answer the user's question using only genuinely relevant facts from the LIVE REAL-TIME DATA CONTEXT.\n"
+                    "2. Completely ignore and discard any irrelevant web search results, career advice, job postings, or advertising.\n"
+                    "3. If the search context does not contain verified reports about the specific event or question, clearly state: 'Based on current live search results, no verified recent reports were found regarding this topic.' Do not hallucinate or invent events.\n"
+                    "4. Respond directly as the assistant. Never prefix your output with 'User:' or 'Assistant:' or simulate a conversation.\n"
+                    "5. Do NOT include greetings, disclaimers about being an AI without emotions, or knowledge cutoff dates."
                 )
                 final_p = (
                     f"LIVE REAL-TIME DATA CONTEXT:\n{web_context}\n\n"
                     f"USER QUESTION: {prompt}\n\n"
-                    f"Synthesize a clear, comprehensive, and directly informative answer incorporating all key facts and live metrics from the context above."
+                    f"Synthesize a clear, direct, and factual answer to the USER QUESTION based strictly on the relevant facts above:"
                 )
             res = self._strip_thinking(self._call_model(llm, final_p, max_tokens=max(1024, self.max_tokens), temperature=0.2, system_prompt=sys_prompt))
             return self._clean_cutoff_notes(res)

@@ -707,23 +707,21 @@ async def chat(request: ChatRequest):
                             hist_text = f"[Executive Summary of Earlier Conversation (Turns 1 to {total_turns-6})]:\n"
                             hist_text += "\n".join(early_summary[:8]) + "\n\n"
                             hist_text += "[Recent Direct Conversation Turns]:\n"
-                            for item in request.history[-6:]:
-                                role = item.get("role", "user")
-                                content = item.get("content", "").strip()
-                                if content:
-                                    label = "User" if role == "user" else "Assistant"
-                                    hist_text += f"{label}: {content}\n\n"
-                        else:
-                            hist_text = ""
-                            for item in request.history:
-                                role = item.get("role", "user")
-                                content = item.get("content", "").strip()
-                                if content:
-                                    label = "User" if role == "user" else "Assistant"
-                                    hist_text += f"{label}: {content}\n\n"
+                        meaningful_turns = []
+                        target_history = request.history[-6:] if total_turns > 6 else request.history
+                        for item in target_history:
+                            role = item.get("role", "user")
+                            content = item.get("content", "").strip()
+                            if content and content.lower() not in ["hi", "hello", "hey", "test", "ping"]:
+                                label = "User" if role == "user" else "Assistant"
+                                meaningful_turns.append(f"{label}: {content}")
 
-                        if hist_text:
-                            final_prompt = f"Previous Conversation Context:\n{hist_text}Current User Request:\n{final_prompt}"
+                        if meaningful_turns:
+                            hist_text = "\n\n".join(meaningful_turns)
+                            final_prompt = (
+                                f"[Conversation Context for Reference]:\n{hist_text}\n\n"
+                                f"[Current User Request - Answer ONLY this]:\n{final_prompt}"
+                            )
 
                     if generation_cancel.is_set():
                         q.put({"type": "error", "message": "Generation cancelled."})
