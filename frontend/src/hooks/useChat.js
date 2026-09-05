@@ -29,13 +29,22 @@ export function useChat({
   };
 
   const handleLoadAll = async () => {
-    if (!isConnected || !isEvmActive || isPreloading) return;
+    if (!isConnected || isPreloading) return;
     setIsPreloading(true);
     try {
       const res = await fetch(`${serverUrl}/api/load_all`, { method: "POST" });
-      alert(res.ok ? "All models successfully loaded into System RAM" : "Error: Failed to load models.");
-    } catch {
-      alert("Error: Failed to load models.");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (data.status === "warning") {
+          alert(`⚠️ ${data.message}`);
+        } else {
+          alert(`✅ ${data.message || "All models successfully loaded into System RAM."}`);
+        }
+      } else {
+        alert(`❌ ${data.detail || data.message || "Error: Failed to load models."}`);
+      }
+    } catch (e) {
+      alert(`❌ Failed to communicate with server: ${e.message}`);
     } finally {
       setIsPreloading(false);
     }

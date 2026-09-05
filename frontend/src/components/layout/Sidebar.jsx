@@ -53,13 +53,13 @@ const Sidebar = ({
         <button
           className="nav-item"
           onClick={handleLoadAll}
-          disabled={!isConnected || !isEvmActive || isPreloading}
+          disabled={!isConnected || isPreloading}
           title={
             !isConnected
               ? "Backend disconnected"
-              : !isEvmActive
-                ? "EVM mode not active (requires EVM to pre-load)"
-                : "Load all models into System RAM"
+              : isPreloading
+                ? "Loading models into System RAM..."
+                : "Pre-load all downloaded models into System RAM"
           }
         >
           <span className="nav-icon">{isPreloading ? <Loader size={15} className="spin" /> : <Zap size={15} />}</span>

@@ -521,7 +521,7 @@ async def offload_memory():
 
 @app.post("/api/load_all")
 def load_all_models():
-    """Pre-load ALL core models directly into System RAM (CPU mode) at startup.
+    """Pre-load ALL available core models directly into System RAM (CPU mode) at startup.
     
     This keeps VRAM 100% empty, maximizing available space for the active model's KV cache.
     During conversation, EVM hot-swaps models from RAM → VRAM one at a time.
@@ -530,36 +530,67 @@ def load_all_models():
         models_status = check_models_status()
         downloaded = [k for k, v in models_status.items() if v.get("downloaded")]
         
-        benchmark_models = ["router", "deepseek_r1", "vibethinker", "ornith"]
+        if not downloaded:
+            return {
+                "status": "warning",
+                "loaded_count": 0,
+                "message": "No models are currently downloaded. Please download models from the Model Hub first."
+            }
+        
+        # Determine models to load: prioritize active role assignments, then other downloaded models
+        from backend.downloader import ROLE_ASSIGNMENTS
+        models_to_load = []
+        for role, key in ROLE_ASSIGNMENTS.items():
+            if key in downloaded and key not in models_to_load:
+                models_to_load.append(key)
+        for key in downloaded:
+            if key not in models_to_load:
+                models_to_load.append(key)
+        
         loaded = []
+        failed = []
         
         # Suspend EVM hot-swap during this initialization phase
         evm_was_active = getattr(orchestrator, 'kaggle_hotswap_mode', False)
         orchestrator.kaggle_hotswap_mode = False
         
         try:
-            for model_key in benchmark_models:
-                if model_key in downloaded:
-                    try:
-                        print(f"📥 EVM Pre-Load: Instantiating '{model_key}' in System RAM (CPU)...")
-                        # Enforce force_cpu=True to load it into CPU RAM
-                        # Use a uniform, safe context (2048) to minimize RAM footprint while warm
-                        cpu_ctx = 2048
-                        
-                        orchestrator._get_model(model_key, required_ctx=cpu_ctx, force_cpu=True)
-                        loaded.append(model_key)
-                        gc.collect()
-                    except Exception as e:
-                        print(f"⚠️ Failed to pre-load '{model_key}' to RAM: {e}")
+            for model_key in models_to_load:
+                # RAM safety check: halt if free RAM is critically low (< 1.0 GB)
+                ram = psutil.virtual_memory()
+                if ram.available < 1.0 * (1024 ** 3):
+                    print(f"⚠️ Low System RAM ({ram.available / (1024**3):.1f} GB free). Halting pre-load to avoid OOM.")
+                    break
+
+                try:
+                    print(f"📥 EVM Pre-Load: Instantiating '{model_key}' in System RAM (CPU)...")
+                    # Uniform, safe context (2048) to minimize warm RAM footprint
+                    cpu_ctx = 2048
+                    orchestrator._get_model(model_key, required_ctx=cpu_ctx, force_cpu=True)
+                    loaded.append(model_key)
+                    gc.collect()
+                except Exception as e:
+                    print(f"⚠️ Failed to pre-load '{model_key}' to RAM: {e}")
+                    failed.append((model_key, str(e)))
         finally:
             # Restore EVM hot-swap mode
             orchestrator.kaggle_hotswap_mode = evm_was_active
             
-        print(f"🚀 EVM Pre-Load Complete: {len(loaded)} models instantiated in System RAM. VRAM is 100% free!")
+        print(f"🚀 EVM Pre-Load Complete: {len(loaded)} models instantiated in System RAM.")
         
+        if not loaded:
+            err_summary = "; ".join([f"{k}: {err}" for k, err in failed[:2]]) if failed else "No models could be instantiated."
+            return {
+                "status": "warning",
+                "loaded_count": 0,
+                "message": f"Could not instantiate models in RAM. {err_summary}"
+            }
+
         return {
             "status": "success", 
-            "message": f"Instantiated {len(loaded)} models in System RAM. VRAM is 100% free for KV cache."
+            "loaded_count": len(loaded),
+            "loaded_models": loaded,
+            "message": f"Successfully loaded {len(loaded)} model(s) ({', '.join(loaded)}) into System RAM. VRAM is 100% free!"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
