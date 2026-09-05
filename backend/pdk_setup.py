@@ -289,5 +289,3 @@ if __name__ == "__main__":
     print("=" * 60)
     print("  PDK Installation Directory:", PDK_BASE_DIR)
     print("=" * 60)
-""",
-<br>"""

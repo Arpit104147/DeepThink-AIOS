@@ -16,6 +16,7 @@ VULKAN_UPDATE_PROGRESS = {
     "percent": 0,
     "message": ""
 }
+VULKAN_PROGRESS_LOCK = threading.Lock()
 
 def get_vulkan_binary_path():
     """Return absolute path to precompiled llama-server binary if present."""
@@ -57,7 +58,6 @@ def get_installed_version():
 def get_vulkan_gpu_diagnostics():
     """Perform hardware diagnostics to detect GPU name, VRAM, and verify Vulkan GPU mode."""
     import subprocess
-    import glob
     try:
         import psutil
         ram = psutil.virtual_memory()
@@ -86,7 +86,7 @@ def get_vulkan_gpu_diagnostics():
 
     if gpu_name == "Unknown Graphics Adapter":
         try:
-            lspci = subprocess.check_output("lspci -vmm", shell=True, stderr=subprocess.DEVNULL).decode()
+            lspci = subprocess.check_output(["lspci", "-vmm"], stderr=subprocess.DEVNULL).decode()
             for block in lspci.split("\n\n"):
                 if "VGA compatible controller" in block or "3D controller" in block or "Display controller" in block:
                     lines = dict([line.split(":\t") for line in block.split("\n") if ":\t" in line])
@@ -212,15 +212,19 @@ def check_vulkan_engine_status():
     except Exception:
         pass
 
+    with VULKAN_PROGRESS_LOCK:
+        active_target = VULKAN_UPDATE_PROGRESS.get("target", detected)
+        progress = VULKAN_UPDATE_PROGRESS.copy() if isinstance(VULKAN_UPDATE_PROGRESS, dict) else VULKAN_UPDATE_PROGRESS
+
     return {
         "detected_platform": detected,
-        "active_target": VULKAN_UPDATE_PROGRESS.get("target", detected),
+        "active_target": active_target,
         "installed": binary_path is not None or check_engine_installed(detected),
         "installed_version": installed_ver or ("Installed" if binary_path else "Ready"),
         "latest_version": latest_tag or installed_ver or "Latest",
         "has_update": has_update,
         "binary_path": binary_path,
-        "progress": VULKAN_UPDATE_PROGRESS,
+        "progress": progress,
         "engines": {
             "nvidia": {
                 "name": "NVIDIA CUDA Engine",
@@ -252,7 +256,8 @@ def setup_target_gpu_engine(engine_target="auto"):
         engine_target = detect_hardware_platform()
 
     if engine_target in ["cuda", "nvidia"]:
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 10, "message": "Compiling CUDA GPU backend (GGML_CUDA=on)..."}
+        with VULKAN_PROGRESS_LOCK:
+            VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 10, "message": "Compiling CUDA GPU backend (GGML_CUDA=on)..."}
         try:
             env = os.environ.copy()
             env["CMAKE_ARGS"] = "-DGGML_CUDA=on"
@@ -262,10 +267,12 @@ def setup_target_gpu_engine(engine_target="auto"):
             state = load_installed_state()
             state["cuda"] = True
             save_installed_state(state)
-            VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA GPU engine compiled & ready!"}
+            with VULKAN_PROGRESS_LOCK:
+                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA GPU engine compiled & ready!"}
         except Exception as e:
             try:
-                VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 50, "message": "Fetching CUDA wheel..."}
+                with VULKAN_PROGRESS_LOCK:
+                    VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "cuda", "percent": 50, "message": "Fetching CUDA wheel..."}
                 cuda_tag = "cu121"
                 try:
                     import torch
@@ -280,12 +287,15 @@ def setup_target_gpu_engine(engine_target="auto"):
                 state = load_installed_state()
                 state["cuda"] = True
                 save_installed_state(state)
-                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA wheel installed & ready!"}
+                with VULKAN_PROGRESS_LOCK:
+                    VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "cuda", "percent": 100, "message": "✅ NVIDIA CUDA wheel installed & ready!"}
             except Exception as e2:
-                VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "cuda", "percent": 0, "message": f"CUDA setup failed: {str(e2)}"}
+                with VULKAN_PROGRESS_LOCK:
+                    VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "cuda", "percent": 0, "message": f"CUDA setup failed: {str(e2)}"}
 
     elif engine_target in ["metal", "apple"]:
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "metal", "percent": 10, "message": "Compiling Apple Silicon Metal Performance Shaders backend..."}
+        with VULKAN_PROGRESS_LOCK:
+            VULKAN_UPDATE_PROGRESS = {"status": "updating", "target": "metal", "percent": 10, "message": "Compiling Apple Silicon Metal Performance Shaders backend..."}
         try:
             env = os.environ.copy()
             env["CMAKE_ARGS"] = "-DGGML_METAL=on"
@@ -294,9 +304,11 @@ def setup_target_gpu_engine(engine_target="auto"):
             state = load_installed_state()
             state["metal"] = True
             save_installed_state(state)
-            VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "metal", "percent": 100, "message": "✅ Apple Silicon Metal engine compiled & ready!"}
+            with VULKAN_PROGRESS_LOCK:
+                VULKAN_UPDATE_PROGRESS = {"status": "completed", "target": "metal", "percent": 100, "message": "✅ Apple Silicon Metal engine compiled & ready!"}
         except Exception as e:
-            VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "metal", "percent": 0, "message": f"Metal setup failed: {str(e)}"}
+            with VULKAN_PROGRESS_LOCK:
+                VULKAN_UPDATE_PROGRESS = {"status": "error", "target": "metal", "percent": 0, "message": f"Metal setup failed: {str(e)}"}
 
     else:
         # Default Vulkan download & extract
@@ -307,7 +319,8 @@ def setup_target_gpu_engine(engine_target="auto"):
 
 def _download_and_extract_vulkan():
     global VULKAN_UPDATE_PROGRESS
-    VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 5, "message": "Fetching latest GitHub release info..."}
+    with VULKAN_PROGRESS_LOCK:
+        VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 5, "message": "Fetching latest GitHub release info..."}
     
     try:
         res = requests.get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", timeout=10)
@@ -383,17 +396,31 @@ def _download_and_extract_vulkan():
                     downloaded += len(chunk)
                     if total_len > 0:
                         pct = int(15 + (downloaded / total_len) * 70)
-                        VULKAN_UPDATE_PROGRESS["percent"] = min(pct, 85)
+                        with VULKAN_PROGRESS_LOCK:
+                            VULKAN_UPDATE_PROGRESS["percent"] = min(pct, 85)
 
-        VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 85, "message": "Extracting GPU binary files..."}
+        with VULKAN_PROGRESS_LOCK:
+            VULKAN_UPDATE_PROGRESS = {"status": "updating", "percent": 85, "message": "Extracting GPU binary files..."}
 
         # Extract archive
         if file_name.endswith(".tar.gz") or file_name.endswith(".tgz"):
             with tarfile.open(archive_path, "r:gz") as tar:
-                tar.extractall(path=VULKAN_DIR)
+                try:
+                    tar.extractall(path=VULKAN_DIR, filter='data')
+                except TypeError:
+                    safe_members = []
+                    for member in tar.getmembers():
+                        member_path = os.path.realpath(os.path.join(VULKAN_DIR, member.name))
+                        if member_path.startswith(os.path.realpath(VULKAN_DIR) + os.sep):
+                            safe_members.append(member)
+                    tar.extractall(path=VULKAN_DIR, members=safe_members)
         elif file_name.endswith(".zip"):
             with zipfile.ZipFile(archive_path, "r") as zip_ref:
-                zip_ref.extractall(VULKAN_DIR)
+                for info in zip_ref.infolist():
+                    member_path = os.path.realpath(os.path.join(VULKAN_DIR, info.filename))
+                    if not member_path.startswith(os.path.realpath(VULKAN_DIR) + os.sep):
+                        continue
+                    zip_ref.extract(info, VULKAN_DIR)
 
         # Clean archive file
         if os.path.exists(archive_path):
@@ -413,22 +440,26 @@ def _download_and_extract_vulkan():
         with open(VERSION_FILE, "w") as f:
             f.write(tag_name)
 
-        VULKAN_UPDATE_PROGRESS = {
-            "status": "completed",
-            "percent": 100,
-            "message": f"Successfully updated pre-compiled Vulkan Engine to version {tag_name}!"
-        }
+        with VULKAN_PROGRESS_LOCK:
+            VULKAN_UPDATE_PROGRESS = {
+                "status": "completed",
+                "percent": 100,
+                "message": f"Successfully updated pre-compiled Vulkan Engine to version {tag_name}!"
+            }
 
     except Exception as e:
-        VULKAN_UPDATE_PROGRESS = {
-            "status": "error",
-            "percent": 0,
-            "message": f"Vulkan update failed: {str(e)}"
-        }
+        with VULKAN_PROGRESS_LOCK:
+            VULKAN_UPDATE_PROGRESS = {
+                "status": "error",
+                "percent": 0,
+                "message": f"Vulkan update failed: {str(e)}"
+            }
 
 def start_vulkan_update_background(engine_target="auto"):
     """Trigger background setup of chosen GPU engine (cuda, vulkan, metal)."""
-    if VULKAN_UPDATE_PROGRESS.get("status") == "updating":
+    with VULKAN_PROGRESS_LOCK:
+        is_updating = VULKAN_UPDATE_PROGRESS.get("status") == "updating"
+    if is_updating:
         return False
     t = threading.Thread(target=setup_target_gpu_engine, args=(engine_target,))
     t.daemon = True

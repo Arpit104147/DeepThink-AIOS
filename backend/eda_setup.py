@@ -15,7 +15,6 @@ Supported tools:
 import subprocess
 import sys
 import shutil
-import os
 
 
 def check_tools():

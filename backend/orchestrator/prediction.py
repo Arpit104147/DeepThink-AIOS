@@ -2,7 +2,6 @@ import re
 import json
 import hashlib
 import numpy as np
-from backend.sandbox import Sandbox
 from backend.downloader import resolve_model_key
 
 class PredictionPipeline:

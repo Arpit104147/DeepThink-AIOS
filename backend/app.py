@@ -74,7 +74,7 @@ except ImportError:
             return 0.0
     psutil = _MockPsutil()
 import time
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Body, UploadFile, File
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -122,7 +122,7 @@ app = FastAPI(title="Local Multi-Agent XPU System API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -882,7 +882,7 @@ def workspace_commit(
 def list_user_memories(limit: int = 50):
     """List recent long-term memories stored in vector memory."""
     try:
-        return {"memories": memory.list_memories(limit=limit)}
+        return {"memories": orchestrator.memory.list_memories(limit=limit)}
     except Exception as e:
         return {"memories": [], "error": str(e)}
 
@@ -890,17 +890,8 @@ def list_user_memories(limit: int = 50):
 def delete_user_memory(memory_id: str = Body(..., embed=True)):
     """Delete a specific long-term memory entry."""
     try:
-        success = memory.delete_memory(memory_id)
+        success = orchestrator.memory.delete_memory(memory_id)
         return {"success": success, "memory_id": memory_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/memory/clear")
-def clear_user_memories():
-    """Clear all long-term memories."""
-    try:
-        success = memory.clear()
-        return {"success": success}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

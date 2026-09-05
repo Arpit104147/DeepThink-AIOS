@@ -218,6 +218,20 @@ class WebSearch:
     def scrape_url(self, url):
         """Deep scrape the full text of a webpage."""
         try:
+            # SSRF protection: block internal/private IPs
+            from urllib.parse import urlparse
+            import socket
+            parsed = urlparse(url)
+            hostname = parsed.hostname
+            if hostname:
+                try:
+                    ip = socket.gethostbyname(hostname)
+                    import ipaddress
+                    ip_obj = ipaddress.ip_address(ip)
+                    if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved:
+                        return ""
+                except (socket.gaierror, ValueError):
+                    pass
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

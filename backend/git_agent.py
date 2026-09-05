@@ -14,14 +14,7 @@ import os
 import json
 import subprocess
 import shutil
-import tempfile
 
-# Try to import GitPython for advanced Git operations
-try:
-    import git as gitpython
-    GIT_AVAILABLE = True
-except ImportError:
-    GIT_AVAILABLE = False
 
 # Try to import requests for GitHub API
 try:
@@ -177,7 +170,10 @@ class GitAgent:
         try:
             # Write files
             for rel_path, content in files_dict.items():
-                full_path = os.path.join(workspace_path, rel_path)
+                full_path = os.path.realpath(os.path.join(workspace_path, rel_path))
+                real_workspace = os.path.realpath(workspace_path)
+                if not full_path.startswith(real_workspace + os.sep) and full_path != real_workspace:
+                    return {"success": False, "message": f"Path traversal blocked: {rel_path}"}
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, "w") as f:
                     f.write(content)

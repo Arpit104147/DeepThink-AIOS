@@ -1,13 +1,6 @@
 import os
 import gc
-import re
-import time
-import shutil
-import uuid
-import subprocess
-import threading
 import weakref
-from backend.downloader import get_model_path, is_model_downloaded, resolve_model_key, MODEL_DEFINITIONS
 
 try:
     import psutil

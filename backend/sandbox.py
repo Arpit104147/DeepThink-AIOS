@@ -894,11 +894,6 @@ class Sandbox:
 
     # ── Utility Methods ──────────────────────────────────────────────────
     @staticmethod
-    def _strip_ansi(text):
-        """Strip ANSI escape codes (color, cursor, etc.) from text for cleaner output."""
-        return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
-
-    @staticmethod
     def _truncate_output(output, max_chars=MAX_OUTPUT_CHARS):
         """Truncate sandbox output to prevent context overflow, preserving head and tail."""
         if not output or len(output) <= max_chars:
@@ -912,13 +907,25 @@ class Sandbox:
         )
 
     def _auto_install_missing_module(self, error_output):
-        """Parse ModuleNotFoundError from sandbox output and auto-install the missing pip package."""
+        """Attempt to install a missing Python module, restricted to a safe allowlist."""
+        SAFE_PACKAGES = {
+            'numpy', 'pandas', 'matplotlib', 'scipy', 'sympy', 'seaborn',
+            'sklearn', 'scikit-learn', 'plotly', 'pillow', 'PIL', 'requests',
+            'beautifulsoup4', 'bs4', 'lxml', 'openpyxl', 'xlsxwriter',
+            'networkx', 'igraph', 'pydot', 'graphviz', 'tqdm',
+            'statsmodels', 'xgboost', 'lightgbm', 'catboost',
+            'torch', 'torchvision', 'tensorflow', 'keras',
+            'opencv-python', 'cv2', 'gdstk', 'gdspy',
+        }
         match = re.search(r"ModuleNotFoundError: No module named '([^']+)'", error_output)
         if not match:
             return False
 
         module_name = match.group(1).split('.')[0]  # Get top-level module
         pip_name = PIP_PACKAGE_MAP.get(module_name, module_name)
+
+        if module_name.lower() not in SAFE_PACKAGES and pip_name.lower() not in SAFE_PACKAGES:
+            return False  # Block unknown packages from auto-install
 
         print(f"📦 Auto-installing missing package: {pip_name} (module: {module_name})")
         try:

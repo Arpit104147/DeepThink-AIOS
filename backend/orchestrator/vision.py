@@ -1,7 +1,6 @@
 import os
 import io
 import base64
-import re
 
 class VisionEngine:
     """Multimodal Vision Engine & Native Page-by-Page PDF Extractor."""

@@ -29,6 +29,21 @@ RECENCY_HALF_LIFE_DAYS = 30.0
 KEYWORD_MIN_MATCHES = 3
 
 class Memory:
+    _STOPWORDS = {
+        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", 
+        "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
+        "can", "did", "do", "does", "doing", "don't", "down", "during", "each", "few", "for", "from", 
+        "further", "had", "has", "have", "having", "he", "her", "here", "hers", "him", "his", "how", 
+        "i", "if", "in", "into", "is", "it", "its", "me", "more", "most", "my", "myself", "no", "nor", 
+        "not", "of", "off", "on", "once", "only", "or", "other", "our", "ours", "out", "over", "own", 
+        "same", "she", "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", 
+        "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", 
+        "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", 
+        "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves",
+        "write", "code", "program", "script", "create", "make", "generate", "give", "please", "solve", "run",
+        "show", "showing", "output", "result", "results", "value", "values"
+    }
+
     def __init__(self, db_path="./forge_memory_db"):
         self.db_path = db_path
         self.chroma_client = None
@@ -164,7 +179,7 @@ class Memory:
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, task, doc, metadata, embedding, created_at FROM memories"
+                "SELECT id, task, doc, metadata, embedding, created_at FROM memories ORDER BY created_at DESC LIMIT 500"
             )
             rows = cursor.fetchall()
 
@@ -254,24 +269,9 @@ class Memory:
                 print(f"Memory Engine: Vector search failed ({e}). Falling back to keyword matching.")
 
         # Keyword matching fallback
-        STOPWORDS = {
-            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", 
-            "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
-            "can", "did", "do", "does", "doing", "don't", "down", "during", "each", "few", "for", "from", 
-            "further", "had", "has", "have", "having", "he", "her", "here", "hers", "him", "his", "how", 
-            "i", "if", "in", "into", "is", "it", "its", "me", "more", "most", "my", "myself", "no", "nor", 
-            "not", "of", "off", "on", "once", "only", "or", "other", "our", "ours", "out", "over", "own", 
-            "same", "she", "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", 
-            "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", 
-            "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", 
-            "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves",
-            "write", "code", "program", "script", "create", "make", "generate", "give", "please", "solve", "run",
-            "show", "showing", "output", "result", "results", "value", "values"
-        }
-
         query_words = set(
             w.strip(",.!?") for w in task.lower().split()
-            if w not in STOPWORDS and len(w) > 1
+            if w not in self._STOPWORDS and len(w) > 1
         )
         if not query_words:
             return ""
@@ -281,7 +281,7 @@ class Memory:
             mem_id, t_task, doc, meta_str, _emb, _created_at = row
             task_words = set(
                 w.strip(",.!?") for w in t_task.lower().split()
-                if w not in STOPWORDS and len(w) > 1
+                if w not in self._STOPWORDS and len(w) > 1
             )
             matches = len(query_words.intersection(task_words))
             if matches >= KEYWORD_MIN_MATCHES or (len(query_words) <= 2 and matches == len(query_words)):
@@ -300,22 +300,9 @@ class Memory:
             cursor.execute("SELECT task FROM memories")
             rows = cursor.fetchall()
 
-        STOPWORDS = {
-            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", 
-            "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", 
-            "can", "did", "do", "does", "doing", "don't", "down", "during", "each", "few", "for", "from", 
-            "further", "had", "has", "have", "having", "he", "her", "here", "hers", "him", "his", "how", 
-            "i", "if", "in", "into", "is", "it", "its", "me", "more", "most", "my", "myself", "no", "nor", 
-            "not", "of", "off", "on", "once", "only", "or", "other", "our", "ours", "out", "over", "own", 
-            "same", "she", "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", 
-            "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", 
-            "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", 
-            "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves"
-        }
-
         def _get_content_words(t):
             words = [w.strip(",.!?()\"';:") for w in t.lower().split()]
-            return set(w for w in words if w and w not in STOPWORDS)
+            return set(w for w in words if w and w not in self._STOPWORDS)
             
         def _get_numbers(t):
             return set(re.findall(r'-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b', t))
@@ -339,7 +326,7 @@ class Memory:
                 return True
         return False
 
-    def save(self, task, successful_code, metadata=None, embed_fn=None, domain="general"):
+    def save(self, task, successful_code, metadata=None, embed_fn=None, domain="general", user_id='default'):
         """Save a compact knowledge summary with domain tagging and de-duplication."""
         if self._is_duplicate(task):
             return None
@@ -394,14 +381,14 @@ class Memory:
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
-                (mem_id, task, doc, json.dumps(meta), emb_blob)
+                "INSERT INTO memories (id, task, doc, metadata, embedding, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (mem_id, task, doc, json.dumps(meta), emb_blob, user_id)
             )
             conn.commit()
 
         return mem_id
 
-    def save_mistake(self, task, wrong_code, error_log, fixed_code, embed_fn=None, domain="general"):
+    def save_mistake(self, task, wrong_code, error_log, fixed_code, embed_fn=None, domain="general", user_id='default'):
         """Save a compact mistake-fix pattern to prevent regression."""
         mem_id = f"mistake_{uuid.uuid4().hex}"
 
@@ -438,14 +425,14 @@ class Memory:
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
-                (mem_id, task, doc, json.dumps(meta), emb_blob)
+                "INSERT INTO memories (id, task, doc, metadata, embedding, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (mem_id, task, doc, json.dumps(meta), emb_blob, user_id)
             )
             conn.commit()
 
         return mem_id
 
-    def store(self, task, doc, metadata=None, embed_fn=None, domain="general"):
+    def store(self, task, doc, metadata=None, embed_fn=None, domain="general", user_id='default'):
         """General-purpose store method with domain tagging."""
         if self._is_duplicate(task):
             return None
@@ -471,8 +458,8 @@ class Memory:
         with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO memories (id, task, doc, metadata, embedding) VALUES (?, ?, ?, ?, ?)",
-                (mem_id, task, doc, json.dumps(meta), emb_blob)
+                "INSERT INTO memories (id, task, doc, metadata, embedding, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (mem_id, task, doc, json.dumps(meta), emb_blob, user_id)
             )
             conn.commit()
 
@@ -542,11 +529,20 @@ class Memory:
 
     def compact_memory(self, max_entries=1000, max_age_days=180):
         """Purges stale memories older than max_age_days to keep vector latency < 5ms."""
-        with sqlite3.connect(self.sqlite_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM memories WHERE created_at < datetime('now', '-' || ? || ' days')",
-                (max_age_days,)
+        try:
+            import datetime
+            cutoff = (datetime.datetime.now() - datetime.timedelta(days=max_age_days)).isoformat()
+            conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
+            cur = conn.cursor()
+            cur.execute("DELETE FROM memories WHERE created_at < ?", (cutoff,))
+            # Enforce max_entries: keep only the most recent
+            cur.execute(
+                "DELETE FROM memories WHERE id NOT IN "
+                "(SELECT id FROM memories ORDER BY created_at DESC LIMIT ?)",
+                (max_entries,)
             )
             conn.commit()
+            conn.close()
+        except Exception:
+            pass
         return True
