@@ -1,0 +1,13 @@
+# Lightweight deps for running the backend test-suite (no models / heavy science stack needed)
+pytest>=8.0
+pytest-timeout>=2.3
+fastapi>=0.110.0
+httpx>=0.27
+uvicorn>=0.27.1
+python-multipart>=0.0.9
+pydantic>=2.9.0
+requests>=2.31.0
+psutil>=5.9.8
+beautifulsoup4>=4.12.3
+gitpython>=3.1.0
+numpy>=1.26.4

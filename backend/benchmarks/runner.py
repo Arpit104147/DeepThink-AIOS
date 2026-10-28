@@ -481,11 +481,12 @@ def stop_benchmark(orchestrator: Any = None):
     with STATE_LOCK:
         BENCHMARK_STATE["active"] = False
         BENCHMARK_STATE["cancel_requested"] = True
-        add_log("⏹️ Benchmark evaluation cancelled by user.")
         for w in BENCHMARK_STATE["workers"]:
             w["status"] = "Idle"
             w["progress"] = 0
             w["task"] = "N/A"
+    # add_log() takes STATE_LOCK itself (non-reentrant), so call it after releasing.
+    add_log("⏹️ Benchmark evaluation cancelled by user.")
     if orchestrator and hasattr(orchestrator, "cancel_event") and orchestrator.cancel_event:
         orchestrator.cancel_event.set()
     return {"status": "stopped", "message": "Benchmark execution cancelled."}

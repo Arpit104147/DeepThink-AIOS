@@ -893,6 +893,15 @@ class Sandbox:
         return result
 
     # ── Utility Methods ──────────────────────────────────────────────────
+    _ANSI_RE = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+
+    @staticmethod
+    def _strip_ansi(text):
+        """Remove ANSI escape sequences (colors, cursor moves) from sandbox output."""
+        if not text:
+            return text
+        return Sandbox._ANSI_RE.sub('', text)
+
     @staticmethod
     def _truncate_output(output, max_chars=MAX_OUTPUT_CHARS):
         """Truncate sandbox output to prevent context overflow, preserving head and tail."""
