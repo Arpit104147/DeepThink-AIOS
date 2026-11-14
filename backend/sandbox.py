@@ -1452,7 +1452,18 @@ class Sandbox:
             path = f.name
 
         try:
-            res = self._run_with_kill([sys.executable, path], timeout=self.timeout)
+            # SECURITY NOTE: this path has no Python-level import whitelist or
+            # builtins restriction — it exists so legitimate AI-generated code
+            # using an unlisted-but-benign module still runs. use_isolation=True
+            # is the only containment left: it wraps the process in a network
+            # namespace (unshare --net/--user) and applies RLIMIT_AS/CPU/NPROC
+            # via the preexec seccomp-lite hook. It does NOT sandbox the
+            # filesystem or block subprocess/exec — those remain open gaps
+            # (see ROADMAP.md §3 P0.1 for the options to close them).
+            # test_sandbox_fallback_isolation.py pins the network containment.
+            res = self._run_with_kill(
+                [sys.executable, path], timeout=self.timeout, use_isolation=self.isolation_available
+            )
             if res.returncode == 0:
                 output = self._strip_ansi(res.stdout)
                 if res.stderr:
@@ -1464,7 +1475,9 @@ class Sandbox:
 
                 # ── Auto-pip: Install missing modules and retry once ──────
                 if 'ModuleNotFoundError' in error_str and self._auto_install_missing_module(error_str):
-                    res2 = self._run_with_kill([sys.executable, path], timeout=self.timeout)
+                    res2 = self._run_with_kill(
+                        [sys.executable, path], timeout=self.timeout, use_isolation=self.isolation_available
+                    )
                     if res2.returncode == 0:
                         output2 = self._strip_ansi(res2.stdout)
                         if res2.stderr:
